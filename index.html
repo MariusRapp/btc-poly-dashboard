@@ -527,7 +527,7 @@ function onTrade(key, tr) {
 }
 
 // ── Backfill: recent trades over REST so charts, strike and model work right after loading ──
-// (Coinbase, Kraken, Bitstamp and Binance allow browser requests; Gemini and Bitfinex don't)
+// (Coinbase, Kraken and Binance allow browser requests; Bitstamp answers browsers with 403, Gemini and Bitfinex send no CORS)
 async function fetchCoinbaseTrades(since) {
   const out = [];
   let after = '';
@@ -555,12 +555,6 @@ async function fetchKrakenTrades(since) {
     cursor = d.result.last;
   }
   return out;
-}
-
-async function fetchBitstampTrades(since) {
-  const d = await getJSON('https://www.bitstamp.net/api/v2/transactions/btcusd/?time=hour');
-  return d.map(x => ({ id: +x.tid, t: +x.date * 1000, p: +x.price, q: +x.amount, sell: x.type === '1' }))
-          .filter(x => x.t >= since).reverse();
 }
 
 async function fetchBinanceTrades(since) {
@@ -624,7 +618,7 @@ async function backfill(since) {
   backfilling = true;
   try {
     await seedUsdt();
-    const jobs = [['coinbase', fetchCoinbaseTrades], ['kraken', fetchKrakenTrades], ['bitstamp', fetchBitstampTrades], ['binance', fetchBinanceTrades]];
+    const jobs = [['coinbase', fetchCoinbaseTrades], ['kraken', fetchKrakenTrades], ['binance', fetchBinanceTrades]];
     const res = await Promise.allSettled(jobs.map(([, f]) => f(since)));
     let added = 0;
     res.forEach((r, i) => {

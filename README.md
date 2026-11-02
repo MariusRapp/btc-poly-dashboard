@@ -32,7 +32,7 @@ Das Dashboard rechnet deshalb so:
 - **BTC-Preis:** Trade-WebSockets von Coinbase, Kraken, Bitstamp, Gemini, Bitfinex und Binance; Median
   aus mindestens drei frischen Quellen. Binance (BTC/USDT) wird mit dem USDT/USD-Kurs von Coinbase umgerechnet.
   Beim Laden und nach der Rückkehr aus dem Hintergrund werden die letzten Minuten per REST nachgeladen
-  (Coinbase, Kraken, Bitstamp, Binance).
+  (Coinbase, Kraken, Binance – die anderen Börsen erlauben keine Browser-Anfragen).
 - **Polymarket:** Gamma API für Marktsuche und offizielle Rundenergebnisse, CLOB-WebSocket für das Orderbuch.
 
 ## Benutzung
