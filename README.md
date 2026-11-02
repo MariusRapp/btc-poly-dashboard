@@ -9,7 +9,7 @@ Läuft komplett im Browser – kein Backend, kein Build-Schritt, keine API-Keys.
 
 | Datei | Inhalt |
 |---|---|
-| `index.html` | Haupt-Dashboard: BTC-Median aus sechs Börsen, Strike und Abstand, Countdown, implizite UP-Wahrscheinlichkeit, Polymarket-Orderbuch, Liquiditäts-Walls, Mispricing, Projected Close. Auch fürs Handy ausgelegt. |
+| `index.html` | Haupt-Dashboard: BTC-Median aus sechs Börsen gegen den Strike, Countdown, implizite UP-Wahrscheinlichkeit, Polymarket-Orderbuch, Signale (Mispricing, Projected Close, Buy Pressure). Für Desktop, Tablet und Handy, mit Light- und Dark-Mode. |
 | `btc-stream.html` | Schlanker BTC/USD-Tick-Stream (Binance aggTrade) mit Volumen und Buy Pressure. |
 | `poly.ipynb` | Jupyter-Notebook: Polymarket-Orderbuch als ipywidgets-Dashboard und Strike-Suche über den Chainlink-Feed. |
 

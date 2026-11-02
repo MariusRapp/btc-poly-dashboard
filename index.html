@@ -3,521 +3,376 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>BTC · Polymarket Dashboard</title>
+  <meta name="color-scheme" content="light dark" />
+  <title>BTC 5m · Polymarket Dashboard</title>
   <script src="https://unpkg.com/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+  <script>
+    // apply a saved theme choice before first paint (no flash)
+    try { const t = localStorage.getItem('theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch {}
+  </script>
   <style>
     *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+    [hidden] { display:none !important; }
+
+    /* ── Tokens: light ── */
     :root {
-      --bg:#0d1117; --bg2:#161b22; --bg3:#21262d;
-      --border:#30363d; --text:#e6edf3; --muted:#8b949e; --dim:#6e7681;
-      --green:#3fb950; --red:#f85149; --orange:#f0883e;
-      --yellow:#e3b341; --blue:#58a6ff;
+      color-scheme: light;
+      --page:#f9f9f7; --surface:#fcfcfb; --surface-2:#f1f0ec;
+      --ink-1:#0b0b0b; --ink-2:#52514e; --muted:#898781; --muted-text:#6f6d68;
+      --grid:#e1e0d9; --axis:#c3c2b7; --border:rgba(11,11,11,.10);
+      --up:#0ca30c; --up-text:#006300; --up-wash:rgba(12,163,12,.10);
+      --down:#d03b3b; --down-text:#d03b3b; --down-wash:rgba(208,59,59,.10);
+      --warning:#fab219; --warning-wash:rgba(250,178,25,.22);
+      --accent:#2a78d6; --accent-track:rgba(42,120,214,.16);
+      --ex-1:#2a78d6; --ex-2:#eb6834; --ex-3:#1baf7a; --ex-4:#eda100; --ex-5:#e87ba4; --ex-6:#008300;
+      --shadow:0 6px 20px rgba(11,11,11,.10);
+      --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     }
-    body {
-      background:var(--bg); color:var(--text);
-      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",ui-monospace,monospace;
-      height:100vh; display:flex; flex-direction:column; overflow:hidden;
-    }
-
-    /* ── Header ── */
-    #header {
-      flex-shrink:0; padding:10px 18px; border-bottom:1px solid var(--border);
-      display:flex; align-items:center; gap:18px; background:var(--bg);
-    }
-    .hpair { font-size:17px; font-weight:700; color:#f0f6fc; letter-spacing:.04em; }
-    .hsrc  { font-size:12px; color:var(--dim); text-transform:uppercase; letter-spacing:.06em; margin-top:2px; }
-    #h-price { font-size:38px; font-weight:700; font-variant-numeric:tabular-nums; color:#f0f6fc; transition:color .25s; }
-    #h-change { font-size:16px; font-variant-numeric:tabular-nums; margin-top:1px; }
-    .up   { color:var(--green); }
-    .down { color:var(--red); }
-    .vsep { width:1px; height:44px; background:var(--border); flex-shrink:0; }
-    .hstats { display:flex; gap:20px; }
-    .hstat  { display:flex; flex-direction:column; gap:2px; }
-    .hsl { font-size:12px; color:var(--dim); text-transform:uppercase; letter-spacing:.05em; }
-    .hsv { font-size:16px; font-weight:500; font-variant-numeric:tabular-nums; color:#c9d1d9; }
-    .h-binance { font-size:12px; color:var(--dim); font-variant-numeric:tabular-nums; margin-top:3px; }
-    .spacer { flex:1; }
-    .win-btns { display:flex; gap:4px; }
-    .wb {
-      padding:4px 11px; font-size:13px; background:transparent;
-      border:1px solid var(--border); border-radius:4px; color:var(--dim);
-      cursor:pointer; transition:all .15s;
-    }
-    .wb:hover  { border-color:#444c56; color:#c9d1d9; }
-    .wb.active { background:var(--bg3); color:#f0f6fc; border-color:#444c56; }
-    .badge { display:flex; align-items:center; gap:6px; font-size:13px; color:var(--dim); }
-    .dot   { width:8px; height:8px; border-radius:50%; background:var(--dim); flex-shrink:0; }
-    .dot.live { background:var(--green); animation:pulse 1.6s ease-in-out infinite; }
-    .dot.wait { background:var(--yellow); }
-    .dot.err  { background:var(--red); }
-    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
-
-    /* ── Exchange toggle buttons ── */
-    .exch-btn {
-      display:flex; align-items:center; gap:4px;
-      padding:3px 8px; font-size:12px;
-      background:transparent;
-      border:1px solid var(--ec, var(--border));
-      border-radius:4px;
-      color:var(--ec, var(--dim));
-      cursor:pointer; transition:opacity .15s,filter .15s;
-      font-family:inherit;
-    }
-    .exch-btn.off { opacity:0.28; filter:grayscale(.8); }
-    .exch-btn:hover { filter:brightness(1.25); }
-    .med-btn {
-      padding:3px 9px; font-size:12px; font-weight:600;
-      background:transparent; border:1px solid var(--border);
-      border-radius:4px; color:var(--dim); cursor:pointer;
-      transition:all .15s; font-family:inherit;
-    }
-    .med-btn.on { background:var(--bg3); border-color:#c9d1d9; color:#f0f6fc; }
-
-    /* ── State Banner ── */
-    #state-banner {
-      padding:5px 14px; border-bottom:1px solid var(--border); flex-shrink:0;
-      display:flex; align-items:center; gap:7px; font-size:12px; font-weight:600;
-      background:var(--bg2); border-left:3px solid var(--dim); transition:border-left-color .25s,background .25s;
-    }
-    #state-banner.up   { border-left-color:var(--green); background:rgba(63,185,80,.04); }
-    #state-banner.down { border-left-color:var(--red);   background:rgba(248,81,73,.04); }
-    #state-banner.warn { border-left-color:var(--orange); }
-    #sb-dot { width:7px; height:7px; border-radius:50%; background:var(--dim); flex-shrink:0; transition:background .25s; }
-    #sb-dot.up { background:var(--green); } #sb-dot.down { background:var(--red); } #sb-dot.warn { background:var(--orange); }
-    #sb-main { color:#e6edf3; }
-    #sb-sub  { color:var(--dim); font-weight:400; font-size:11px; margin-left:3px; }
-    #sb-right { margin-left:auto; font-size:11px; color:var(--dim); font-weight:400; }
-
-    /* ── Outcome Card ── */
-    #outcome-card {
-      padding:7px 14px; border-bottom:1px solid var(--border); flex-shrink:0;
-      border-left:3px solid var(--dim); transition:border-left-color .3s,background .3s;
-    }
-    #outcome-card.above { border-left-color:var(--green); background:rgba(63,185,80,.03); }
-    #outcome-card.below { border-left-color:var(--red);   background:rgba(248,81,73,.03); }
-    .oc-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:4px 8px; }
-    .oc-cell { display:flex; flex-direction:column; }
-    .oc-lbl  { font-size:9px; color:var(--dim); text-transform:uppercase; letter-spacing:.06em; line-height:1.4; }
-    .oc-val  { font-size:14px; font-weight:700; font-variant-numeric:tabular-nums; color:#e6edf3; white-space:nowrap; }
-    .oc-val.up { color:var(--green); } .oc-val.down { color:var(--red); } .oc-val.orange { color:var(--orange); }
-
-    /* ── Large Countdown ── */
-    #countdown-big {
-      padding:4px 14px 3px; border-bottom:1px solid var(--border); flex-shrink:0;
-      display:flex; flex-direction:column; align-items:center; background:var(--bg2);
-    }
-    #cd-time {
-      font-size:34px; font-weight:800; font-variant-numeric:tabular-nums;
-      letter-spacing:.04em; line-height:1.1; color:var(--yellow); transition:color .3s;
-    }
-    #cd-time.orange { color:var(--orange); }
-    #cd-time.red    { color:var(--red); }
-    @keyframes cd-flash { 0%,100%{opacity:1} 50%{opacity:.15} }
-    #cd-time.flash  { animation:cd-flash .4s ease-in-out infinite; }
-    #cd-label { font-size:9px; color:var(--dim); text-transform:uppercase; letter-spacing:.1em; margin-top:-1px; }
-
-    /* ── Prob bar sentiment ── */
-    .prob-sentiment { font-size:11px; font-weight:700; min-width:72px; text-align:right; white-space:nowrap; }
-
-    /* ── Strike + distance row ── */
-    .sdr-wrap { display:flex; align-items:flex-start; gap:16px; }
-    .sdr-item { display:flex; flex-direction:column; }
-    .sdr-lbl  { font-size:9px; color:var(--dim); text-transform:uppercase; letter-spacing:.06em; }
-    .sdr-val  { font-size:13px; font-weight:600; font-variant-numeric:tabular-nums; }
-    .sdr-val.orange { color:var(--orange); }
-
-    /* ── Liq Walls ── */
-    #liq-walls {
-      padding:5px 14px; border-bottom:1px solid var(--border); flex-shrink:0;
-      display:flex; align-items:center; gap:0; background:var(--bg);
-    }
-    .lw-title { font-size:9px; color:var(--dim); text-transform:uppercase; letter-spacing:.07em; margin-right:10px; flex-shrink:0; }
-    .lw-item  { display:flex; flex-direction:column; flex:1; }
-    .lw-lbl   { font-size:9px; color:var(--dim); }
-    .lw-val   { font-size:12px; font-weight:700; font-variant-numeric:tabular-nums; white-space:nowrap; }
-    .lw-sep   { width:1px; height:28px; background:var(--border); margin:0 10px; flex-shrink:0; }
-
-    /* ── Analysis row (mispricing / confidence / buy trend) ── */
-    #analysis-row {
-      padding:5px 0; border-bottom:1px solid var(--border); flex-shrink:0;
-      display:flex;
-    }
-    .an-cell {
-      flex:1; padding:0 10px; display:flex; flex-direction:column; gap:2px;
-      border-right:1px solid var(--border);
-    }
-    .an-cell:first-child { padding-left:14px; }
-    .an-cell:last-child  { border-right:none; }
-    .an-lbl  { font-size:9px; color:var(--dim); text-transform:uppercase; letter-spacing:.06em; }
-    .an-val  { font-size:13px; font-weight:700; color:#c9d1d9; font-variant-numeric:tabular-nums; }
-    .an-val.up { color:var(--green); } .an-val.down { color:var(--red); } .an-val.orange { color:var(--orange); }
-    .an-sub  { font-size:10px; color:var(--dim); }
-    .conf-track { height:3px; background:var(--border); border-radius:2px; margin-top:2px; }
-    .conf-fill  { height:100%; border-radius:2px; transition:width .5s,background .5s; }
-
-    /* ── Projected Close ── */
-    #proj-row {
-      padding:4px 14px; border-bottom:1px solid var(--border); flex-shrink:0;
-      display:flex; align-items:center; gap:10px;
-    }
-    .proj-lbl { font-size:9px; color:var(--dim); text-transform:uppercase; letter-spacing:.06em; flex-shrink:0; }
-    #proj-val { font-size:13px; font-weight:700; font-variant-numeric:tabular-nums; }
-    #proj-conf { font-size:11px; color:var(--dim); }
-    #proj-vel  { margin-left:auto; font-size:11px; color:var(--dim); font-variant-numeric:tabular-nums; }
-
-    /* ── Main ── */
-    #main { flex:1; display:flex; min-height:0; overflow:hidden; }
-
-    /* ── Left panel ── */
-    #chart-wrap {
-      flex:1; min-width:0; display:flex; flex-direction:column;
-      border-right:1px solid var(--border);
-    }
-    #chart { flex:1; width:100%; display:block; cursor:crosshair; min-height:0; }
-    #prob-wrap { height:180px; flex-shrink:0; border-top:1px solid var(--border); position:relative; }
-    #prob { width:100%; height:100%; display:block; }
-
-    /* ── Right panel ── */
-    #poly-panel {
-      width:580px; flex-shrink:0; display:flex; flex-direction:column;
-      overflow:hidden; background:var(--bg);
-    }
-
-    #poly-head {
-      padding:10px 14px; border-bottom:1px solid var(--border); flex-shrink:0;
-    }
-    .poly-title { font-size:16px; font-weight:600; color:#f0f6fc; line-height:1.4; }
-    .poly-sub   { font-size:12px; color:var(--dim); margin-top:3px; }
-
-    #poly-stats {
-      padding:10px 14px; border-bottom:1px solid var(--border);
-      flex-shrink:0; display:flex; flex-direction:column; gap:9px;
-    }
-    .ps-row { display:flex; gap:8px; }
-    .ps-chip {
-      background:var(--bg2); border:1px solid var(--border); border-radius:6px;
-      padding:6px 10px; display:flex; flex-direction:column; gap:2px; flex:1;
-    }
-    .ps-label { font-size:11px; color:var(--dim); text-transform:uppercase; letter-spacing:.04em; }
-    .ps-val   { font-size:20px; font-weight:600; font-variant-numeric:tabular-nums; }
-
-    .impl-row { display:flex; align-items:center; gap:8px; }
-    .impl-label { font-size:13px; color:var(--dim); width:95px; flex-shrink:0; }
-    .impl-bar-wrap {
-      flex:1; height:12px; border-radius:5px; background:var(--red);
-      overflow:hidden; position:relative;
-    }
-    #impl-yes { height:100%; background:var(--green); transition:width .5s; border-radius:5px; }
-    .impl-pct { font-size:18px; font-weight:700; font-variant-numeric:tabular-nums; width:62px; text-align:right; }
-
-    .meta-row { display:flex; justify-content:space-between; align-items:center; }
-    .strike-row { font-size:14px; color:var(--muted); }
-    .strike-val { color:var(--orange); font-weight:600; font-variant-numeric:tabular-nums; }
-    .countdown { font-size:14px; color:var(--muted); }
-    .countdown b { font-variant-numeric:tabular-nums; }
-
-    /* ── Order Book ── */
-    #orderbook { flex:1; overflow-y:auto; }
-    #orderbook::-webkit-scrollbar { width:3px; }
-    #orderbook::-webkit-scrollbar-thumb { background:var(--bg3); border-radius:2px; }
-
-    .ob-table { width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums; font-size:15px; table-layout:fixed; }
-    .ob-table thead th {
-      font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--dim);
-      text-align:right; padding:6px 10px 4px; border-bottom:1px solid var(--border);
-      position:sticky; top:0; background:var(--bg); z-index:1;
-    }
-    .ob-table td { padding:4px 10px; text-align:right; white-space:nowrap; overflow:hidden; }
-    .ob-table tbody tr:hover { background:var(--bg2); }
-    .bid-p { color:var(--green); }
-    .ask-p { color:var(--red); }
-    .sep-c { color:var(--border); text-align:center !important; padding:0 2px; width:12px; }
-    .depth-c { width:80px; padding:2px 4px; }
-    .dbar { height:7px; border-radius:3px; display:inline-block; vertical-align:middle; min-width:2px; }
-    .dbar.bid { background:rgba(63,185,80,.5); }
-    .dbar.ask { background:rgba(248,81,73,.5); float:right; }
-    .ob-mid-row td {
-      text-align:center; padding:4px; font-size:14px; color:var(--muted);
-      border-top:1px solid var(--border); border-bottom:1px solid var(--border);
-      background:var(--bg2);
-    }
-
-    #poly-foot {
-      padding:5px 14px; border-top:1px solid var(--border); flex-shrink:0;
-      font-size:12px; color:var(--dim); display:flex; align-items:center; gap:6px;
-    }
-
-    /* ── Tablet / Mobile: chart stacked above panel, page scrolls ── */
-    @media (max-width: 900px) {
-      body { height:auto; min-height:100vh; overflow:visible; }
-
-      #header { flex-wrap:wrap; gap:8px 14px; padding:10px 12px; }
-      #h-price  { font-size:28px; }
-      #h-change { font-size:14px; }
-      #h-price + div { flex-wrap:wrap; row-gap:2px; }
-      .vsep, .spacer { display:none; }
-      .hstats { width:100%; gap:16px; }
-      .hsv { font-size:14px; }
-      #exch-badges { flex-wrap:wrap; }
-
-      #main { flex-direction:column; overflow:visible; }
-      #chart-wrap {
-        flex:none; height:60vh; height:60svh; min-height:320px;
-        border-right:none; border-bottom:1px solid var(--border);
+    /* ── Tokens: dark (OS setting, unless the viewer picked light) ── */
+    @media (prefers-color-scheme: dark) {
+      :root:where(:not([data-theme="light"])) {
+        color-scheme: dark;
+        --page:#0d0d0d; --surface:#1a1a19; --surface-2:#252524;
+        --ink-1:#f0efec; --ink-2:#c3c2b7; --muted:#898781; --muted-text:#898781;
+        --grid:#2c2c2a; --axis:#383835; --border:rgba(255,255,255,.10);
+        --up:#0ca30c; --up-text:#0ca30c; --up-wash:rgba(12,163,12,.14);
+        --down:#d03b3b; --down-text:#e66767; --down-wash:rgba(208,59,59,.16);
+        --warning-wash:rgba(250,178,25,.20);
+        --accent:#3987e5; --accent-track:rgba(57,135,229,.20);
+        --ex-1:#3987e5; --ex-2:#d95926; --ex-3:#199e70; --ex-4:#c98500; --ex-5:#d55181; --ex-6:#008300;
+        --shadow:0 6px 20px rgba(0,0,0,.45);
       }
-      #prob-wrap { height:130px; }
+    }
+    /* ── Tokens: dark (theme toggle) ── */
+    :root[data-theme="dark"] {
+      color-scheme: dark;
+      --page:#0d0d0d; --surface:#1a1a19; --surface-2:#252524;
+      --ink-1:#f0efec; --ink-2:#c3c2b7; --muted:#898781; --muted-text:#898781;
+      --grid:#2c2c2a; --axis:#383835; --border:rgba(255,255,255,.10);
+      --up:#0ca30c; --up-text:#0ca30c; --up-wash:rgba(12,163,12,.14);
+      --down:#d03b3b; --down-text:#e66767; --down-wash:rgba(208,59,59,.16);
+      --warning-wash:rgba(250,178,25,.20);
+      --accent:#3987e5; --accent-track:rgba(57,135,229,.20);
+      --ex-1:#3987e5; --ex-2:#d95926; --ex-3:#199e70; --ex-4:#c98500; --ex-5:#d55181; --ex-6:#008300;
+      --shadow:0 6px 20px rgba(0,0,0,.45);
+    }
 
-      #poly-panel { width:100%; overflow:visible; }
-      #orderbook  { flex:none; overflow:visible; }
+    html { -webkit-text-size-adjust:100%; }
+    body { background:var(--page); color:var(--ink-1); font:14px/1.4 var(--font); min-height:100vh; }
+    .num   { font-variant-numeric:tabular-nums; }
+    .muted { color:var(--muted-text); }
+    .up-t   { color:var(--up-text); }
+    .down-t { color:var(--down-text); }
+    h2 { font-size:13px; font-weight:600; }
 
-      #state-banner, #proj-row, .sdr-wrap { flex-wrap:wrap; }
+    .wrap { max-width:1480px; margin:0 auto; padding:12px 16px 24px; display:flex; flex-direction:column; gap:12px; }
+    .card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:14px 16px; min-width:0; }
+    .card-head { display:flex; align-items:baseline; justify-content:space-between; gap:8px; margin-bottom:10px; }
+    .card-meta { font-size:12px; color:var(--muted-text); text-align:right; }
+
+    /* ── Top bar ── */
+    .topbar { display:flex; align-items:center; gap:12px; padding:2px 2px 0; }
+    .brand { flex:1; min-width:0; }
+    .brand-title { font-size:15px; font-weight:650; }
+    .brand-sub { font-size:12px; color:var(--ink-2); }
+    .status { display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--ink-2); white-space:nowrap; }
+    .dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--muted); flex-shrink:0; }
+    .dot.live { background:var(--up); }
+    .dot.wait { background:var(--warning); }
+    .dot.err  { background:var(--down); }
+    .icon-btn {
+      width:34px; height:34px; display:grid; place-items:center; flex-shrink:0;
+      border-radius:8px; border:1px solid var(--border); background:var(--surface);
+      color:var(--ink-2); cursor:pointer;
+    }
+    .icon-btn:hover { color:var(--ink-1); }
+
+    /* ── KPI row ── */
+    .kpis { display:grid; grid-template-columns:minmax(0,1.6fr) minmax(0,1fr) minmax(0,1fr); gap:12px; }
+    .kpi { display:flex; flex-direction:column; gap:4px; }
+    .kpi-label { font-size:12px; color:var(--ink-2); }
+    .hero { font-size:48px; font-weight:650; line-height:1.05; letter-spacing:-.01em; font-variant-numeric:tabular-nums; }
+    .kpi-value { font-size:32px; font-weight:600; line-height:1.1; font-variant-numeric:tabular-nums; }
+    .kpi-delta { font-size:14px; font-weight:600; display:flex; flex-wrap:wrap; align-items:center; gap:4px 8px; }
+    .kpi-sub { font-size:12px; color:var(--muted-text); margin-top:auto; padding-top:2px; }
+    .chip {
+      font-size:11px; font-weight:600; padding:1px 8px; border-radius:999px;
+      background:var(--warning-wash); color:var(--ink-1);
+    }
+
+    /* thin segmented bar: two parts, 2px surface gap, rounded ends, no text */
+    .segbar { display:flex; gap:2px; height:8px; margin:6px 0 2px; }
+    .segbar span { flex:1 1 0; border-radius:999px; transition:flex-grow .4s; }
+    .segbar .sb-up   { background:var(--up); }
+    .segbar .sb-down { background:var(--down); }
+    .segbar.idle span { background:var(--grid); }
+    .segbar.thin { height:4px; margin:6px 0 4px; }
+
+    /* meter: fill carries severity, track is a lighter step of the same hue */
+    .meter { height:8px; border-radius:999px; overflow:hidden; margin:6px 0 2px; background:var(--accent-track); }
+    .meter span { display:block; height:100%; width:0; border-radius:999px; background:var(--accent); transition:width .5s linear, background-color .3s; }
+    .meter[data-level="warn"] { background:var(--warning-wash); }
+    .meter[data-level="warn"] span { background:var(--warning); }
+    .meter[data-level="crit"] { background:var(--down-wash); }
+    .meter[data-level="crit"] span { background:var(--down); }
+
+    /* ── Layout ── */
+    .layout { display:grid; grid-template-columns:minmax(0,1fr) 380px; gap:12px; align-items:start; }
+    .col { display:flex; flex-direction:column; gap:12px; min-width:0; }
+
+    /* ── Charts card ── */
+    .toolbar { display:flex; align-items:center; justify-content:space-between; gap:10px 16px; flex-wrap:wrap; margin-bottom:6px; }
+    .seg { display:inline-flex; gap:2px; padding:2px; border-radius:8px; background:var(--surface-2); }
+    .seg button {
+      font:inherit; font-size:12px; font-weight:500; min-width:44px; padding:5px 12px;
+      color:var(--ink-2); background:transparent; border:0; border-radius:6px; cursor:pointer;
+    }
+    .seg button:hover { color:var(--ink-1); }
+    .seg button[aria-pressed="true"] { background:var(--surface); color:var(--ink-1); box-shadow:0 0 0 1px var(--border); }
+    .toggle { display:inline-flex; align-items:center; gap:7px; font-size:12px; color:var(--ink-2); cursor:pointer; user-select:none; }
+    .toggle input, .src-name input { accent-color:var(--ink-1); width:14px; height:14px; cursor:pointer; }
+
+    .chart-head { display:flex; align-items:baseline; justify-content:space-between; gap:4px 12px; flex-wrap:wrap; margin:10px 0 6px; }
+    .legend { display:flex; flex-wrap:wrap; gap:4px 12px; font-size:11px; color:var(--ink-2); }
+    .legend span { display:inline-flex; align-items:center; gap:5px; }
+    #legend-ex { display:contents; }
+    .lk { display:inline-block; width:14px; height:2px; border-radius:1px; background:var(--ink-1); flex-shrink:0; }
+    .lk.dash { background:repeating-linear-gradient(90deg, var(--ink-2) 0 4px, transparent 4px 7px); }
+    .lk.ghost { background:transparent; }
+    .wk { display:inline-block; width:10px; height:10px; border-radius:2px; }
+    .wk.up   { background:var(--up);   opacity:.4; }
+    .wk.down { background:var(--down); opacity:.4; }
+
+    .plot { position:relative; height:clamp(280px, 44vh, 520px); }
+    .plot-prob { height:clamp(150px, 20vh, 220px); }
+    .plot canvas { position:absolute; inset:0; width:100%; height:100%; display:block; touch-action:pan-y; cursor:crosshair; }
+
+    .tip {
+      position:absolute; top:6px; left:0; z-index:2; pointer-events:none; min-width:150px;
+      background:var(--surface); border:1px solid var(--border); border-radius:8px;
+      box-shadow:var(--shadow); padding:7px 10px; font-size:12px;
+    }
+    .tip-time { color:var(--muted-text); margin-bottom:3px; font-variant-numeric:tabular-nums; }
+    .tip-row { display:flex; align-items:center; justify-content:space-between; gap:12px; line-height:1.6; }
+    .tip-name { display:inline-flex; align-items:center; gap:6px; color:var(--ink-2); }
+    .tip-row b { font-weight:600; font-variant-numeric:tabular-nums; }
+
+    /* ── Order book ladder ── */
+    .ladder { font-size:13px; }
+    .lrow {
+      position:relative; display:grid; grid-template-columns:repeat(3, minmax(0,1fr));
+      align-items:center; height:25px; padding:0 8px;
+    }
+    .lrow > span { position:relative; text-align:right; font-variant-numeric:tabular-nums; }
+    .lrow > span:first-child { text-align:left; }
+    .lhead { height:22px; font-size:11px; color:var(--muted-text); }
+    .lbar { position:absolute; top:2px; bottom:2px; right:0; border-radius:4px 0 0 4px; }
+    .ask .lbar { background:var(--down-wash); }
+    .bid .lbar { background:var(--up-wash); }
+    .ask .lp { color:var(--down-text); }
+    .bid .lp { color:var(--up-text); }
+    .lt   { color:var(--muted-text); }
+    .wall { font-weight:700; }
+    .lmid {
+      display:flex; justify-content:space-between; align-items:center; height:32px; padding:0 8px; margin:3px 0;
+      font-size:12px; color:var(--ink-2); font-variant-numeric:tabular-nums;
+      border-top:1px solid var(--grid); border-bottom:1px solid var(--grid);
+    }
+
+    /* ── Signals ── */
+    .sig { padding:11px 0; border-top:1px solid var(--grid); }
+    .sig:first-of-type { border-top:0; padding-top:0; }
+    .sig-top { display:flex; justify-content:space-between; align-items:baseline; gap:8px; }
+    .sig-label { font-size:12px; color:var(--ink-2); }
+    .sig-value { font-size:16px; font-weight:600; font-variant-numeric:tabular-nums; text-align:right; }
+    .sig-sub { font-size:12px; color:var(--muted-text); margin-top:2px; }
+
+    /* ── Sources table ── */
+    .src { display:grid; grid-template-columns:minmax(0,1fr) auto auto 8px; column-gap:16px; align-items:center; font-size:13px; }
+    .src > * { padding:7px 0; border-top:1px solid var(--grid); }
+    .src > .src-h { border-top:0; padding-top:0; font-size:11px; color:var(--muted-text); }
+    .src-name { display:flex; align-items:center; gap:8px; min-width:0; }
+    label.src-name { cursor:pointer; }
+    .src-name.off { color:var(--muted-text); }
+    .src-v, .src-d { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+    .src-d { color:var(--muted-text); }
+    .src-s { display:flex; justify-content:center; }
+
+    /* ── Tablet: charts full width, order book + signals side by side ── */
+    @media (max-width: 980px) {
+      .layout { grid-template-columns:minmax(0,1fr) minmax(0,1fr); }
+      .col { display:contents; }
+      #card-charts  { order:1; grid-column:1 / -1; }
+      #card-book    { order:2; }
+      #card-signals { order:3; }
+      #card-sources { order:4; grid-column:1 / -1; }
     }
 
     /* ── Phone ── */
-    @media (max-width: 560px) {
-      .hpair { font-size:15px; }
-      .hsrc  { font-size:10px; }
-
-      .oc-val { font-size:13px; }
-
-      .ps-row { display:grid; grid-template-columns:1fr 1fr; }
-      .ps-val { font-size:17px; }
-      .impl-label { width:auto; font-size:12px; }
-      .impl-pct   { width:auto; font-size:16px; }
-      .prob-sentiment { min-width:0; }
-      .sdr-wrap { gap:8px 14px; }
-
-      #liq-walls { display:grid; grid-template-columns:1fr 1fr; gap:6px 12px; }
-      .lw-title { grid-column:1 / -1; }
-      .lw-sep   { display:none; }
-
-      .an-cell { min-width:0; padding:0 8px; }
-      .an-cell:first-child { padding-left:12px; }
-
-      .ob-table { font-size:12px; }
-      .ob-table thead th { font-size:10px; padding:5px 4px 3px; }
-      .ob-table td { padding:3px 4px; }
-      .depth-c { width:40px; }
-      /* drop both Cum columns (3rd + 7th) so the book fits phone width */
-      .ob-table th:nth-child(3), .ob-table td:nth-child(3),
-      .ob-table th:nth-child(7), .ob-table td:nth-child(7) { display:none; }
-      .ob-mid-row td { font-size:12px; }
+    @media (max-width: 640px) {
+      .wrap { padding:10px 10px 20px; gap:10px; }
+      .card { padding:12px; border-radius:10px; }
+      .layout { grid-template-columns:minmax(0,1fr); gap:10px; }
+      .kpis { grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:10px; }
+      .kpi-hero { grid-column:1 / -1; }
+      .hero { font-size:44px; }
+      .kpi-value { font-size:26px; }
+      .plot { height:280px; }
+      .plot-prob { height:150px; }
+      .src { column-gap:10px; }
     }
   </style>
 </head>
 <body>
+<div class="wrap">
 
-<div id="header">
-  <div>
-    <div class="hpair">BTC / USD</div>
-    <div class="hsrc">Multi-Exchange Median</div>
-  </div>
-  <div>
-    <div id="h-price">—</div>
-    <div style="display:flex;gap:14px;align-items:baseline">
-      <div id="h-change">—</div>
-      <div class="h-binance">CL on-chain: <span id="h-binance-p">—</span></div>
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-title">BTC Up or Down <span class="muted">· 5-minute rounds</span></div>
+      <div class="brand-sub" id="market-title">Loading market…</div>
     </div>
-  </div>
-  <div class="vsep"></div>
-  <div class="hstats">
-    <div class="hstat"><span class="hsl">Trades/s</span><span class="hsv" id="h-tps">—</span></div>
-    <div class="hstat"><span class="hsl">Last qty</span><span class="hsv" id="h-qty">—</span></div>
-    <div class="hstat"><span class="hsl">Buy pressure</span><span class="hsv" id="h-buy">—</span></div>
-  </div>
-  <div class="spacer"></div>
-  <div class="win-btns">
-    <button class="wb" data-s="10">10s</button>
-    <button class="wb active" data-s="30">30s</button>
-    <button class="wb" data-s="60">1m</button>
-    <button class="wb" data-s="300">5m</button>
-  </div>
-  <div class="badge"><div id="cl-dot" class="dot wait"></div><span id="cl-st">CL…</span></div>
-  <div id="exch-badges" style="display:flex;gap:8px;align-items:center"></div>
-</div>
+    <span class="status"><i class="dot wait" id="live-dot"></i><span id="live-text">Connecting</span></span>
+    <button class="icon-btn" id="theme-btn" type="button" aria-label="Switch light/dark theme"></button>
+  </header>
 
-<div id="main">
-
-  <div id="chart-wrap">
-    <canvas id="chart"></canvas>
-    <div id="prob-wrap">
-      <canvas id="prob"></canvas>
-    </div>
-  </div>
-
-  <div id="poly-panel">
-    <div id="poly-head">
-      <div class="poly-title" id="poly-title">Loading market…</div>
-      <div class="poly-sub"  id="poly-sub"></div>
-    </div>
-
-    <!-- #1 Market State Banner -->
-    <div id="state-banner">
-      <div id="sb-dot"></div>
-      <span id="sb-main">—</span>
-      <span id="sb-sub"></span>
-      <span id="sb-right"></span>
-    </div>
-
-    <!-- #1 Outcome Summary Card -->
-    <div id="outcome-card">
-      <div class="oc-grid">
-        <div class="oc-cell"><span class="oc-lbl">BTC Price</span><span class="oc-val" id="oc-btc">—</span></div>
-        <div class="oc-cell"><span class="oc-lbl">Strike</span><span class="oc-val orange" id="oc-strike">—</span></div>
-        <div class="oc-cell"><span class="oc-lbl">Distance</span><span class="oc-val" id="oc-dist">—</span></div>
-        <div class="oc-cell"><span class="oc-lbl">UP Prob</span><span class="oc-val" id="oc-prob">—</span></div>
-        <div class="oc-cell"><span class="oc-lbl">Time Left</span><span class="oc-val" id="oc-time">—</span></div>
-        <div class="oc-cell"><span class="oc-lbl">Verdict</span><span class="oc-val" id="oc-verdict">—</span></div>
+  <section class="kpis" aria-label="Current round">
+    <div class="card kpi kpi-hero">
+      <div class="kpi-label">BTC / USD <span class="muted">· median of exchanges</span></div>
+      <div class="hero" id="btc-price">—</div>
+      <div class="kpi-delta muted" id="btc-delta">
+        <span id="btc-delta-text">Waiting for trades…</span>
+        <span class="chip" id="close-chip" hidden>◆ Close to strike</span>
       </div>
+      <div class="kpi-sub num" id="btc-sub">Strike — · Chainlink —</div>
     </div>
-
-    <!-- #4 Large Countdown -->
-    <div id="countdown-big">
-      <div id="cd-time">—:——</div>
-      <div id="cd-label">Time Remaining</div>
+    <div class="card kpi">
+      <div class="kpi-label">UP probability <span class="muted">· market</span></div>
+      <div class="kpi-value" id="up-prob">—</div>
+      <div class="segbar idle" id="up-bar" aria-hidden="true"><span class="sb-up" id="seg-up"></span><span class="sb-down" id="seg-down"></span></div>
+      <div class="kpi-sub num" id="up-sub">Waiting for order book…</div>
     </div>
+    <div class="card kpi">
+      <div class="kpi-label">Time left in round</div>
+      <div class="kpi-value" id="time-left">—:——</div>
+      <div class="meter" id="time-meter" data-level="ok" aria-hidden="true"><span id="time-fill"></span></div>
+      <div class="kpi-sub num" id="round-end">—</div>
+    </div>
+  </section>
 
-    <div id="poly-stats">
-      <div class="ps-row">
-        <div class="ps-chip"><span class="ps-label">Best Bid</span><span class="ps-val up"   id="ps-bid">—</span></div>
-        <div class="ps-chip"><span class="ps-label">Best Ask</span><span class="ps-val down" id="ps-ask">—</span></div>
-        <div class="ps-chip"><span class="ps-label">Spread</span>  <span class="ps-val"      id="ps-sp">—</span></div>
-        <div class="ps-chip"><span class="ps-label">Last</span>    <span class="ps-val"      id="ps-last">—</span></div>
-      </div>
-      <!-- #10 Prob bar + verbal sentiment -->
-      <div class="impl-row">
-        <span class="impl-label">UP implied</span>
-        <div class="impl-bar-wrap"><div id="impl-yes" style="width:50%"></div></div>
-        <span class="impl-pct up" id="impl-pct">—</span>
-        <span class="prob-sentiment" id="prob-sentiment">—</span>
-      </div>
-      <!-- #2 Strike + distance row (replaces meta-row) -->
-      <div class="sdr-wrap">
-        <div class="sdr-item">
-          <span class="sdr-lbl">Strike</span>
-          <span class="sdr-val orange" id="strike-val">fetching…</span>
+  <main class="layout">
+    <div class="col">
+
+      <section class="card" id="card-charts" aria-label="Charts">
+        <div class="toolbar">
+          <div class="seg" role="group" aria-label="Time window">
+            <button type="button" data-s="10"  aria-pressed="false">10s</button>
+            <button type="button" data-s="30"  aria-pressed="true">30s</button>
+            <button type="button" data-s="60"  aria-pressed="false">1m</button>
+            <button type="button" data-s="300" aria-pressed="false">5m</button>
+          </div>
+          <label class="toggle"><input type="checkbox" id="show-ex"> Exchange lines</label>
         </div>
-        <div class="sdr-item">
-          <span class="sdr-lbl">Distance</span>
-          <span class="sdr-val" id="dist-abs">—</span>
+
+        <div class="chart-head">
+          <h2>BTC price vs strike</h2>
+          <div class="legend">
+            <span><i class="lk"></i>Median</span>
+            <span><i class="lk dash"></i>Strike</span>
+            <span><i class="wk up"></i>Above</span>
+            <span><i class="wk down"></i>Below</span>
+            <span id="legend-ex" hidden></span>
+          </div>
         </div>
-        <div class="sdr-item">
-          <span class="sdr-lbl">Dist %</span>
-          <span class="sdr-val" id="dist-pct">—</span>
+        <div class="plot" id="btc-plot">
+          <canvas id="btc-canvas" role="img" aria-label="BTC price chart"></canvas>
+          <div class="tip" id="btc-tip" hidden></div>
         </div>
-        <div class="sdr-item" style="margin-left:auto">
-          <span class="sdr-lbl">Countdown</span>
-          <span class="sdr-val" id="countdown" style="color:var(--yellow)">—</span>
+
+        <div class="chart-head">
+          <h2>Implied UP probability</h2>
+          <div class="legend"><span id="leg-50"><i class="lk dash"></i>50%</span></div>
         </div>
-      </div>
-    </div>
+        <div class="plot plot-prob" id="prob-plot">
+          <canvas id="prob-canvas" role="img" aria-label="Implied UP probability chart"></canvas>
+          <div class="tip" id="prob-tip" hidden></div>
+        </div>
+      </section>
 
-    <!-- #5 Liquidity Walls + #8 Exchange Divergence -->
-    <div id="liq-walls">
-      <span class="lw-title">Liq Walls</span>
-      <div class="lw-item">
-        <span class="lw-lbl">Ask Wall</span>
-        <span class="lw-val down" id="lw-ask">—</span>
-      </div>
-      <div class="lw-sep"></div>
-      <div class="lw-item">
-        <span class="lw-lbl">Bid Wall</span>
-        <span class="lw-val up" id="lw-bid">—</span>
-      </div>
-      <div class="lw-sep"></div>
-      <div class="lw-item">
-        <span class="lw-lbl">Exch Hi</span>
-        <span class="lw-val up" id="ed-hi">—</span>
-      </div>
-      <div class="lw-sep"></div>
-      <div class="lw-item">
-        <span class="lw-lbl">Exch Lo / Δ</span>
-        <span class="lw-val" id="ed-lo-spread">—</span>
-      </div>
-    </div>
+      <section class="card" id="card-sources" aria-label="Data sources">
+        <div class="card-head"><h2>Data sources</h2><span class="card-meta num" id="src-meta">—</span></div>
+        <div class="src" id="src">
+          <span class="src-h">Source <span class="muted">· checked = in median</span></span>
+          <span class="src-h src-v">Last</span>
+          <span class="src-h src-v">vs median</span>
+          <span class="src-h"></span>
+        </div>
+      </section>
 
-    <!-- #6 Mispricing · #9 Confidence · #7 Buy Pressure Trend -->
-    <div id="analysis-row">
-      <div class="an-cell">
-        <span class="an-lbl">Mispricing</span>
-        <span class="an-val" id="misprice-val">—</span>
-        <span class="an-sub" id="misprice-sub">—</span>
-      </div>
-      <div class="an-cell">
-        <span class="an-lbl">Confidence</span>
-        <span class="an-val" id="conf-pct">—</span>
-        <div class="conf-track"><div class="conf-fill" id="conf-fill" style="width:0%"></div></div>
-      </div>
-      <div class="an-cell">
-        <span class="an-lbl">Buy Pressure</span>
-        <span class="an-val" id="bp-val">—</span>
-        <span class="an-sub" id="bp-trend">—</span>
-      </div>
     </div>
+    <div class="col">
 
-    <!-- #12 Projected Close -->
-    <div id="proj-row">
-      <span class="proj-lbl">Projected Close</span>
-      <span id="proj-val">—</span>
-      <span id="proj-conf">—</span>
-      <span id="proj-vel"></span>
-    </div>
+      <section class="card" id="card-book" aria-label="Order book">
+        <div class="card-head"><h2>Order book <span class="muted">· UP shares</span></h2><span class="card-meta num" id="last-trade">Last —</span></div>
+        <div class="ladder" role="table" aria-label="Order book for UP shares">
+          <div class="lrow lhead" role="row"><span role="columnheader">Price</span><span role="columnheader">Size</span><span role="columnheader">Total</span></div>
+          <div id="asks" role="rowgroup"></div>
+          <div class="lmid" id="lmid" role="row"><span role="cell">Waiting for book…</span><span role="cell"></span></div>
+          <div id="bids" role="rowgroup"></div>
+        </div>
+      </section>
 
-    <div id="orderbook">
-      <table class="ob-table">
-        <thead>
-          <tr>
-            <th style="text-align:left">Bid ¢</th>
-            <th>Size</th>
-            <th>Cum</th>
-            <th class="depth-c"></th>
-            <th class="sep-c"></th>
-            <th class="depth-c"></th>
-            <th>Cum</th>
-            <th>Size</th>
-            <th>Ask ¢</th>
-          </tr>
-        </thead>
-        <tbody id="ob-body">
-          <tr><td colspan="9" style="text-align:center;color:var(--dim);padding:24px">Waiting…</td></tr>
-        </tbody>
-      </table>
-    </div>
+      <section class="card" id="card-signals" aria-label="Signals">
+        <div class="card-head"><h2>Signals</h2><span class="card-meta">heuristics, not advice</span></div>
+        <div class="sig">
+          <div class="sig-top"><span class="sig-label">Market vs model</span><span class="sig-value" id="edge-val">—</span></div>
+          <div class="sig-sub" id="edge-sub">Needs order book, strike and price</div>
+        </div>
+        <div class="sig">
+          <div class="sig-top"><span class="sig-label">Projected close</span><span class="sig-value" id="proj-val">—</span></div>
+          <div class="sig-sub" id="proj-sub">Momentum of the last 30s, extrapolated</div>
+        </div>
+        <div class="sig">
+          <div class="sig-top"><span class="sig-label" id="bp-label">Buy pressure · 30s</span><span class="sig-value" id="bp-val">—</span></div>
+          <div class="segbar thin idle" id="bp-bar" aria-hidden="true"><span class="sb-up" id="bp-buy"></span><span class="sb-down" id="bp-sell"></span></div>
+          <div class="sig-sub" id="bp-sub">—</div>
+        </div>
+      </section>
 
-    <div id="poly-foot">
-      <div id="poly-dot" class="dot wait"></div>
-      <span id="poly-st">Connecting…</span>
     </div>
-  </div>
+  </main>
 </div>
 
 <script>
+const $ = id => document.getElementById(id);
+
 // ── State ────────────────────────────────────────────────────────────────────
 let WINDOW_MS = 30_000;
 const MAX_BUF = 40_000;
 
+// color is filled from the --ex-N tokens by readTheme()
 const EXCH = [
-  { key:'coinbase', name:'Coinbase', short:'CB', color:'#58a6ff', trades:[], lastP:null, enabled:true },
-  { key:'kraken',   name:'Kraken',   short:'KR', color:'#8957e5', trades:[], lastP:null, enabled:true },
-  { key:'bitstamp', name:'Bitstamp', short:'BS', color:'#e3b341', trades:[], lastP:null, enabled:true },
-  { key:'gemini',   name:'Gemini',   short:'GM', color:'#3fb950', trades:[], lastP:null, enabled:true },
-  { key:'bitfinex', name:'Bitfinex', short:'BX', color:'#f0883e', trades:[], lastP:null, enabled:true },
-  { key:'binance',  name:'Binance',  short:'BN', color:'#f85149', trades:[], lastP:null, enabled:true },
+  { key:'coinbase', name:'Coinbase', short:'CB', color:'', trades:[], lastP:null, enabled:true },
+  { key:'kraken',   name:'Kraken',   short:'KR', color:'', trades:[], lastP:null, enabled:true },
+  { key:'bitstamp', name:'Bitstamp', short:'BS', color:'', trades:[], lastP:null, enabled:true },
+  { key:'gemini',   name:'Gemini',   short:'GM', color:'', trades:[], lastP:null, enabled:true },
+  { key:'bitfinex', name:'Bitfinex', short:'BX', color:'', trades:[], lastP:null, enabled:true },
+  { key:'binance',  name:'Binance',  short:'BN', color:'', trades:[], lastP:null, enabled:true },
 ];
 
-let medianOnly = false;
+let showExchanges = false;
 
-let openBtcP = null, lastMedianP = null, prevMedianP = null;
+let lastMedianP = null;
 let tpsCount = 0, tps = 0, tpsTick = Date.now();
-let mouseX = -1, mouseY = -1;
 // medianHistory entries: {t, p, lo, hi}
 const medianHistory = [];
 
-let polyBids = {}, polyAsks = {}, polyLastTrade = null;
-let strike = null, windowTs = null;
+let polyBids = {}, polyAsks = {}, polyLastTrade = null, bookDirty = true;
+let upProb = null;                       // implied UP probability = book mid, in %
+let strike = null, strikeStatus = 'fetching…', windowTs = null;
 let polyWs = null, countdownTimer = null;
+let polyState = 'wait', polyStamp = 'Connecting…';
 
-let clPrice = null, prevClPrice = null, clProvider = null;
+let clPrice = null, clProvider = null, clState = 'wait';
 
 // probability history — trimmed by age, never by count
 const probHistory = [];
@@ -527,6 +382,10 @@ let lastProbValue = null;
 
 // buy pressure snapshots for trend detection {t, pct}
 const buyPressureSnaps = [];
+
+// crosshair: fraction of the plot width under the pointer, shared by both charts
+let hoverFrac = null, hoverSrc = null, touchClearTimer = null;
+let plotGutter = 72;
 
 function pushProbPoint(pct) {
   const now = Date.now();
@@ -543,13 +402,19 @@ function pushProbPoint(pct) {
   while (probHistory.length && probHistory[0].t < cutoff) probHistory.shift();
 }
 
-// ── Small helpers ────────────────────────────────────────────────────────────
-function probSentiment(p) {
-  if (p < 20) return ['Very Bearish','down'];
-  if (p < 40) return ['Bearish','down'];
-  if (p < 60) return ['Neutral',''];
-  if (p < 80) return ['Bullish','up'];
-  return ['Very Bullish','up'];
+// ── Formatting & small helpers ───────────────────────────────────────────────
+const fmtP     = n => '$' + n.toLocaleString('en-US', { minimumFractionDigits:2, maximumFractionDigits:2 });
+const fmtNum   = n => n.toLocaleString('en-US', { minimumFractionDigits:2, maximumFractionDigits:2 });
+const fmtSz    = n => n.toLocaleString('en-US', { maximumFractionDigits: n >= 100 ? 0 : 1 });
+const fmtClock = t => new Date(t).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+const signedUsd = d => (d >= 0 ? '+' : '−') + fmtP(Math.abs(d));
+const winLabel = () => WINDOW_MS < 60_000 ? (WINDOW_MS / 1000) + 's' : (WINDOW_MS / 60_000) + 'm';
+
+// first index with arr[i].t >= t (arrays are time-ordered)
+function firstIdx(arr, t) {
+  let a = 0, b = arr.length;
+  while (a < b) { const m = (a + b) >>> 1; arr[m].t < t ? (a = m + 1) : (b = m); }
+  return a;
 }
 
 // Abramowitz & Stegun normal CDF approximation
@@ -578,118 +443,11 @@ function computeModelProb() {
   return Math.max(1, Math.min(99, normalCDF(z) * 100));
 }
 
-function updateSummaryPanel() {
-  const med   = lastMedianP;
-  // impl-pct shows '—' while the book has no mid → parseFloat gives NaN, treat as "no prob yet"
-  const prob  = (() => { const el = document.getElementById('impl-pct'); const v = el ? parseFloat(el.textContent) : NaN; return Number.isFinite(v) ? v : null; })();
-  const s     = secsLeft();
-  const m     = Math.floor(s / 60), r = s % 60;
-
-  // Outcome card
-  document.getElementById('oc-btc').textContent    = med !== null ? fmtP(med) : '—';
-  document.getElementById('oc-strike').textContent = strike !== null ? fmtP(strike) : '—';
-  document.getElementById('oc-time').textContent   = s > 0 ? `${m}:${String(r).padStart(2,'0')}` : '—';
-
-  if (med !== null && strike !== null) {
-    const dist = med - strike;
-    const pct  = dist / strike * 100;
-    const above = dist >= 0;
-    const distTxt = (dist >= 0 ? '+' : '') + fmtP(dist);
-    const pctTxt  = (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%';
-    document.getElementById('oc-dist').textContent   = distTxt;
-    document.getElementById('oc-dist').className     = 'oc-val ' + (above ? 'up' : 'down');
-    document.getElementById('dist-abs').textContent  = distTxt;
-    document.getElementById('dist-abs').className    = 'sdr-val ' + (above ? 'up' : 'down');
-    document.getElementById('dist-pct').textContent  = pctTxt;
-    document.getElementById('dist-pct').className    = 'sdr-val ' + (above ? 'up' : 'down');
-
-    const card = document.getElementById('outcome-card');
-    card.className = above ? 'above' : 'below';
-
-    // State banner
-    const riskLevel = Math.abs(dist);
-    let cls, main;
-    const sub = distTxt + (prob !== null ? ' · ' + prob.toFixed(1) + '% UP' : '');
-    if (above) {
-      cls  = riskLevel < 50 ? 'warn' : 'up';
-      main = riskLevel < 50 ? 'MARGINAL ABOVE' : 'BTC ABOVE STRIKE';
-    } else {
-      cls  = riskLevel < 50 ? 'warn' : 'down';
-      main = riskLevel < 50 ? 'MARGINAL BELOW' : 'BTC BELOW STRIKE';
-    }
-    const banner = document.getElementById('state-banner');
-    banner.className = cls;
-    document.getElementById('sb-dot').className = cls;
-    document.getElementById('sb-main').textContent = main;
-    document.getElementById('sb-sub').textContent  = sub;
-    document.getElementById('sb-right').textContent = s > 0 ? `${m}:${String(r).padStart(2,'0')} left` : '';
-  } else {
-    document.getElementById('oc-dist').textContent = '—';
-    document.getElementById('dist-abs').textContent = '—';
-    document.getElementById('dist-pct').textContent = '—';
-  }
-
-  if (prob !== null) {
-    document.getElementById('oc-prob').textContent = prob.toFixed(1) + '%';
-    const [lbl, cls] = probSentiment(prob);
-    document.getElementById('oc-prob').className   = 'oc-val ' + cls;
-    document.getElementById('oc-verdict').textContent = lbl;
-    document.getElementById('oc-verdict').className   = 'oc-val ' + cls;
-    const [slbl, scls] = probSentiment(prob);
-    document.getElementById('prob-sentiment').textContent = slbl;
-    document.getElementById('prob-sentiment').className   = 'prob-sentiment ' + scls;
-  }
-}
-
-// ── BTC Canvas ───────────────────────────────────────────────────────────────
-const canvas = document.getElementById('chart');
-const ctx    = canvas.getContext('2d');
-let dpr = window.devicePixelRatio || 1;
-
-function resizeCanvas() {
-  dpr = window.devicePixelRatio || 1;
-  canvas.width  = canvas.offsetWidth  * dpr;
-  canvas.height = canvas.offsetHeight * dpr;
-}
-new ResizeObserver(resizeCanvas).observe(canvas);
-resizeCanvas();
-
-canvas.addEventListener('mousemove', e => {
-  const r = canvas.getBoundingClientRect();
-  mouseX = e.clientX - r.left; mouseY = e.clientY - r.top;
-});
-canvas.addEventListener('mouseleave', () => { mouseX = -1; mouseY = -1; });
-
-// ── Prob Canvas ──────────────────────────────────────────────────────────────
-const probCanvas = document.getElementById('prob');
-const probCtx    = probCanvas.getContext('2d');
-let probDpr = window.devicePixelRatio || 1;
-
-function resizeProbCanvas() {
-  probDpr = window.devicePixelRatio || 1;
-  probCanvas.width  = probCanvas.offsetWidth  * probDpr;
-  probCanvas.height = probCanvas.offsetHeight * probDpr;
-}
-new ResizeObserver(resizeProbCanvas).observe(probCanvas);
-resizeProbCanvas();
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
-const fmtP  = n => '$' + n.toLocaleString('en-US', { minimumFractionDigits:2, maximumFractionDigits:2 });
-const fmtSz = n => n.toLocaleString('en-US', { maximumFractionDigits:1 });
-const setDot = (id, cls) => { const el = document.getElementById(id); if (el) el.className = 'dot ' + cls; };
-
 function getMedian() {
   const prices = EXCH.filter(e => e.enabled && e.lastP !== null).map(e => e.lastP).sort((a,b) => a-b);
   if (!prices.length) return null;
   const m = Math.floor(prices.length / 2);
   return prices.length % 2 === 0 ? (prices[m-1] + prices[m]) / 2 : prices[m];
-}
-
-function updateExchDots() {
-  for (const ex of EXCH) {
-    const dot = document.getElementById('dot-' + ex.key);
-    if (dot) dot.style.background = ex.lastP !== null ? ex.color : '#6e7681';
-  }
 }
 
 function onTrade(key, trade) {
@@ -702,89 +460,509 @@ function onTrade(key, trade) {
   tpsCount++;
 
   const prices = EXCH.filter(e => e.enabled && e.lastP !== null).map(e => e.lastP).sort((a,b) => a-b);
-  if (prices.length) {
+  // wait for 3 sources before trusting the median — a single exchange (e.g. Binance USDT) can sit $100+ off
+  if (prices.length >= Math.min(3, EXCH.filter(e => e.enabled).length)) {
     const m = Math.floor(prices.length / 2);
     const med = prices.length % 2 === 0 ? (prices[m-1] + prices[m]) / 2 : prices[m];
     medianHistory.push({ t: Date.now(), p: med, lo: prices[0], hi: prices[prices.length-1] });
     if (medianHistory.length > MAX_BUF) medianHistory.splice(0, 2000);
     lastMedianP = med;
   }
-  updateBtcHeader(trade);
 }
 
-function updateBtcHeader(tr) {
-  const med = getMedian();
-  if (med === null) return;
-  const el = document.getElementById('h-price');
-  if (prevMedianP !== null) {
-    el.style.color = med > prevMedianP ? '#3fb950' : med < prevMedianP ? '#f85149' : '#f0f6fc';
-    setTimeout(() => el.style.color = '#f0f6fc', 400);
-  }
-  el.textContent = fmtP(med);
-  prevMedianP = med;
-  document.getElementById('h-qty').textContent = tr.q.toFixed(4) + ' ₿';
-  if (openBtcP !== null) {
-    const chg = med - openBtcP, pct = chg / openBtcP * 100;
-    const el2 = document.getElementById('h-change');
-    el2.textContent = (chg>=0?'+':'') + fmtP(chg) + ' (' + pct.toFixed(3) + '%)';
-    el2.className = chg >= 0 ? 'up' : 'down';
-  }
-  const cut = Date.now() - WINDOW_MS;
-  let b = 0, s = 0;
-  for (const ex of EXCH.filter(e => e.enabled))
-    for (let i = ex.trades.length-1; i >= 0 && ex.trades[i].t >= cut; i--)
-      ex.trades[i].sell ? s += ex.trades[i].q : b += ex.trades[i].q;
-  const tot = b + s || 1;
-  const buyPct = b / tot * 100;
-  document.getElementById('h-buy').textContent = buyPct.toFixed(1) + '% buy';
-  updateExchDots();
+// ── Theme ────────────────────────────────────────────────────────────────────
+// canvas can't read CSS vars, so the tokens are copied into T on every theme change
+const T = {};
+const darkMq = matchMedia('(prefers-color-scheme: dark)');
+const ICON_SUN  = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>';
+const ICON_MOON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>';
 
-  // buy pressure snapshots (keep 5 min)
-  buyPressureSnaps.push({ t: Date.now(), pct: buyPct });
-  if (buyPressureSnaps.length > 3000) buyPressureSnaps.splice(0, 500);
-  const old = buyPressureSnaps.find(v => Date.now() - v.t >= 90_000);
-  const bpEl = document.getElementById('bp-val');
-  const btEl = document.getElementById('bp-trend');
-  if (bpEl) bpEl.textContent = buyPct.toFixed(1) + '%';
-  if (btEl && old) {
-    const diff = buyPct - old.pct;
-    btEl.textContent = diff > 2 ? '▲ Rising' : diff < -2 ? '▼ Falling' : '→ Neutral';
-    btEl.style.color = diff > 2 ? 'var(--green)' : diff < -2 ? 'var(--red)' : 'var(--dim)';
-  } else if (btEl) { btEl.textContent = '—'; }
+function isDark() {
+  const t = document.documentElement.dataset.theme;
+  return t ? t === 'dark' : darkMq.matches;
+}
 
-  // exchange divergence
-  const live = EXCH.filter(e => e.enabled && e.lastP !== null);
-  if (live.length >= 2) {
-    const hiEx = live.reduce((a, b) => a.lastP > b.lastP ? a : b);
-    const loEx = live.reduce((a, b) => a.lastP < b.lastP ? a : b);
-    const spread = hiEx.lastP - loEx.lastP;
-    const hiEl = document.getElementById('ed-hi');
-    const loEl = document.getElementById('ed-lo-spread');
-    if (hiEl) { hiEl.textContent = hiEx.short + ' ' + fmtP(hiEx.lastP); }
-    if (loEl) { loEl.textContent = loEx.short + ' · Δ' + fmtP(spread); }
+function readTheme() {
+  const cs = getComputedStyle(document.documentElement);
+  const v = n => cs.getPropertyValue('--' + n).trim();
+  Object.assign(T, {
+    surface: v('surface'), ink1: v('ink-1'), ink2: v('ink-2'), muted: v('muted'),
+    grid: v('grid'), axis: v('axis'), upWash: v('up-wash'), downWash: v('down-wash'),
+  });
+  EXCH.forEach((ex, i) => ex.color = v('ex-' + (i + 1)));
+  $('theme-btn').innerHTML = isDark() ? ICON_SUN : ICON_MOON;
+}
+
+darkMq.addEventListener('change', readTheme);
+$('theme-btn').addEventListener('click', () => {
+  const next = isDark() ? 'light' : 'dark';
+  document.documentElement.dataset.theme = next;
+  try { localStorage.setItem('theme', next); } catch {}
+  readTheme();
+});
+
+// ── Canvas plumbing ──────────────────────────────────────────────────────────
+const FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+
+function setupCanvas(id) {
+  const el = $(id);
+  const c = { el, ctx: el.getContext('2d'), w: 0, h: 0, dpr: 1 };
+  const fit = () => {
+    c.dpr = window.devicePixelRatio || 1;
+    c.w = el.clientWidth; c.h = el.clientHeight;
+    el.width = Math.round(c.w * c.dpr); el.height = Math.round(c.h * c.dpr);
+  };
+  new ResizeObserver(fit).observe(el);
+  fit();
+  return c;
+}
+
+// pointer → shared crosshair; touch keeps it visible briefly after lifting the finger
+function attachHover(el, name) {
+  const update = e => {
+    const r = el.getBoundingClientRect();
+    hoverFrac = Math.max(0, Math.min(1, (e.clientX - r.left) / (r.width - plotGutter)));
+    hoverSrc = name;
+  };
+  const clear = () => { hoverFrac = null; hoverSrc = null; };
+  el.addEventListener('pointerdown', e => { clearTimeout(touchClearTimer); update(e); });
+  el.addEventListener('pointermove', e => { if (e.pointerType === 'mouse' || e.buttons) update(e); });
+  el.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') clear(); });
+  el.addEventListener('pointerup', e => { if (e.pointerType !== 'mouse') touchClearTimer = setTimeout(clear, 2500); });
+  el.addEventListener('pointercancel', clear);
+}
+
+// visible slice reduced to one point per pixel column (+ the point just before the window)
+function series(arr, cutoff, xOf) {
+  const pts = [];
+  let lo = Infinity, hi = -Infinity;
+  for (let i = Math.max(0, firstIdx(arr, cutoff) - 1); i < arr.length; i++) {
+    const v = arr[i], x = Math.max(0, Math.round(xOf(v.t)));
+    if (v.p < lo) lo = v.p;
+    if (v.p > hi) hi = v.p;
+    const last = pts[pts.length - 1];
+    if (last && last.x === x) last.p = v.p; else pts.push({ x, p: v.p });
+  }
+  return { pts, lo, hi };
+}
+
+// polyline vertices; step = hold each value until the next point; extends flat to xEnd ("now")
+function vertices(pts, yOf, step, xEnd) {
+  const out = [];
+  let prevY = null;
+  for (const p of pts) {
+    const y = yOf(p.p);
+    if (step && prevY !== null) out.push([p.x, prevY]);
+    out.push([p.x, y]);
+    prevY = y;
+  }
+  if (xEnd > out[out.length - 1][0]) out.push([xEnd, prevY]);
+  return out;
+}
+
+function strokeVerts(ctx, verts, color, width) {
+  ctx.beginPath();
+  ctx.moveTo(verts[0][0], verts[0][1]);
+  for (let i = 1; i < verts.length; i++) ctx.lineTo(verts[i][0], verts[i][1]);
+  ctx.strokeStyle = color; ctx.lineWidth = width;
+  ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  ctx.stroke();
+}
+
+// ~10% wash between the line and a reference level: up color above it, down color below
+function washVerts(ctx, verts, baseY, PW, H) {
+  const path = new Path2D();
+  path.moveTo(verts[0][0], baseY);
+  for (const [x, y] of verts) path.lineTo(x, y);
+  path.lineTo(verts[verts.length - 1][0], baseY);
+  path.closePath();
+  ctx.save(); ctx.beginPath(); ctx.rect(0, 0, PW, baseY);     ctx.clip(); ctx.fillStyle = T.upWash;   ctx.fill(path); ctx.restore();
+  ctx.save(); ctx.beginPath(); ctx.rect(0, baseY, PW, H - baseY); ctx.clip(); ctx.fillStyle = T.downWash; ctx.fill(path); ctx.restore();
+}
+
+function niceStep(range, target) {
+  const raw = range / Math.max(1, target);
+  const p = Math.pow(10, Math.floor(Math.log10(raw)));
+  const n = raw / p;
+  return (n < 1.5 ? 1 : n < 3 ? 2 : n < 7 ? 5 : 10) * p;
+}
+
+// solid hairline grid with clean tick values in the right gutter (no label where the end tag sits)
+function yGrid(ctx, lo, hi, yOf, PW, Y0, Y1, target, fmt, tagY) {
+  const step = niceStep(hi - lo, target);
+  if (!(step > 0)) return;
+  ctx.font = '11px ' + FONT; ctx.textBaseline = 'middle'; ctx.textAlign = 'left'; ctx.lineWidth = 1;
+  for (let i = Math.ceil(lo / step), n = 0; i * step <= hi && n < 40; i++, n++) {
+    const v = i * step, y = Math.round(yOf(v)) + .5;
+    if (y < Y0 - 1 || y > Y1 + 1) continue;
+    ctx.strokeStyle = T.grid;
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(PW, y); ctx.stroke();
+    if (Math.abs(y - tagY) < 15) continue;
+    ctx.fillStyle = T.muted;
+    ctx.fillText(fmt(v, step), PW + 8, y);
+  }
+}
+
+function xAxis(ctx, cutoff, PW, Y1) {
+  ctx.strokeStyle = T.axis; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0, Y1 + .5); ctx.lineTo(PW, Y1 + .5); ctx.stroke();
+  ctx.font = '11px ' + FONT; ctx.fillStyle = T.muted; ctx.textBaseline = 'top';
+  const n = Math.max(2, Math.min(6, Math.floor(PW / 110)));
+  for (let i = 0; i <= n; i++) {
+    ctx.textAlign = i === 0 ? 'left' : i === n ? 'right' : 'center';
+    ctx.fillText(fmtClock(cutoff + WINDOW_MS * i / n), PW * i / n, Y1 + 7);
+  }
+  ctx.textAlign = 'left';
+}
+
+// threshold reference (strike, 50%): the one place a dashed line is right
+function refLine(ctx, y, PW) {
+  ctx.setLineDash([4, 4]); ctx.strokeStyle = T.ink2; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(PW, y); ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+function vline(ctx, x, Y0, Y1) {
+  ctx.strokeStyle = T.axis; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(Math.round(x) + .5, Y0); ctx.lineTo(Math.round(x) + .5, Y1); ctx.stroke();
+}
+
+// 8px dot with a 2px surface ring
+function dot(ctx, x, y, color) {
+  ctx.beginPath(); ctx.arc(x, y, 6, 0, Math.PI * 2); ctx.fillStyle = T.surface; ctx.fill();
+  ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI * 2); ctx.fillStyle = color;     ctx.fill();
+}
+
+function rrect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  if (ctx.roundRect) ctx.roundRect(x, y, w, h, r); else ctx.rect(x, y, w, h);
+}
+
+// value at the line end, in the gutter (label inside a fill: surface-colored text)
+function endTag(ctx, x, y, text, Y0, Y1) {
+  ctx.font = '600 11px ' + FONT;
+  const tw = ctx.measureText(text).width, h = 18;
+  const ty = Math.max(Y0 + h / 2 - 4, Math.min(Y1 - h / 2 + 4, y));
+  ctx.fillStyle = T.ink1; rrect(ctx, x + 6, ty - h / 2, tw + 12, h, 4); ctx.fill();
+  ctx.fillStyle = T.surface; ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+  ctx.fillText(text, x + 12, ty + .5);
+}
+
+function emptyState(ctx, PW, Y0, Y1, msg) {
+  ctx.fillStyle = T.muted; ctx.font = '12px ' + FONT;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(msg, PW / 2, (Y0 + Y1) / 2);
+  ctx.textAlign = 'left';
+}
+
+// tooltip: DOM built once, values written with textContent
+function makeTip(id, rows) {
+  const el = $(id), refs = {};
+  const time = document.createElement('div'); time.className = 'tip-time'; el.appendChild(time);
+  for (const r of rows) {
+    const row = document.createElement('div'); row.className = 'tip-row';
+    const name = document.createElement('span'); name.className = 'tip-name';
+    if (r.key) { const k = document.createElement('i'); k.className = 'lk ' + r.key; if (r.color) k.style.background = r.color; name.appendChild(k); }
+    name.appendChild(document.createTextNode(r.label));
+    const val = document.createElement('b');
+    row.append(name, val); el.appendChild(row);
+    refs[r.id] = { row, val };
+  }
+  return { el, time, refs };
+}
+
+function placeTip(tip, x, PW) {
+  tip.el.hidden = false;
+  const w = tip.el.offsetWidth;
+  let left = x + 14;
+  if (left + w > PW) left = x - 14 - w;
+  tip.el.style.left = Math.max(0, left) + 'px';
+}
+
+// ── BTC chart ────────────────────────────────────────────────────────────────
+function drawBtc(now) {
+  const c = btcC, ctx = c.ctx, W = c.w, H = c.h;
+  if (!W || !H) return;
+  ctx.setTransform(c.dpr, 0, 0, c.dpr, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+
+  // gutter sized to the widest label so both charts share the same plot width
+  ctx.font = '600 11px ' + FONT;
+  plotGutter = Math.max(64, Math.ceil(ctx.measureText(lastMedianP !== null ? fmtNum(lastMedianP) : '00,000.00').width) + 26);
+  const PW = W - plotGutter, Y0 = 10, Y1 = H - 6;
+  const cutoff = now - WINDOW_MS;
+  const xOf = t => (t - cutoff) / WINDOW_MS * PW;
+
+  const med = series(medianHistory, cutoff, xOf);
+  if (!med.pts.length) { btcTip.el.hidden = true; emptyState(ctx, PW, Y0, Y1, 'Waiting for trades…'); return; }
+
+  let lo = med.lo, hi = med.hi;
+  const exLines = [];
+  if (showExchanges) for (const ex of EXCH) {
+    if (!ex.enabled) continue;
+    const s = series(ex.trades, cutoff, xOf);
+    if (!s.pts.length) continue;
+    exLines.push([ex, s]);
+    lo = Math.min(lo, s.lo); hi = Math.max(hi, s.hi);
+  }
+  if (strike !== null) { lo = Math.min(lo, strike); hi = Math.max(hi, strike); }
+  const pad = Math.max((hi - lo) * 0.12, 3);
+  lo -= pad; hi += pad;
+  const yOf = p => Y0 + (hi - p) / (hi - lo) * (Y1 - Y0);
+
+  const lastP = med.pts[med.pts.length - 1].p;
+  yGrid(ctx, lo, hi, yOf, PW, Y0, Y1, (Y1 - Y0) < 240 ? 4 : 6,
+    (v, step) => '$' + v.toLocaleString('en-US', { minimumFractionDigits: step < 1 ? 2 : 0, maximumFractionDigits: step < 1 ? 2 : 0 }),
+    yOf(lastP));
+
+  const verts = vertices(med.pts, yOf, false, PW);
+  if (strike !== null) washVerts(ctx, verts, yOf(strike), PW, H);
+  for (const [ex, s] of exLines) strokeVerts(ctx, vertices(s.pts, yOf, false, PW), ex.color, 1.25);
+
+  if (strike !== null) {
+    const sy = Math.round(yOf(strike)) + .5;
+    refLine(ctx, sy, PW);
+    const lbl = 'Strike ' + fmtP(strike);
+    ctx.font = '11px ' + FONT;
+    const lw = ctx.measureText(lbl).width;
+    const ly = sy - 12 > Y0 + 4 ? sy - 11 : sy + 11;
+    ctx.fillStyle = T.surface; rrect(ctx, 4, ly - 8, lw + 8, 16, 4); ctx.fill();
+    ctx.fillStyle = T.ink2; ctx.textBaseline = 'middle'; ctx.fillText(lbl, 8, ly);
   }
 
-  // confidence score: 0–100 based on tps, spread tightness, exchange consensus
-  const exchPrices = live.map(e => e.lastP);
-  const mean  = exchPrices.reduce((a,v) => a+v, 0) / (exchPrices.length || 1);
-  const stdDev = exchPrices.length > 1
-    ? Math.sqrt(exchPrices.reduce((a,v) => a+(v-mean)**2, 0) / exchPrices.length)
-    : 999;
-  const consensusScore = Math.max(0, 100 - stdDev * 5);      // stdDev > 20 → 0
-  const tpsScore       = Math.min(100, tps * 10);             // 10 t/s → 100
-  const conf           = Math.round((consensusScore * 0.6 + tpsScore * 0.4));
-  const confEl = document.getElementById('conf-pct');
-  const fillEl = document.getElementById('conf-fill');
-  if (confEl) {
-    confEl.textContent = conf + '%';
-    confEl.className   = 'an-val ' + (conf >= 70 ? 'up' : conf >= 40 ? 'orange' : 'down');
+  strokeVerts(ctx, verts, T.ink1, 2);
+  dot(ctx, PW, yOf(lastP), T.ink1);
+  endTag(ctx, PW, yOf(lastP), fmtNum(lastP), Y0, Y1);
+
+  if (hoverFrac === null) { btcTip.el.hidden = true; return; }
+  const x  = hoverFrac * PW;
+  const ht = cutoff + hoverFrac * WINDOW_MS;
+  const i  = firstIdx(medianHistory, ht);
+  const a = medianHistory[i - 1], b = medianHistory[i];
+  const v = !a ? b : !b ? a : (ht - a.t <= b.t - ht ? a : b);
+  if (!v) { btcTip.el.hidden = true; return; }
+  vline(ctx, x, Y0, Y1);
+  dot(ctx, x, yOf(v.p), T.ink1);
+  if (hoverSrc !== 'btc') { btcTip.el.hidden = true; return; }
+
+  btcTip.time.textContent = fmtClock(v.t);
+  btcTip.refs.med.val.textContent = fmtP(v.p);
+  btcTip.refs.vs.val.textContent  = strike !== null ? signedUsd(v.p - strike) : '—';
+  for (const ex of EXCH) {
+    const r = btcTip.refs[ex.key];
+    r.row.hidden = !showExchanges || !ex.enabled;
+    if (r.row.hidden) continue;
+    const j = firstIdx(ex.trades, ht + 1) - 1;
+    r.val.textContent = j >= 0 ? fmtP(ex.trades[j].p) : '—';
   }
-  if (fillEl) {
-    fillEl.style.width      = conf + '%';
-    fillEl.style.background = conf >= 70 ? 'var(--green)' : conf >= 40 ? 'var(--orange)' : 'var(--red)';
+  placeTip(btcTip, x, PW);
+}
+
+// ── Probability chart ────────────────────────────────────────────────────────
+function drawProb(now) {
+  const c = probC, ctx = c.ctx, W = c.w, H = c.h;
+  if (!W || !H) return;
+  ctx.setTransform(c.dpr, 0, 0, c.dpr, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+
+  const PW = W - plotGutter, Y0 = 10, Y1 = H - 24;
+  const cutoff = now - WINDOW_MS;
+  const xOf = t => (t - cutoff) / WINDOW_MS * PW;
+  xAxis(ctx, cutoff, PW, Y1);
+
+  const s = series(probHistory, cutoff, xOf);
+  if (!s.pts.length) { probTip.el.hidden = true; emptyState(ctx, PW, Y0, Y1, 'Waiting for market…'); return; }
+
+  const pad = Math.max(5, (s.hi - s.lo) * 0.4);
+  const lo = Math.max(0, s.lo - pad), hi = Math.min(100, s.hi + pad);
+  const yOf = p => Y0 + (hi - p) / ((hi - lo) || 1) * (Y1 - Y0);
+
+  const lastP = s.pts[s.pts.length - 1].p;
+  yGrid(ctx, lo, hi, yOf, PW, Y0, Y1, 3, v => v.toFixed(0) + '%', yOf(lastP));
+  const verts = vertices(s.pts, yOf, true, PW);
+  const baseY = yOf(Math.max(lo, Math.min(hi, 50)));
+  washVerts(ctx, verts, baseY, PW, Y1);
+  const show50 = lo < 50 && hi > 50;
+  if (show50) refLine(ctx, Math.round(baseY) + .5, PW);
+  if (show50 === $('leg-50').hidden) $('leg-50').hidden = !show50;
+  strokeVerts(ctx, verts, T.ink1, 2);
+  dot(ctx, PW, yOf(lastP), T.ink1);
+  endTag(ctx, PW, yOf(lastP), lastP.toFixed(1) + '%', Y0, Y1);
+
+  if (hoverFrac === null) { probTip.el.hidden = true; return; }
+  const x  = hoverFrac * PW;
+  const ht = cutoff + hoverFrac * WINDOW_MS;
+  const j  = firstIdx(probHistory, ht + 1) - 1;
+  vline(ctx, x, Y0, Y1);
+  if (j < 0) { probTip.el.hidden = true; return; }
+  const p = probHistory[j].p;
+  dot(ctx, x, yOf(Math.max(lo, Math.min(hi, p))), T.ink1);
+  if (hoverSrc !== 'prob') { probTip.el.hidden = true; return; }
+  probTip.time.textContent = fmtClock(ht);
+  probTip.refs.up.val.textContent = p.toFixed(1) + '%';
+  placeTip(probTip, x, PW);
+}
+
+// ── Panels (text updates are throttled; charts redraw every frame) ───────────
+let lastUiT = 0, lastSlowT = 0;
+
+function setDelta(el, text, cls) { el.textContent = text; el.className = cls; }
+
+function updateTime() {
+  const s = secsLeft(), m = Math.floor(s / 60), r = s % 60;
+  $('time-left').textContent = `${m}:${String(r).padStart(2, '0')}`;
+  $('time-fill').style.width = ((300 - s) / 300 * 100).toFixed(1) + '%';
+  $('time-meter').dataset.level = s < 30 ? 'crit' : s < 60 ? 'warn' : 'ok';
+  $('round-end').textContent = 'Round ends ' + fmtClock((Math.floor(Date.now() / 300_000) + 1) * 300_000);
+}
+
+function updateUI(now) {
+  if (bookDirty) renderBook();
+  updateTime();
+
+  const med = lastMedianP;
+  $('btc-price').textContent = med !== null ? fmtP(med) : '—';
+  const chip = $('close-chip');
+  if (med !== null && strike !== null) {
+    const d = med - strike, above = d >= 0;
+    $('btc-delta').className = 'kpi-delta ' + (above ? 'up-t' : 'down-t');
+    $('btc-delta-text').textContent =
+      `${above ? '▲' : '▼'} ${fmtP(Math.abs(d))} ${above ? 'above' : 'below'} strike (${above ? '+' : '−'}${Math.abs(d / strike * 100).toFixed(2)}%)`;
+    chip.hidden = Math.abs(d) >= 50;
+  } else {
+    $('btc-delta').className = 'kpi-delta muted';
+    $('btc-delta-text').textContent = med === null ? 'Waiting for trades…' : 'Waiting for strike…';
+    chip.hidden = true;
+  }
+  $('btc-sub').textContent =
+    `Strike ${strike !== null ? fmtP(strike) : strikeStatus} · Chainlink ${clPrice !== null ? fmtP(clPrice) : '—'}`;
+
+  const modelP = computeModelProb();
+  if (upProb !== null) {
+    $('up-prob').textContent = upProb.toFixed(1) + '%';
+    $('up-bar').classList.remove('idle');
+    $('seg-up').style.flexGrow   = upProb;
+    $('seg-down').style.flexGrow = 100 - upProb;
+    $('up-sub').textContent = `Down ${(100 - upProb).toFixed(1)}% · Model ${modelP !== null ? modelP.toFixed(1) + '%' : '—'}`;
+  } else {
+    $('up-prob').textContent = '—';
+    $('up-bar').classList.add('idle');
+    $('seg-up').style.flexGrow = $('seg-down').style.flexGrow = 1;
+    $('up-sub').textContent = 'Waiting for order book…';
   }
 
-  updateSummaryPanel();
+  if (now - lastSlowT >= 1000) {
+    lastSlowT = now;
+    updateSignals(now, modelP);
+    updateSources();
+    updateLive();
+    btcC.el.setAttribute('aria-label',
+      `BTC median price ${med !== null ? fmtP(med) : 'unknown'}${strike !== null ? ', strike ' + fmtP(strike) : ''}, last ${winLabel()}`);
+    probC.el.setAttribute('aria-label',
+      `Implied UP probability ${upProb !== null ? upProb.toFixed(1) + '%' : 'unknown'}, last ${winLabel()}`);
+  }
+}
+
+function updateSignals(now, modelP) {
+  // Market vs model (mispricing)
+  if (upProb !== null && modelP !== null) {
+    const prem = upProb - modelP;
+    const both = `market ${upProb.toFixed(1)}% vs model ${modelP.toFixed(1)}%`;
+    if (Math.abs(prem) < 3) {
+      $('edge-val').textContent = 'Fair';
+      $('edge-sub').textContent = 'Within 3 pts · ' + both;
+    } else {
+      $('edge-val').textContent = `${prem > 0 ? '+' : '−'}${Math.abs(prem).toFixed(1)} pts`;
+      $('edge-sub').textContent = `UP looks ${prem > 0 ? 'overpriced' : 'underpriced'} · ` + both;
+    }
+  } else {
+    $('edge-val').textContent = '—';
+    $('edge-sub').textContent = 'Needs order book, strike and price';
+  }
+
+  // Projected close — velocity from last 30s extrapolated to round end
+  const s = secsLeft();
+  const k = Math.max(0, firstIdx(medianHistory, now - 30_000) - 1);
+  const old = medianHistory[k];
+  if (lastMedianP !== null && s > 0 && old && now - old.t > 1000) {
+    const vel  = (lastMedianP - old.p) / ((now - old.t) / 1000);   // $/s
+    const proj = lastMedianP + vel * s;
+    $('proj-val').textContent = fmtP(proj);
+    const sub = $('proj-sub');
+    sub.replaceChildren();
+    if (strike !== null) {
+      const above = proj >= strike, sp = document.createElement('span');
+      sp.className = above ? 'up-t' : 'down-t';
+      sp.textContent = above ? '▲ above strike' : '▼ below strike';
+      sub.append(sp, ' · ');
+    }
+    sub.append(`momentum ${vel >= 0 ? '+' : '−'}$${Math.abs(vel * 60).toFixed(0)}/min · ${s < 30 ? 'high' : s < 90 ? 'medium' : 'low'} confidence`);
+  } else {
+    $('proj-val').textContent = '—';
+  }
+
+  // Buy pressure over the chart window + trend vs ~90s ago
+  $('bp-label').textContent = 'Buy pressure · ' + winLabel();
+  const cut = now - WINDOW_MS;
+  let b = 0, sl = 0;
+  for (const ex of EXCH) {
+    if (!ex.enabled) continue;
+    for (let i = firstIdx(ex.trades, cut); i < ex.trades.length; i++) ex.trades[i].sell ? sl += ex.trades[i].q : b += ex.trades[i].q;
+  }
+  if (b + sl > 0) {
+    const pct = b / (b + sl) * 100;
+    buyPressureSnaps.push({ t: now, pct });
+    while (buyPressureSnaps.length && buyPressureSnaps[0].t < now - 300_000) buyPressureSnaps.shift();
+    $('bp-val').textContent = pct.toFixed(0) + '% buy';
+    $('bp-bar').classList.remove('idle');
+    $('bp-buy').style.flexGrow  = pct;
+    $('bp-sell').style.flexGrow = 100 - pct;
+    let ref = null;
+    for (let i = buyPressureSnaps.length - 1; i >= 0; i--) if (now - buyPressureSnaps[i].t >= 90_000) { ref = buyPressureSnaps[i]; break; }
+    const sub = $('bp-sub');
+    sub.replaceChildren();
+    if (ref) {
+      const diff = pct - ref.pct, sp = document.createElement('span');
+      sp.className = diff > 2 ? 'up-t' : diff < -2 ? 'down-t' : '';
+      sp.textContent = diff > 2 ? '▲ rising' : diff < -2 ? '▼ falling' : '→ steady';
+      sub.append(sp, ` vs 90s ago (${ref.pct.toFixed(0)}%)`);
+    } else {
+      sub.textContent = 'Trend shows after 90s of data';
+    }
+  } else {
+    $('bp-val').textContent = '—';
+    $('bp-bar').classList.add('idle');
+  }
+}
+
+function updateSources() {
+  const med = lastMedianP;
+  for (const ex of EXCH) {
+    $('sp-' + ex.key).textContent = ex.lastP !== null ? fmtP(ex.lastP) : '—';
+    $('sd-' + ex.key).textContent = ex.lastP !== null && med !== null ? signedUsd(ex.lastP - med) : '—';
+    $('sdot-' + ex.key).className = 'dot ' + (!ex.enabled ? '' : ex.lastP !== null ? 'live' : 'wait');
+  }
+  $('sp-cl').textContent = clPrice !== null ? fmtP(clPrice) : '—';
+  $('sd-cl').textContent = clPrice !== null && med !== null ? signedUsd(clPrice - med) : '—';
+  $('sdot-cl').className = 'dot ' + clState;
+  $('sp-pm').textContent = polyStamp;
+  $('sdot-pm').className = 'dot ' + polyState;
+
+  // data quality 0–100 from exchange consensus and trade activity
+  const live = EXCH.filter(e => e.enabled && e.lastP !== null).map(e => e.lastP);
+  const mean = live.reduce((a, v) => a + v, 0) / (live.length || 1);
+  const stdDev = live.length > 1 ? Math.sqrt(live.reduce((a, v) => a + (v - mean) ** 2, 0) / live.length) : 999;
+  const quality = Math.round(Math.max(0, 100 - stdDev * 5) * 0.6 + Math.min(100, tps * 10) * 0.4);
+  $('src-meta').textContent = `${tps} trades/s · data quality ${quality}%`;
+}
+
+function updateLive() {
+  const live = EXCH.filter(e => e.enabled && e.lastP !== null).length;
+  let cls = 'wait', txt = 'Connecting';
+  if (polyState === 'live' && live >= 3) { cls = 'live'; txt = 'Live'; }
+  else if (polyState === 'err') { cls = 'err'; txt = 'Reconnecting'; }
+  $('live-dot').className = 'dot ' + cls;
+  $('live-text').textContent = txt;
 }
 
 // ── Exchange WebSocket connections ───────────────────────────────────────────
@@ -866,21 +1044,6 @@ function connectBinance() {
   ws.onerror = () => ws.close();
 }
 
-// seed 24h open from Coinbase REST
-fetch('https://api.exchange.coinbase.com/products/BTC-USD/stats')
-  .then(r => r.json()).then(d => { openBtcP = parseFloat(d.open); })
-  .catch(() => {});
-
-connectCoinbase(); connectKraken(); connectBitstamp();
-connectGemini(); connectBitfinex(); connectBinance();
-
-// ── Window buttons ───────────────────────────────────────────────────────────
-document.querySelectorAll('.wb').forEach(btn => btn.addEventListener('click', () => {
-  document.querySelectorAll('.wb').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  WINDOW_MS = parseInt(btn.dataset.s) * 1000;
-}));
-
 // ── Polymarket ───────────────────────────────────────────────────────────────
 const GAMMA = 'https://gamma-api.polymarket.com';
 const PM_WS = 'wss://ws-subscriptions-clob.polymarket.com/ws/market';
@@ -908,134 +1071,71 @@ function parseMarket(event) {
   return { question: m.question || event.title, yesId: ids[0] || null };
 }
 
-// ── Order book render ────────────────────────────────────────────────────────
-function renderBook() {
-  const bids = Object.values(polyBids).sort((a,b) => b.price - a.price).slice(0, 14);
-  const asks = Object.values(polyAsks).sort((a,b) => a.price - b.price).slice(0, 14);
-
-  const bb  = bids[0]?.price ?? null;
-  const ba  = asks[0]?.price ?? null;
-  const mid = bb !== null && ba !== null ? (bb + ba) / 2 : null;
-  const sp  = bb !== null && ba !== null ? (ba - bb) * 100 : null;
-
-  document.getElementById('ps-bid').textContent  = bb !== null ? (bb*100).toFixed(2)+'¢' : '—';
-  document.getElementById('ps-ask').textContent  = ba !== null ? (ba*100).toFixed(2)+'¢' : '—';
-  document.getElementById('ps-sp').textContent   = sp !== null ? sp.toFixed(2)+'¢' : '—';
-  document.getElementById('ps-last').textContent = polyLastTrade !== null ? (polyLastTrade*100).toFixed(2)+'¢' : '—';
-
-  if (mid !== null) {
-    const pct = mid * 100;
-    document.getElementById('impl-yes').style.width = pct + '%';
-    document.getElementById('impl-pct').textContent = pct.toFixed(1) + '%';
-    document.getElementById('impl-pct').className = 'impl-pct ' + (pct >= 50 ? 'up' : 'down');
-    pushProbPoint(pct);
-
-    // #6 Mispricing detector
-    const modelP = computeModelProb();
-    const mvEl = document.getElementById('misprice-val');
-    const msEl = document.getElementById('misprice-sub');
-    if (mvEl && modelP !== null) {
-      const premium = pct - modelP;
-      const absPrem = Math.abs(premium);
-      if (absPrem < 3) {
-        mvEl.textContent = 'Fair Priced'; mvEl.className = 'an-val';
-        if (msEl) { msEl.textContent = `Mkt ${pct.toFixed(1)}% · Model ${modelP.toFixed(1)}%`; }
-      } else {
-        const dir = premium > 0 ? 'Overpriced UP' : 'Underpriced UP';
-        mvEl.textContent = (premium > 0 ? '+' : '') + premium.toFixed(1) + '% Premium';
-        mvEl.className   = 'an-val ' + (premium > 0 ? 'down' : 'up');
-        if (msEl) { msEl.textContent = dir; }
-      }
-    } else if (mvEl) { mvEl.textContent = '—'; }
+// called on every book message: keep the probability history at full resolution, render the ladder later
+function onBookChange() {
+  let bb = -Infinity, ba = Infinity;
+  for (const k in polyBids) if (polyBids[k].price > bb) bb = polyBids[k].price;
+  for (const k in polyAsks) if (polyAsks[k].price < ba) ba = polyAsks[k].price;
+  if (isFinite(bb) && isFinite(ba)) {
+    upProb = (bb + ba) / 2 * 100;
+    pushProbPoint(upProb);
   }
-
-  const maxB = Math.max(...bids.map(b => b.size), 1e-9);
-  const maxA = Math.max(...asks.map(a => a.size), 1e-9);
-  const n = Math.max(bids.length, asks.length);
-  let cumB = 0, cumA = 0, rows = '';
-
-  for (let i = 0; i < n; i++) {
-    const b = bids[i], a = asks[i];
-    let bHtml = '<td></td><td></td><td></td><td class="depth-c"></td>';
-    if (b) {
-      cumB += b.size;
-      bHtml = `<td class="bid-p" style="text-align:left">${(b.price*100).toFixed(2)}¢</td>
-               <td>${fmtSz(b.size)}</td><td style="color:var(--dim)">${fmtSz(cumB)}</td>
-               <td class="depth-c"><div class="dbar bid" style="width:${(b.size/maxB*100).toFixed(0)}%"></div></td>`;
-    }
-    let aHtml = '<td class="depth-c"></td><td></td><td></td><td></td>';
-    if (a) {
-      cumA += a.size;
-      aHtml = `<td class="depth-c"><div class="dbar ask" style="width:${(a.size/maxA*100).toFixed(0)}%"></div></td>
-               <td style="color:var(--dim)">${fmtSz(cumA)}</td>
-               <td>${fmtSz(a.size)}</td><td class="ask-p">${(a.price*100).toFixed(2)}¢</td>`;
-    }
-    rows += `<tr>${bHtml}<td class="sep-c">│</td>${aHtml}</tr>`;
-  }
-
-  if (mid !== null)
-    rows += `<tr class="ob-mid-row"><td colspan="9">Mid ${(mid*100).toFixed(2)}¢${polyLastTrade !== null ? ' · Last ' + (polyLastTrade*100).toFixed(2)+'¢' : ''}</td></tr>`;
-
-  document.getElementById('ob-body').innerHTML = rows;
-
-  // #5 Liquidity Walls — find the single largest bid/ask level
-  if (bids.length && asks.length) {
-    const topBid = bids.reduce((a, b) => b.size > a.size ? b : a);
-    const topAsk = asks.reduce((a, b) => b.size > a.size ? b : a);
-    const lbEl = document.getElementById('lw-bid');
-    const laEl = document.getElementById('lw-ask');
-    if (lbEl) lbEl.textContent = (topBid.price*100).toFixed(2) + '¢ (' + fmtSz(topBid.size) + ')';
-    if (laEl) laEl.textContent = (topAsk.price*100).toFixed(2) + '¢ (' + fmtSz(topAsk.size) + ')';
-  }
-
-  updateSummaryPanel();
+  bookDirty = true;
 }
 
-// ── Countdown ────────────────────────────────────────────────────────────────
+// ── Order book ladder: asks on top (best ask nearest the middle), bids below ──
+const LEVELS = 7;
+function renderBook() {
+  bookDirty = false;
+  const bids = Object.values(polyBids).sort((a,b) => b.price - a.price).slice(0, LEVELS);
+  const asks = Object.values(polyAsks).sort((a,b) => a.price - b.price).slice(0, LEVELS);
+  const maxSz = Math.max(1e-9, ...bids.map(l => l.size), ...asks.map(l => l.size));
+  const wallB = Math.max(0, ...bids.map(l => l.size));
+  const wallA = Math.max(0, ...asks.map(l => l.size));
+
+  const row = (l, cum, side, wall) => !l
+    ? '<div class="lrow" role="row"><span role="cell"></span><span role="cell"></span><span role="cell"></span></div>'
+    : `<div class="lrow ${side}" role="row"><i class="lbar" style="width:${(l.size / maxSz * 100).toFixed(1)}%"></i>` +
+      `<span class="lp" role="cell">${(l.price * 100).toFixed(1)}¢</span>` +
+      `<span role="cell"${l.size === wall && (side === 'ask' ? asks : bids).length > 1 ? ' class="wall" title="Largest level"' : ''}>${fmtSz(l.size)}</span>` +
+      `<span class="lt" role="cell">${fmtSz(cum)}</span></div>`;
+
+  // fixed row count on both sides so the card never jumps
+  let cum = 0;
+  const askRows = [];
+  for (let i = 0; i < LEVELS; i++) { if (asks[i]) cum += asks[i].size; askRows.push(row(asks[i], cum, 'ask', wallA)); }
+  cum = 0;
+  const bidRows = [];
+  for (let i = 0; i < LEVELS; i++) { if (bids[i]) cum += bids[i].size; bidRows.push(row(bids[i], cum, 'bid', wallB)); }
+  $('asks').innerHTML = askRows.reverse().join('');
+  $('bids').innerHTML = bidRows.join('');
+
+  const bb = bids[0]?.price, ba = asks[0]?.price;
+  $('lmid').innerHTML = bb !== undefined && ba !== undefined
+    ? `<span role="cell">Spread ${((ba - bb) * 100).toFixed(1)}¢</span><span role="cell">Mid ${((bb + ba) / 2 * 100).toFixed(1)}¢</span>`
+    : `<span role="cell">${bids.length || asks.length ? 'One-sided book' : 'Waiting for book…'}</span><span role="cell"></span>`;
+  $('last-trade').textContent = polyLastTrade !== null ? `Last ${(polyLastTrade * 100).toFixed(1)}¢` : 'Last —';
+}
+
+// ── Countdown (round expiry → load next market) ──────────────────────────────
 function startCountdown(onExpire) {
   if (countdownTimer) clearInterval(countdownTimer);
   countdownTimer = setInterval(() => {
-    const s = secsLeft(), m = Math.floor(s/60), r = s % 60;
-    const fmt = `${m}:${String(r).padStart(2,'0')}`;
-
-    // small inline countdown (sdr-wrap)
-    const sm = document.getElementById('countdown');
-    if (sm) {
-      sm.textContent = fmt;
-      sm.style.color = s < 30 ? 'var(--red)' : s < 60 ? 'var(--orange)' : 'var(--yellow)';
-    }
-
-    // large countdown
-    const big = document.getElementById('cd-time');
-    if (big) {
-      big.textContent = fmt;
-      big.className   = s < 10 ? 'flash' : s < 30 ? 'red' : s < 60 ? 'orange' : '';
-    }
-
-    // outcome card time
-    const ot = document.getElementById('oc-time');
-    if (ot) ot.textContent = fmt;
-
-    // right badge in state banner
-    const sr = document.getElementById('sb-right');
-    if (sr) sr.textContent = fmt + ' left';
-
-    if (s <= 1) { clearInterval(countdownTimer); setTimeout(onExpire, 3000); }
+    updateTime();
+    if (secsLeft() <= 1) { clearInterval(countdownTimer); setTimeout(onExpire, 3000); }
   }, 500);
 }
 
 // ── Polymarket WebSocket ─────────────────────────────────────────────────────
 function connectPoly(yesId, onExpire) {
   if (polyWs) try { polyWs.close(); } catch {}
-  polyBids = {}; polyAsks = {}; polyLastTrade = null;
-  setDot('poly-dot','wait');
-  document.getElementById('poly-st').textContent = 'Connecting…';
+  polyBids = {}; polyAsks = {}; polyLastTrade = null; upProb = null; bookDirty = true;
+  polyState = 'wait'; polyStamp = 'Connecting…';
 
   const ws = polyWs = new WebSocket(PM_WS);
   ws.onopen = () => {
     ws.send(JSON.stringify({ assets_ids: [yesId], type: 'market' }));
-    setDot('poly-dot','live');
-    document.getElementById('poly-st').textContent = 'Live · order book';
+    polyState = 'live'; polyStamp = 'Live';
   };
   ws.onmessage = e => {
     const msgs = JSON.parse(e.data);
@@ -1055,15 +1155,13 @@ function connectPoly(yesId, onExpire) {
       } else if (et === 'last_trade_price') {
         polyLastTrade = parseFloat(msg.price);
       } else continue;
-      renderBook();
-      const t = new Date().toLocaleTimeString([], { hour:'2-digit', minute:'2-digit', second:'2-digit' });
-      document.getElementById('poly-st').textContent = 'Live · ' + t;
+      onBookChange();
+      polyStamp = 'Live · ' + fmtClock(Date.now());
     }
   };
   ws.onclose = () => {
     if (polyWs !== ws) return;
-    setDot('poly-dot','err');
-    document.getElementById('poly-st').textContent = 'Reconnecting…';
+    polyState = 'err'; polyStamp = 'Reconnecting…';
     setTimeout(() => connectPoly(yesId, onExpire), 2500);
   };
   ws.onerror = () => ws.close();
@@ -1086,14 +1184,12 @@ async function backfillProbHistory(yesId) {
 
 // ── Master loader ────────────────────────────────────────────────────────────
 async function loadPolymarket() {
-  document.getElementById('poly-title').textContent = 'Loading market…';
-  document.getElementById('poly-sub').textContent   = '';
-  document.getElementById('strike-val').textContent = 'fetching…';
-  strike = null;
+  $('market-title').textContent = 'Loading market…';
+  strike = null; strikeStatus = 'fetching…'; upProb = null;
 
   const result = await findMarket();
   if (!result) {
-    document.getElementById('poly-title').textContent = 'No active market – retrying…';
+    $('market-title').textContent = 'No active market – retrying…';
     setTimeout(loadPolymarket, 8000);
     return;
   }
@@ -1102,12 +1198,10 @@ async function loadPolymarket() {
   windowTs = wts;
   probHistory.length = 0;
   const market = parseMarket(event);
-
-  document.getElementById('poly-title').textContent = market.question || event.title || slug;
-  document.getElementById('poly-sub').textContent   = slug;
+  $('market-title').textContent = market.question || event.title || slug;
 
   if (!market.yesId) {
-    document.getElementById('poly-title').textContent += ' (no token ID)';
+    $('market-title').textContent += ' (no token ID)';
     return;
   }
 
@@ -1145,16 +1239,10 @@ async function pollChainlink() {
     const feed = new ethers.Contract(FEED_ADDR, CL_ABI, provider);
     const d    = await feed.latestRoundData();
     const p    = Number(d[1]) / 1e8;
-    if (p > 0) {
-      prevClPrice = clPrice; clPrice = p;
-      document.getElementById('h-binance-p').textContent = fmtP(p);
-      setDot('cl-dot','live');
-      document.getElementById('cl-st').textContent = 'CL · live';
-    }
+    if (p > 0) { clPrice = p; clState = 'live'; }
   } catch (e) {
     clProvider = null;
-    setDot('cl-dot','wait');
-    document.getElementById('cl-st').textContent = 'CL retrying…';
+    clState = 'wait';
     console.warn('CL poll:', e.message);
   }
   setTimeout(pollChainlink, 12000);
@@ -1171,7 +1259,6 @@ async function fetchStrike(wts) {
       const latestTs = Number(latest[3]);
       if (latestTs > 0 && latestTs <= wts) {
         strike = Number(latest[1]) / 1e8;
-        document.getElementById('strike-val').textContent = fmtP(strike);
         return;
       }
 
@@ -1184,421 +1271,79 @@ async function fetchStrike(wts) {
         const ts   = Number(data[3]);
         if (ts > 0 && ts <= wts) {
           strike = Number(data[1]) / 1e8;
-          document.getElementById('strike-val').textContent = fmtP(strike);
           return;
         }
       }
-      document.getElementById('strike-val').textContent = 'not found';
+      strikeStatus = 'not found';
       return;
     } catch (e) {
       clProvider = null;
       console.warn('fetchStrike attempt', attempt, ':', e.message);
     }
   }
-  document.getElementById('strike-val').textContent = 'unavailable';
+  strikeStatus = 'unavailable';
 }
 
-// ── Probability chart render ──────────────────────────────────────────────────
-function renderProb() {
-  const PW = probCanvas.width / probDpr, PH = probCanvas.height / probDpr;
-  probCtx.setTransform(probDpr, 0, 0, probDpr, 0, 0);
-  probCtx.clearRect(0, 0, PW, PH);
-
-  const TOP_PAD = 18, BOT_PAD = 18;
-  const chartH = PH - TOP_PAD - BOT_PAD;
-
-  if (!probHistory.length) {
-    probCtx.fillStyle = '#6e7681'; probCtx.font = '12px monospace';
-    probCtx.fillText('Waiting for market…', 4, PH / 2);
-    return;
-  }
-
-  // Rolling window — same as BTC chart, driven by WINDOW_MS
-  const now    = Date.now();
-  const cutoff = now - WINDOW_MS;
-  const xOf    = t => (t - cutoff) / WINDOW_MS * PW;
-
-  // Binary search for window start
-  let a = 0, b = probHistory.length;
-  while (a < b) { const mid = (a + b) >>> 1; probHistory[mid].t < cutoff ? (a = mid + 1) : (b = mid); }
-  const vis   = probHistory.slice(a);
-  const lastP = vis.length ? vis[vis.length - 1].p : null;
-
-  // Dynamic y range
-  let pMin = lastP ?? 50, pMax = lastP ?? 50;
-  for (const v of vis) { if (v.p < pMin) pMin = v.p; if (v.p > pMax) pMax = v.p; }
-  const pPad = Math.max(5, (pMax - pMin) * 0.4);
-  const yLo  = Math.max(0,   pMin - pPad);
-  const yHi  = Math.min(100, pMax + pPad);
-  const ySpan = yHi - yLo || 1;
-  const yOf  = pv => TOP_PAD + chartH * (1 - (pv - yLo) / ySpan);
-
-  // Grid
-  const tickStep  = ySpan <= 8 ? 1 : ySpan <= 20 ? 2 : ySpan <= 50 ? 5 : 10;
-  probCtx.font = '12px monospace';
-  for (let pv = Math.ceil(yLo / tickStep) * tickStep; pv <= yHi + 0.001; pv += tickStep) {
-    const y = yOf(pv), is50 = Math.abs(pv - 50) < 0.001;
-    probCtx.strokeStyle = is50 ? '#2d3741' : '#1a1f26';
-    probCtx.lineWidth   = is50 ? 1.5 : 1;
-    probCtx.setLineDash(is50 ? [4,4] : []);
-    probCtx.beginPath(); probCtx.moveTo(0, y); probCtx.lineTo(PW, y); probCtx.stroke();
-    probCtx.setLineDash([]);
-    probCtx.fillStyle = '#6e7681';
-    probCtx.fillText(pv.toFixed(0) + '%', 4, y - 3);
-  }
-
-  // Title
-  const winLabel = WINDOW_MS < 60000 ? (WINDOW_MS/1000).toFixed(0)+'s'
-                 : WINDOW_MS < 3600000 ? (WINDOW_MS/60000).toFixed(0)+'m' : '5m';
-  probCtx.fillStyle = '#6e7681'; probCtx.font = '12px monospace';
-  probCtx.fillText(`IMPLIED UP PROBABILITY  (${winLabel} rolling)`, 4, TOP_PAD - 5);
-
-  // Time axis
-  probCtx.fillStyle = '#6e7681'; probCtx.font = '11px monospace';
-  const nTicks = PW < 520 ? 3 : 6;   // fewer labels on narrow (phone) screens
-  for (let i = 0; i <= nTicks; i++) {
-    const t  = cutoff + WINDOW_MS / nTicks * i;
-    const x  = xOf(t);
-    const tl = new Date(t).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit', second:'2-digit' });
-    const tw = probCtx.measureText(tl).width;
-    probCtx.fillText(tl, Math.min(PW - tw, Math.max(0, x - tw / 2)), PH - 2);
-  }
-
-  // "Now" marker (right edge)
-  const nowX = PW;
-  probCtx.strokeStyle = 'rgba(201,209,217,.18)'; probCtx.lineWidth = 1; probCtx.setLineDash([3,4]);
-  probCtx.beginPath(); probCtx.moveTo(nowX, TOP_PAD); probCtx.lineTo(nowX, TOP_PAD + chartH); probCtx.stroke();
-  probCtx.setLineDash([]);
-
-  if (!vis.length) return;
-
-  const isUp    = lastP >= 50;
-  const lineClr = isUp ? '#3fb950' : '#f85149';
-  const baseY   = yOf(Math.max(yLo, Math.min(yHi, 50)));
-
-  function stepPath() {
-    probCtx.moveTo(xOf(vis[0].t), yOf(vis[0].p));
-    let cur = vis[0].p;
-    for (let i = 1; i < vis.length; i++) {
-      probCtx.lineTo(xOf(vis[i].t), yOf(cur));
-      probCtx.lineTo(xOf(vis[i].t), yOf(vis[i].p));
-      cur = vis[i].p;
-    }
-    probCtx.lineTo(nowX, yOf(lastP));
-  }
-
-  // Area fill
-  probCtx.beginPath();
-  stepPath();
-  probCtx.lineTo(nowX, baseY);
-  probCtx.lineTo(xOf(vis[0].t), baseY);
-  probCtx.closePath();
-  const g = probCtx.createLinearGradient(0, TOP_PAD, 0, TOP_PAD + chartH);
-  if (isUp) { g.addColorStop(0,'rgba(63,185,80,.35)'); g.addColorStop(1,'rgba(63,185,80,.04)'); }
-  else       { g.addColorStop(0,'rgba(248,81,73,.04)'); g.addColorStop(1,'rgba(248,81,73,.35)'); }
-  probCtx.fillStyle = g; probCtx.fill();
-
-  // Line
-  probCtx.beginPath();
-  stepPath();
-  probCtx.strokeStyle = lineClr; probCtx.lineWidth = 2; probCtx.lineJoin = 'round'; probCtx.stroke();
-
-  // Value badge
-  const cy = yOf(lastP);
-  probCtx.font = 'bold 14px monospace';
-  const lbl = lastP.toFixed(1) + '%';
-  const lw  = probCtx.measureText(lbl).width;
-  probCtx.fillStyle = '#21262d';
-  probCtx.fillRect(nowX - lw - 14, cy - 11, lw + 13, 19);
-  probCtx.strokeStyle = lineClr; probCtx.lineWidth = 1;
-  probCtx.strokeRect(nowX - lw - 14, cy - 11, lw + 13, 19);
-  probCtx.fillStyle = lineClr;
-  probCtx.fillText(lbl, nowX - lw - 7, cy + 4);
-}
-
-// ── Multi-exchange canvas render ──────────────────────────────────────────────
+// ── Render loop ──────────────────────────────────────────────────────────────
 function render() {
-  const now    = Date.now();
-  const cutoff = now - WINDOW_MS;
-
-  if (now - tpsTick >= 1000) {
-    tps = tpsCount; tpsCount = 0; tpsTick = now;
-    document.getElementById('h-tps').textContent = tps;
-  }
-
-  const W = canvas.width / dpr, H = canvas.height / dpr;
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.clearRect(0, 0, W, H);
-
-  // visible trades per exchange (disabled exchanges get empty array)
-  const visPerExch = EXCH.map(ex => {
-    if (!ex.enabled) return [];
-    let si = 0;
-    while (si < ex.trades.length - 1 && ex.trades[si].t < cutoff) si++;
-    return ex.trades.slice(si);
-  });
-  const allVis = visPerExch.flat();
-
-  // visible median history
-  let msi = 0;
-  while (msi < medianHistory.length - 1 && medianHistory[msi].t < cutoff) msi++;
-  const visMed = medianHistory.slice(msi);
-
-  if (!allVis.length && !visMed.length) { renderProb(); requestAnimationFrame(render); return; }
-
-  // price range from all sources
-  let minP = Infinity, maxP = -Infinity;
-  for (const t of allVis) { if (t.p < minP) minP = t.p; if (t.p > maxP) maxP = t.p; }
-  for (const v of visMed) { if (v.lo < minP) minP = v.lo; if (v.hi > maxP) maxP = v.hi; }
-  if (strike !== null) { if (strike < minP) minP = strike; if (strike > maxP) maxP = strike; }
-  if (!isFinite(minP)) { renderProb(); requestAnimationFrame(render); return; }
-
-  const pad = (maxP - minP) * 0.12 || 5;
-  const lo = minP - pad, hi = maxP + pad, rng = hi - lo;
-
-  const CH = H * 0.78, VH = H * 0.13, VY = CH + H * 0.04;
-  const xOf = t => (t - cutoff) / WINDOW_MS * W;
-  const yOf = p => CH - (p - lo) / rng * CH;
-
-  // #3 Outcome zones — green above strike, red below
-  if (strike !== null) {
-    const sy = yOf(strike);
-    if (sy > 0 && sy < CH) {
-      ctx.fillStyle = 'rgba(63,185,80,.07)';
-      ctx.fillRect(0, 0, W, sy);
-      ctx.fillStyle = 'rgba(248,81,73,.07)';
-      ctx.fillRect(0, sy, W, CH - sy);
-    } else if (sy <= 0) {
-      ctx.fillStyle = 'rgba(63,185,80,.07)'; ctx.fillRect(0, 0, W, CH);
-    } else {
-      ctx.fillStyle = 'rgba(248,81,73,.07)'; ctx.fillRect(0, 0, W, CH);
-    }
-  }
-
-  // Grid
-  ctx.strokeStyle = '#161b22'; ctx.lineWidth = 1; ctx.font = '12px monospace'; ctx.fillStyle = '#6e7681';
-  for (let i = 0; i <= 5; i++) {
-    const y = CH / 5 * i;
-    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
-    const p = hi - rng / 5 * i;
-    ctx.fillText('$' + p.toLocaleString('en-US', { maximumFractionDigits:0 }), 4, Math.max(12, y - 3));
-  }
-
-  // Spread band between exchange hi/lo
-  if (visMed.length >= 2) {
-    ctx.beginPath();
-    ctx.moveTo(xOf(visMed[0].t), yOf(visMed[0].hi));
-    for (const v of visMed) ctx.lineTo(xOf(v.t), yOf(v.hi));
-    for (let i = visMed.length - 1; i >= 0; i--) ctx.lineTo(xOf(visMed[i].t), yOf(visMed[i].lo));
-    ctx.closePath();
-    ctx.fillStyle = 'rgba(255,255,255,.04)';
-    ctx.fill();
-  }
-
-  // Per-exchange colored lines (thin, semi-transparent) — hidden in medianOnly mode
-  if (!medianOnly) {
-    for (let ei = 0; ei < EXCH.length; ei++) {
-      const vis = visPerExch[ei];
-      if (vis.length < 2) continue;
-      ctx.beginPath();
-      ctx.moveTo(xOf(vis[0].t), yOf(vis[0].p));
-      for (const t of vis) ctx.lineTo(xOf(t.t), yOf(t.p));
-      ctx.strokeStyle = EXCH[ei].color;
-      ctx.lineWidth = 1;
-      ctx.globalAlpha = 0.55;
-      ctx.lineJoin = 'round';
-      ctx.stroke();
-      ctx.globalAlpha = 1;
-    }
-  }
-
-  // Median line (bold white)
-  if (visMed.length >= 2) {
-    ctx.beginPath();
-    ctx.moveTo(xOf(visMed[0].t), yOf(visMed[0].p));
-    for (const v of visMed) ctx.lineTo(xOf(v.t), yOf(v.p));
-    ctx.strokeStyle = '#f0f6fc';
-    ctx.lineWidth = 2;
-    ctx.lineJoin = 'round';
-    ctx.stroke();
-  }
-
-  // Strike line
-  if (strike !== null) {
-    const sy = yOf(strike);
-    if (sy >= 0 && sy <= CH) {
-      ctx.setLineDash([6,5]); ctx.strokeStyle = '#f0883e'; ctx.lineWidth = 1.5;
-      ctx.beginPath(); ctx.moveTo(0, sy); ctx.lineTo(W, sy); ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.font = 'bold 13px monospace';
-      const sl = 'STRIKE  ' + fmtP(strike), sw = ctx.measureText(sl).width;
-      ctx.fillStyle = 'rgba(13,17,23,.88)'; ctx.fillRect(4, sy - 14, sw + 12, 18);
-      ctx.fillStyle = '#f0883e'; ctx.fillText(sl, 10, sy - 1);
-    }
-  }
-
-  // Legend top-right: each exchange price + median (disabled/medianOnly exchanges hidden)
-  ctx.font = '12px monospace';
-  let ly = 14;
-  if (!medianOnly) {
-    for (const ex of EXCH) {
-      if (!ex.enabled || ex.lastP === null) continue;
-      const lbl = ex.short + ' ' + fmtP(ex.lastP);
-      const lw = ctx.measureText(lbl).width;
-      ctx.globalAlpha = 0.85;
-      ctx.fillStyle = ex.color;
-      ctx.fillText(lbl, W - lw - 6, ly);
-      ctx.globalAlpha = 1;
-      ly += 15;
-    }
-  }
-  const med = getMedian();
-  if (med !== null) {
-    const lbl = '∅ ' + fmtP(med);
-    const lw = ctx.measureText(lbl).width;
-    ctx.fillStyle = '#f0f6fc';
-    ctx.fillText(lbl, W - lw - 6, ly);
-
-    // live median price label on right edge
-    const cy = yOf(med);
-    if (cy >= 0 && cy <= CH) {
-      ctx.setLineDash([4,5]); ctx.strokeStyle = 'rgba(240,246,252,.15)'; ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.moveTo(0, cy); ctx.lineTo(W, cy); ctx.stroke(); ctx.setLineDash([]);
-      ctx.font = 'bold 14px monospace';
-      const ml = fmtP(med), mlw = ctx.measureText(ml).width;
-      ctx.fillStyle = '#21262d'; ctx.fillRect(W-mlw-13, cy-11, mlw+12, 18);
-      ctx.strokeStyle = '#f0f6fc'; ctx.lineWidth = 1; ctx.strokeRect(W-mlw-13, cy-11, mlw+12, 18);
-      ctx.fillStyle = '#f0f6fc'; ctx.fillText(ml, W-mlw-7, cy+4);
-    }
-  }
-
-  // Volume bars (aggregated across all exchanges)
-  const NB = Math.max(30, Math.min(200, Math.floor(W/4)));
-  const bk = new Float64Array(NB * 2);
-  for (const t of allVis) {
-    const i = Math.min(NB-1, Math.floor((t.t - cutoff) / WINDOW_MS * NB));
-    t.sell ? bk[i*2+1] += t.q : bk[i*2] += t.q;
-  }
-  let mv = 1e-12;
-  for (let i = 0; i < NB; i++) { const v = bk[i*2]+bk[i*2+1]; if (v > mv) mv = v; }
-  const bw = W / NB;
-  ctx.fillStyle = 'rgba(248,81,73,.6)'; ctx.beginPath();
-  for (let i = 0; i < NB; i++) ctx.rect(i*bw, VY, bw-1, bk[i*2+1]/mv*VH);
-  ctx.fill();
-  ctx.fillStyle = 'rgba(63,185,80,.6)'; ctx.beginPath();
-  for (let i = 0; i < NB; i++) ctx.rect(i*bw, VY + bk[i*2+1]/mv*VH, bw-1, bk[i*2]/mv*VH);
-  ctx.fill();
-
-  // Time axis
-  ctx.fillStyle = '#6e7681'; ctx.font = '12px monospace';
-  const nTicks = W < 520 ? 3 : 6;   // fewer labels on narrow (phone) screens
-  for (let i = 0; i <= nTicks; i++) {
-    const t = cutoff + WINDOW_MS/nTicks*i, x = (i/nTicks)*W;
-    const lbl = new Date(t).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit', second:'2-digit' });
-    const lw  = ctx.measureText(lbl).width;
-    ctx.fillText(lbl, Math.min(W-lw, Math.max(0, x-lw/2)), H - 3);
-  }
-
-  // Crosshair
-  if (mouseX >= 0 && mouseY >= 0 && mouseY < CH) {
-    ctx.strokeStyle = 'rgba(201,209,217,.3)'; ctx.lineWidth = 1; ctx.setLineDash([3,4]);
-    ctx.beginPath(); ctx.moveTo(mouseX,0); ctx.lineTo(mouseX,CH); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(0,mouseY); ctx.lineTo(W,mouseY); ctx.stroke();
-    ctx.setLineDash([]);
-    const hp = lo + (1 - mouseY/CH) * rng;
-    ctx.font = 'bold 13px monospace';
-    const pl = fmtP(hp), plw = ctx.measureText(pl).width;
-    ctx.fillStyle = '#21262d'; ctx.fillRect(W-plw-13, mouseY-11, plw+12, 18);
-    ctx.fillStyle = '#c9d1d9'; ctx.fillText(pl, W-plw-7, mouseY+4);
-    const ht = cutoff + mouseX/W*WINDOW_MS;
-    const tl = new Date(ht).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit', second:'2-digit' });
-    const tlw = ctx.measureText(tl).width;
-    ctx.fillStyle = '#21262d'; ctx.fillRect(mouseX-tlw/2-4, CH-16, tlw+8, 15);
-    ctx.fillStyle = '#c9d1d9'; ctx.fillText(tl, mouseX-tlw/2, CH-4);
-
-    // find nearest trade across all exchanges
-    let nearest = null, nearExch = null, bd = Infinity;
-    for (let ei = 0; ei < EXCH.length; ei++) {
-      for (const t of visPerExch[ei]) {
-        const dx = Math.abs(xOf(t.t)-mouseX);
-        if (dx < bd) { bd=dx; nearest=t; nearExch=EXCH[ei]; }
-      }
-    }
-    if (nearest && bd < 30) {
-      const nx = xOf(nearest.t), ny = yOf(nearest.p);
-      ctx.beginPath(); ctx.arc(nx, ny, 5, 0, Math.PI*2);
-      ctx.strokeStyle = nearExch.color; ctx.lineWidth = 1.5; ctx.stroke();
-      const lines = [
-        (nearest.sell?'SELL':' BUY')+'  '+fmtP(nearest.p),
-        nearExch.name+'  '+nearest.q.toFixed(4)+' ₿',
-        new Date(nearest.t).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'})
-      ];
-      const tw=185, th=64, mg=10;
-      let tx = nx+10, ty = ny-th/2;
-      if (tx+tw > W-mg) tx = nx-tw-10;
-      if (ty < mg) ty = mg;
-      if (ty+th > CH) ty = CH-th-mg;
-      ctx.fillStyle='rgba(13,17,23,.92)'; ctx.strokeStyle='#21262d'; ctx.lineWidth=1;
-      ctx.beginPath(); ctx.roundRect(tx,ty,tw,th,5); ctx.fill(); ctx.stroke();
-      ctx.font='14px monospace';
-      ctx.fillStyle = nearest.sell?'#f85149':'#3fb950'; ctx.fillText(lines[0], tx+8, ty+20);
-      ctx.fillStyle = nearExch.color; ctx.fillText(lines[1], tx+8, ty+38);
-      ctx.fillStyle='#6e7681'; ctx.fillText(lines[2], tx+8, ty+56);
-    }
-  }
-
-  // #12 Projected Close — velocity from last 30s extrapolated to round end
-  if (now - tpsTick < 1100) { // update ~1/s alongside TPS
-    const s = secsLeft();
-    const pvEl = document.getElementById('proj-val');
-    const pcEl = document.getElementById('proj-conf');
-    const plEl = document.getElementById('proj-vel');
-    if (pvEl && lastMedianP !== null && s > 0) {
-      const lookback = 30_000;
-      let si2 = medianHistory.length - 1;
-      while (si2 > 0 && medianHistory[si2].t > now - lookback) si2--;
-      if (si2 < medianHistory.length - 1) {
-        const pOld = medianHistory[si2].p;
-        const dt   = (now - medianHistory[si2].t) / 1000;
-        const vel  = (lastMedianP - pOld) / dt;  // $/s
-        const proj = lastMedianP + vel * s;
-        const above = proj > (strike ?? proj);
-        const conf  = s < 30 ? 'High' : s < 90 ? 'Med' : 'Low';
-        pvEl.textContent = fmtP(proj);
-        pvEl.className   = strike !== null ? (proj > strike ? 'up' : 'down') : '';
-        if (pcEl) { pcEl.textContent = conf; pcEl.style.color = conf === 'High' ? 'var(--green)' : conf === 'Med' ? 'var(--yellow)' : 'var(--dim)'; }
-        if (plEl) { plEl.textContent = (vel >= 0 ? '▲' : '▼') + ' ' + Math.abs(vel*60).toFixed(0) + '/min'; plEl.style.color = vel >= 0 ? 'var(--green)' : 'var(--red)'; }
-      }
-    } else if (pvEl) { pvEl.textContent = '—'; }
-  }
-
-  renderProb();
+  const now = Date.now();
+  if (now - tpsTick >= 1000) { tps = tpsCount; tpsCount = 0; tpsTick = now; }
+  if (now - lastUiT >= 200) { lastUiT = now; updateUI(now); }
+  drawBtc(now);
+  drawProb(now);
   requestAnimationFrame(render);
 }
 
-// ── Boot ──────────────────────────────────────────────────────────────────────
-// populate per-exchange toggle buttons + MED-only toggle
-const eb = document.getElementById('exch-badges');
-
-// MED-only button
-eb.insertAdjacentHTML('beforeend',
-  `<button id="btn-med-only" class="med-btn" title="Show median line only">∅ MED</button>`);
-document.getElementById('btn-med-only').addEventListener('click', () => {
-  medianOnly = !medianOnly;
-  document.getElementById('btn-med-only').classList.toggle('on', medianOnly);
+// ── Boot ─────────────────────────────────────────────────────────────────────
+// data sources table (doubles as the table view for the exchange lines)
+const srcEl = $('src');
+EXCH.forEach((ex, i) => {
+  srcEl.insertAdjacentHTML('beforeend',
+    `<label class="src-name"><input type="checkbox" checked data-key="${ex.key}"><i class="lk" style="background:var(--ex-${i + 1})"></i>${ex.name}</label>` +
+    `<span class="src-v" id="sp-${ex.key}">—</span><span class="src-d" id="sd-${ex.key}">—</span>` +
+    `<span class="src-s"><i class="dot" id="sdot-${ex.key}"></i></span>`);
+});
+srcEl.insertAdjacentHTML('beforeend',
+  `<span class="src-name"><i class="lk ghost"></i>Chainlink · Polygon</span>` +
+  `<span class="src-v" id="sp-cl">—</span><span class="src-d" id="sd-cl">—</span><span class="src-s"><i class="dot" id="sdot-cl"></i></span>` +
+  `<span class="src-name"><i class="lk ghost"></i>Polymarket book</span>` +
+  `<span class="src-v" id="sp-pm" style="grid-column:span 2">—</span><span class="src-s"><i class="dot" id="sdot-pm"></i></span>`);
+srcEl.addEventListener('change', e => {
+  const ex = EXCH.find(x => x.key === e.target.dataset.key);
+  if (!ex) return;
+  ex.enabled = e.target.checked;
+  e.target.closest('.src-name').classList.toggle('off', !ex.enabled);
+  lastMedianP = getMedian();
 });
 
-// per-exchange toggle buttons (include connection dot inside)
-for (const ex of EXCH) {
-  eb.insertAdjacentHTML('beforeend',
-    `<button id="btn-${ex.key}" class="exch-btn" style="--ec:${ex.color}" title="Toggle ${ex.name}">` +
-    `<div id="dot-${ex.key}" class="dot" style="background:#6e7681"></div>` +
-    `<span>${ex.short}</span></button>`);
-  document.getElementById('btn-' + ex.key).addEventListener('click', () => {
-    ex.enabled = !ex.enabled;
-    document.getElementById('btn-' + ex.key).classList.toggle('off', !ex.enabled);
-  });
-}
+// chart legend entries for the optional exchange lines
+$('legend-ex').innerHTML = EXCH.map((ex, i) => `<span><i class="lk" style="background:var(--ex-${i + 1})"></i>${ex.name}</span>`).join('');
+$('show-ex').addEventListener('change', e => {
+  showExchanges = e.target.checked;
+  $('legend-ex').hidden = !showExchanges;
+});
+
+document.querySelectorAll('.seg button').forEach(btn => btn.addEventListener('click', () => {
+  document.querySelectorAll('.seg button').forEach(b => b.setAttribute('aria-pressed', String(b === btn)));
+  WINDOW_MS = parseInt(btn.dataset.s) * 1000;
+  lastSlowT = 0;
+}));
+
+const btcTip = makeTip('btc-tip', [
+  { id:'med', label:'Median',    key:' ' },
+  { id:'vs',  label:'vs strike', key:'ghost' },
+  ...EXCH.map((ex, i) => ({ id: ex.key, label: ex.name, key: ' ', color: `var(--ex-${i + 1})` })),
+]);
+const probTip = makeTip('prob-tip', [{ id:'up', label:'UP probability', key:' ' }]);
+
+readTheme();
+const btcC  = setupCanvas('btc-canvas');
+const probC = setupCanvas('prob-canvas');
+attachHover(btcC.el, 'btc');
+attachHover(probC.el, 'prob');
+
+connectCoinbase(); connectKraken(); connectBitstamp();
+connectGemini(); connectBitfinex(); connectBinance();
 
 pollChainlink();
 loadPolymarket();
