@@ -246,6 +246,63 @@
       padding:5px 14px; border-top:1px solid var(--border); flex-shrink:0;
       font-size:12px; color:var(--dim); display:flex; align-items:center; gap:6px;
     }
+
+    /* ── Tablet / Mobile: chart stacked above panel, page scrolls ── */
+    @media (max-width: 900px) {
+      body { height:auto; min-height:100vh; overflow:visible; }
+
+      #header { flex-wrap:wrap; gap:8px 14px; padding:10px 12px; }
+      #h-price  { font-size:28px; }
+      #h-change { font-size:14px; }
+      #h-price + div { flex-wrap:wrap; row-gap:2px; }
+      .vsep, .spacer { display:none; }
+      .hstats { width:100%; gap:16px; }
+      .hsv { font-size:14px; }
+      #exch-badges { flex-wrap:wrap; }
+
+      #main { flex-direction:column; overflow:visible; }
+      #chart-wrap {
+        flex:none; height:60vh; height:60svh; min-height:320px;
+        border-right:none; border-bottom:1px solid var(--border);
+      }
+      #prob-wrap { height:130px; }
+
+      #poly-panel { width:100%; overflow:visible; }
+      #orderbook  { flex:none; overflow:visible; }
+
+      #state-banner, #proj-row, .sdr-wrap { flex-wrap:wrap; }
+    }
+
+    /* ── Phone ── */
+    @media (max-width: 560px) {
+      .hpair { font-size:15px; }
+      .hsrc  { font-size:10px; }
+
+      .oc-val { font-size:13px; }
+
+      .ps-row { display:grid; grid-template-columns:1fr 1fr; }
+      .ps-val { font-size:17px; }
+      .impl-label { width:auto; font-size:12px; }
+      .impl-pct   { width:auto; font-size:16px; }
+      .prob-sentiment { min-width:0; }
+      .sdr-wrap { gap:8px 14px; }
+
+      #liq-walls { display:grid; grid-template-columns:1fr 1fr; gap:6px 12px; }
+      .lw-title { grid-column:1 / -1; }
+      .lw-sep   { display:none; }
+
+      .an-cell { min-width:0; padding:0 8px; }
+      .an-cell:first-child { padding-left:12px; }
+
+      .ob-table { font-size:12px; }
+      .ob-table thead th { font-size:10px; padding:5px 4px 3px; }
+      .ob-table td { padding:3px 4px; }
+      .depth-c { width:40px; }
+      /* drop both Cum columns (3rd + 7th) so the book fits phone width */
+      .ob-table th:nth-child(3), .ob-table td:nth-child(3),
+      .ob-table th:nth-child(7), .ob-table td:nth-child(7) { display:none; }
+      .ob-mid-row td { font-size:12px; }
+    }
   </style>
 </head>
 <body>
@@ -523,7 +580,8 @@ function computeModelProb() {
 
 function updateSummaryPanel() {
   const med   = lastMedianP;
-  const prob  = (() => { const el = document.getElementById('impl-pct'); return el ? parseFloat(el.textContent) : null; })();
+  // impl-pct shows '—' while the book has no mid → parseFloat gives NaN, treat as "no prob yet"
+  const prob  = (() => { const el = document.getElementById('impl-pct'); const v = el ? parseFloat(el.textContent) : NaN; return Number.isFinite(v) ? v : null; })();
   const s     = secsLeft();
   const m     = Math.floor(s / 60), r = s % 60;
 
@@ -550,15 +608,14 @@ function updateSummaryPanel() {
 
     // State banner
     const riskLevel = Math.abs(dist);
-    let cls, main, sub;
+    let cls, main;
+    const sub = distTxt + (prob !== null ? ' · ' + prob.toFixed(1) + '% UP' : '');
     if (above) {
       cls  = riskLevel < 50 ? 'warn' : 'up';
       main = riskLevel < 50 ? 'MARGINAL ABOVE' : 'BTC ABOVE STRIKE';
-      sub  = distTxt + ' · ' + (prob !== null ? prob.toFixed(1) + '% UP' : '');
     } else {
       cls  = riskLevel < 50 ? 'warn' : 'down';
       main = riskLevel < 50 ? 'MARGINAL BELOW' : 'BTC BELOW STRIKE';
-      sub  = distTxt + ' · ' + (prob !== null ? prob.toFixed(1) + '% UP' : '');
     }
     const banner = document.getElementById('state-banner');
     banner.className = cls;
@@ -904,12 +961,12 @@ function renderBook() {
       cumB += b.size;
       bHtml = `<td class="bid-p" style="text-align:left">${(b.price*100).toFixed(2)}¢</td>
                <td>${fmtSz(b.size)}</td><td style="color:var(--dim)">${fmtSz(cumB)}</td>
-               <td class="depth-c"><div class="dbar bid" style="width:${(b.size/maxB*70).toFixed(0)}px"></div></td>`;
+               <td class="depth-c"><div class="dbar bid" style="width:${(b.size/maxB*100).toFixed(0)}%"></div></td>`;
     }
     let aHtml = '<td class="depth-c"></td><td></td><td></td><td></td>';
     if (a) {
       cumA += a.size;
-      aHtml = `<td class="depth-c"><div class="dbar ask" style="width:${(a.size/maxA*70).toFixed(0)}px"></div></td>
+      aHtml = `<td class="depth-c"><div class="dbar ask" style="width:${(a.size/maxA*100).toFixed(0)}%"></div></td>
                <td style="color:var(--dim)">${fmtSz(cumA)}</td>
                <td>${fmtSz(a.size)}</td><td class="ask-p">${(a.price*100).toFixed(2)}¢</td>`;
     }
@@ -1198,8 +1255,9 @@ function renderProb() {
 
   // Time axis
   probCtx.fillStyle = '#6e7681'; probCtx.font = '11px monospace';
-  for (let i = 0; i <= 6; i++) {
-    const t  = cutoff + WINDOW_MS / 6 * i;
+  const nTicks = PW < 520 ? 3 : 6;   // fewer labels on narrow (phone) screens
+  for (let i = 0; i <= nTicks; i++) {
+    const t  = cutoff + WINDOW_MS / nTicks * i;
     const x  = xOf(t);
     const tl = new Date(t).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit', second:'2-digit' });
     const tw = probCtx.measureText(tl).width;
@@ -1433,8 +1491,9 @@ function render() {
 
   // Time axis
   ctx.fillStyle = '#6e7681'; ctx.font = '12px monospace';
-  for (let i = 0; i <= 6; i++) {
-    const t = cutoff + WINDOW_MS/6*i, x = (i/6)*W;
+  const nTicks = W < 520 ? 3 : 6;   // fewer labels on narrow (phone) screens
+  for (let i = 0; i <= nTicks; i++) {
+    const t = cutoff + WINDOW_MS/nTicks*i, x = (i/nTicks)*W;
     const lbl = new Date(t).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit', second:'2-digit' });
     const lw  = ctx.measureText(lbl).width;
     ctx.fillText(lbl, Math.min(W-lw, Math.max(0, x-lw/2)), H - 3);
