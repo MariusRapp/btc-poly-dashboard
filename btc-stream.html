@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BTC/USD · HF Tick Stream</title>
+  <style>
+    *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+
+    body {
+      background: #0d1117;
+      color: #e6edf3;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", ui-monospace, monospace;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    header {
+      flex-shrink: 0;
+      padding: 10px 18px;
+      border-bottom: 1px solid #21262d;
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+
+    .pair   { font-size: 14px; font-weight: 700; color: #f0f6fc; letter-spacing:.04em; }
+    .source { font-size: 10px; color: #6e7681; text-transform: uppercase; letter-spacing:.06em; margin-top:2px; }
+
+    #price {
+      font-size: 26px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      color: #f0f6fc;
+      transition: color .25s;
+    }
+    #change { font-size: 12px; margin-top:1px; font-variant-numeric: tabular-nums; }
+    .up   { color: #3fb950; }
+    .down { color: #f85149; }
+
+    .sep { width:1px; height:36px; background:#21262d; flex-shrink:0; }
+
+    .stats { display:flex; gap:18px; }
+    .stat  { display:flex; flex-direction:column; gap:3px; }
+    .sl    { font-size:9px; color:#6e7681; text-transform:uppercase; letter-spacing:.06em; }
+    .sv    { font-size:12px; font-weight:500; font-variant-numeric:tabular-nums; color:#c9d1d9; }
+
+    #tps-val { color: #e3b341; }
+
+    .pressure {
+      display:flex; align-items:center; gap:5px; margin-top:1px;
+    }
+    .pbar {
+      width:72px; height:5px; border-radius:3px; overflow:hidden;
+      background:#21262d; display:flex;
+    }
+    #buy-seg  { background:#3fb950; transition:width .4s; }
+    #sell-seg { background:#f85149; transition:width .4s; }
+
+    .spacer { flex:1; }
+
+    .win-btns { display:flex; gap:3px; }
+    .wb {
+      padding:3px 9px; font-size:11px;
+      background:transparent; border:1px solid #21262d;
+      border-radius:4px; color:#6e7681; cursor:pointer;
+      transition:all .15s;
+    }
+    .wb:hover  { border-color:#444c56; color:#c9d1d9; }
+    .wb.active { background:#21262d; color:#f0f6fc; border-color:#444c56; }
+
+    .badge { display:flex; align-items:center; gap:5px; font-size:11px; color:#6e7681; }
+    .dot   { width:7px; height:7px; border-radius:50%; background:#6e7681; flex-shrink:0; }
+    .dot.live { background:#3fb950; animation:pulse 1.6s ease-in-out infinite; }
+    .dot.wait { background:#d29922; }
+    .dot.err  { background:#f85149; }
+    @keyframes pulse {
+      0%,100% { opacity:1; }
+      50%      { opacity:.35; }
+    }
+
+    canvas { flex:1; display:block; width:100%; min-height:0; cursor:crosshair; }
+
+    /* ── Mobile: header wraps instead of overflowing ── */
+    @media (max-width: 760px) {
+      body { height:100vh; height:100dvh; }
+      header { flex-wrap:wrap; gap:8px 14px; padding:10px 12px; }
+      .sep, .spacer { display:none; }
+      .stats { width:100%; flex-wrap:wrap; gap:8px 16px; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="pair">BTC / USD</div>
+    <div class="source">aggTrade · Binance WebSocket</div>
+  </div>
+
+  <div>
+    <div id="price">—</div>
+    <div id="change" class="up">—</div>
+  </div>
+
+  <div class="sep"></div>
+
+  <div class="stats">
+    <div class="stat">
+      <span class="sl">Trades / s</span>
+      <span class="sv" id="tps-val">—</span>
+    </div>
+    <div class="stat">
+      <span class="sl">Last qty</span>
+      <span class="sv" id="last-qty">—</span>
+    </div>
+    <div class="stat">
+      <span class="sl">Total trades</span>
+      <span class="sv" id="total">0</span>
+    </div>
+    <div class="stat">
+      <span class="sl">Buy pressure</span>
+      <div class="pressure">
+        <div class="pbar">
+          <div id="buy-seg"  style="width:50%"></div>
+          <div id="sell-seg" style="width:50%"></div>
+        </div>
+        <span class="sv up" id="buy-pct">—</span>
+      </div>
+    </div>
+    <div class="stat">
+      <span class="sl">24h range</span>
+      <span class="sv" id="range24">—</span>
+    </div>
+  </div>
+
+  <div class="spacer"></div>
+
+  <div class="win-btns">
+    <button class="wb" data-s="10">10s</button>
+    <button class="wb active" data-s="30">30s</button>
+    <button class="wb" data-s="60">1m</button>
+    <button class="wb" data-s="300">5m</button>
+  </div>
+
+  <div class="badge">
+    <div id="dot" class="dot wait"></div>
+    <span id="status">Connecting…</span>
+  </div>
+</header>
+
+<canvas id="c"></canvas>
+
+<script>
+  // ── State ────────────────────────────────────────────────────────────────────
+  let WINDOW_MS = 30_000;
+  const MAX_BUF = 40_000;
+
+  const trades = [];            // { t:ms, p:number, q:number, sell:bool }
+  let lastPrice  = null;
+  let openPrice  = null;
+  let totalCount = 0;
+
+  let tpsCount = 0, tps = 0, tpsTick = Date.now();
+
+  // crosshair
+  let mouseX = -1, mouseY = -1;
+
+  // ── Canvas ───────────────────────────────────────────────────────────────────
+  const canvas = document.getElementById('c');
+  const ctx    = canvas.getContext('2d');
+  let dpr = window.devicePixelRatio || 1;
+
+  function resize() {
+    dpr = window.devicePixelRatio || 1;
+    const { offsetWidth: w, offsetHeight: h } = canvas;
+    canvas.width  = w * dpr;
+    canvas.height = h * dpr;
+  }
+  new ResizeObserver(resize).observe(canvas);
+  resize();
+
+  canvas.addEventListener('mousemove', e => {
+    const r = canvas.getBoundingClientRect();
+    mouseX = e.clientX - r.left;
+    mouseY = e.clientY - r.top;
+  });
+  canvas.addEventListener('mouseleave', () => { mouseX = -1; mouseY = -1; });
+
+  // ── Helpers ──────────────────────────────────────────────────────────────────
+  const fmtPrice = p => '$' + p.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  function updateHeader(trade) {
+    const p = trade.p;
+
+    const el = document.getElementById('price');
+    if (lastPrice !== null) {
+      el.style.color = p > lastPrice ? '#3fb950' : p < lastPrice ? '#f85149' : '#f0f6fc';
+      setTimeout(() => (el.style.color = '#f0f6fc'), 300);
+    }
+    el.textContent = fmtPrice(p);
+    lastPrice = p;
+
+    document.getElementById('last-qty').textContent = trade.q.toFixed(4) + ' ₿';
+    document.getElementById('total').textContent    = totalCount.toLocaleString();
+
+    if (openPrice !== null) {
+      const chg = p - openPrice;
+      const pct = chg / openPrice * 100;
+      const el2 = document.getElementById('change');
+      el2.textContent = (chg >= 0 ? '+' : '') + fmtPrice(chg) + ' (' + pct.toFixed(3) + '%)';
+      el2.className   = chg >= 0 ? 'up' : 'down';
+    }
+
+    // Buy/sell pressure from visible window
+    const cutoff = Date.now() - WINDOW_MS;
+    let b = 0, s = 0;
+    for (let i = trades.length - 1; i >= 0 && trades[i].t >= cutoff; i--) {
+      if (trades[i].sell) s += trades[i].q;
+      else b += trades[i].q;
+    }
+    const tot = b + s || 1;
+    const bPct = b / tot * 100;
+    document.getElementById('buy-seg').style.width  = bPct + '%';
+    document.getElementById('sell-seg').style.width = (100 - bPct) + '%';
+    document.getElementById('buy-pct').textContent  = bPct.toFixed(1) + '%';
+  }
+
+  // ── REST seed ────────────────────────────────────────────────────────────────
+  fetch('https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT')
+    .then(r => r.json())
+    .then(d => {
+      openPrice = parseFloat(d.openPrice);
+      const hi  = parseFloat(d.highPrice);
+      const lo  = parseFloat(d.lowPrice);
+      document.getElementById('range24').textContent =
+        fmtPrice(lo) + ' – ' + fmtPrice(hi);
+    });
+
+  // ── WebSocket ────────────────────────────────────────────────────────────────
+  function connect() {
+    document.getElementById('status').textContent = 'Connecting…';
+    document.getElementById('dot').className = 'dot wait';
+
+    const ws = new WebSocket('wss://stream.binance.com:9443/ws/btcusdt@aggTrade');
+
+    ws.onopen = () => {
+      document.getElementById('status').textContent = 'Live · tick stream';
+      document.getElementById('dot').className = 'dot live';
+    };
+
+    ws.onmessage = e => {
+      const d = JSON.parse(e.data);
+      trades.push({ t: d.T, p: parseFloat(d.p), q: parseFloat(d.q), sell: d.m });
+      if (trades.length > MAX_BUF) trades.splice(0, 2000);
+
+      tpsCount++;
+      totalCount++;
+      updateHeader(trades[trades.length - 1]);
+    };
+
+    ws.onclose = () => {
+      document.getElementById('status').textContent = 'Reconnecting…';
+      document.getElementById('dot').className = 'dot wait';
+      setTimeout(connect, 2500);
+    };
+
+    ws.onerror = () => ws.close();
+  }
+
+  connect();
+
+  // ── Window selector ──────────────────────────────────────────────────────────
+  document.querySelectorAll('.wb').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.wb').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      WINDOW_MS = parseInt(btn.dataset.s) * 1000;
+    });
+  });
+
+  // ── Render ───────────────────────────────────────────────────────────────────
+  function render() {
+    const now    = Date.now();
+    const cutoff = now - WINDOW_MS;
+
+    // Update TPS counter every second
+    if (now - tpsTick >= 1000) {
+      tps = tpsCount; tpsCount = 0; tpsTick = now;
+      document.getElementById('tps-val').textContent = tps;
+    }
+
+    // Logical pixel size
+    const W = canvas.width  / dpr;
+    const H = canvas.height / dpr;
+
+    // Reset transform for this frame
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+
+    // Visible slice
+    let startIdx = 0;
+    while (startIdx < trades.length - 1 && trades[startIdx].t < cutoff) startIdx++;
+    const vis = trades.slice(startIdx);
+
+    if (vis.length < 2) { requestAnimationFrame(render); return; }
+
+    // Price range (with padding)
+    let minP = vis[0].p, maxP = vis[0].p;
+    for (const t of vis) {
+      if (t.p < minP) minP = t.p;
+      if (t.p > maxP) maxP = t.p;
+    }
+    const pad  = (maxP - minP) * 0.12 || 1;
+    const lo   = minP - pad;
+    const hi   = maxP + pad;
+    const rngP = hi - lo;
+
+    // Layout zones
+    const CHART_H = H * 0.78;
+    const VOL_H   = H * 0.14;
+    const VOL_Y   = CHART_H + H * 0.04;
+
+    const xOf = t => (t - cutoff) / WINDOW_MS * W;
+    const yOf = p => CHART_H - (p - lo) / rngP * CHART_H;
+
+    // ── Grid ─────────────────────────────────────────────────────────────────
+    const N_GRID = 5;
+    ctx.strokeStyle = '#161b22';
+    ctx.lineWidth   = 1;
+    ctx.font        = '9px monospace';
+    ctx.fillStyle   = '#6e7681';
+    for (let i = 0; i <= N_GRID; i++) {
+      const y = (CHART_H / N_GRID) * i;
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+      const p   = hi - rngP / N_GRID * i;
+      const lbl = '$' + p.toLocaleString('en-US', { maximumFractionDigits: 0 });
+      ctx.fillText(lbl, 4, y > 12 ? y - 3 : 10);
+    }
+
+    // ── Area fill ─────────────────────────────────────────────────────────────
+    ctx.beginPath();
+    ctx.moveTo(xOf(vis[0].t), yOf(vis[0].p));
+    for (const tr of vis) ctx.lineTo(xOf(tr.t), yOf(tr.p));
+    ctx.lineTo(xOf(vis.at(-1).t), CHART_H);
+    ctx.lineTo(xOf(vis[0].t),     CHART_H);
+    ctx.closePath();
+    const areaGrad = ctx.createLinearGradient(0, 0, 0, CHART_H);
+    areaGrad.addColorStop(0, 'rgba(63,185,80,.20)');
+    areaGrad.addColorStop(1, 'rgba(63,185,80,.01)');
+    ctx.fillStyle = areaGrad;
+    ctx.fill();
+
+    // ── Price line ────────────────────────────────────────────────────────────
+    ctx.beginPath();
+    ctx.moveTo(xOf(vis[0].t), yOf(vis[0].p));
+    for (const tr of vis) ctx.lineTo(xOf(tr.t), yOf(tr.p));
+    ctx.strokeStyle = '#3fb950';
+    ctx.lineWidth   = 1.5;
+    ctx.lineJoin    = 'round';
+    ctx.stroke();
+
+    // ── Trade dots ────────────────────────────────────────────────────────────
+    // Draw in batches by color for performance
+    ctx.beginPath();
+    for (const tr of vis) {
+      if (!tr.sell) {
+        const x = xOf(tr.t), y = yOf(tr.p);
+        const r = Math.max(1.5, Math.min(5, 1 + Math.log10(tr.q * 10 + 1)));
+        ctx.moveTo(x + r, y);
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+      }
+    }
+    ctx.fillStyle = 'rgba(63,185,80,.80)';
+    ctx.fill();
+
+    ctx.beginPath();
+    for (const tr of vis) {
+      if (tr.sell) {
+        const x = xOf(tr.t), y = yOf(tr.p);
+        const r = Math.max(1.5, Math.min(5, 1 + Math.log10(tr.q * 10 + 1)));
+        ctx.moveTo(x + r, y);
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+      }
+    }
+    ctx.fillStyle = 'rgba(248,81,73,.80)';
+    ctx.fill();
+
+    // ── Live price line ───────────────────────────────────────────────────────
+    if (lastPrice !== null) {
+      const cy = yOf(lastPrice);
+      ctx.setLineDash([4, 5]);
+      ctx.strokeStyle = 'rgba(240,246,252,.25)';
+      ctx.lineWidth   = 1;
+      ctx.beginPath(); ctx.moveTo(0, cy); ctx.lineTo(W, cy); ctx.stroke();
+      ctx.setLineDash([]);
+
+      const lbl  = fmtPrice(lastPrice);
+      ctx.font    = 'bold 11px monospace';
+      const lw   = ctx.measureText(lbl).width;
+      const PAD  = 5;
+      ctx.fillStyle = '#21262d';
+      ctx.fillRect(W - lw - PAD * 2 - 1, cy - 9, lw + PAD * 2, 15);
+      ctx.strokeStyle = '#3fb950';
+      ctx.lineWidth   = 1;
+      ctx.strokeRect(W - lw - PAD * 2 - 1, cy - 9, lw + PAD * 2, 15);
+      ctx.fillStyle = '#f0f6fc';
+      ctx.fillText(lbl, W - lw - PAD, cy + 3);
+    }
+
+    // ── Volume histogram ──────────────────────────────────────────────────────
+    const N_BUCKETS = Math.max(30, Math.min(200, Math.floor(W / 4)));
+    const buckets   = new Float64Array(N_BUCKETS * 2); // [buyVol, sellVol] interleaved
+    for (const tr of vis) {
+      const idx = Math.min(N_BUCKETS - 1, Math.floor((tr.t - cutoff) / WINDOW_MS * N_BUCKETS));
+      if (tr.sell) buckets[idx * 2 + 1] += tr.q;
+      else         buckets[idx * 2]     += tr.q;
+    }
+    let maxVol = 1e-12;
+    for (let i = 0; i < N_BUCKETS; i++) {
+      const v = buckets[i * 2] + buckets[i * 2 + 1];
+      if (v > maxVol) maxVol = v;
+    }
+    const bw = W / N_BUCKETS;
+    ctx.fillStyle = 'rgba(248,81,73,.65)';
+    ctx.beginPath();
+    for (let i = 0; i < N_BUCKETS; i++) {
+      const s  = buckets[i * 2 + 1];
+      const sh = (s / maxVol) * VOL_H;
+      ctx.rect(i * bw, VOL_Y, bw - 1, sh);
+    }
+    ctx.fill();
+
+    ctx.fillStyle = 'rgba(63,185,80,.65)';
+    ctx.beginPath();
+    for (let i = 0; i < N_BUCKETS; i++) {
+      const b  = buckets[i * 2];
+      const s  = buckets[i * 2 + 1];
+      const sh = (s / maxVol) * VOL_H;
+      const bh = (b / maxVol) * VOL_H;
+      ctx.rect(i * bw, VOL_Y + sh, bw - 1, bh);
+    }
+    ctx.fill();
+
+    // ── Time axis ─────────────────────────────────────────────────────────────
+    const N_TICKS = 6;
+    ctx.fillStyle = '#6e7681';
+    ctx.font      = '9px monospace';
+    for (let i = 0; i <= N_TICKS; i++) {
+      const t   = cutoff + WINDOW_MS / N_TICKS * i;
+      const x   = (i / N_TICKS) * W;
+      const lbl = new Date(t).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+      const lw  = ctx.measureText(lbl).width;
+      ctx.fillText(lbl, Math.min(W - lw, Math.max(0, x - lw / 2)), H - 3);
+    }
+
+    // ── Crosshair ─────────────────────────────────────────────────────────────
+    if (mouseX >= 0 && mouseY >= 0 && mouseY < CHART_H) {
+      ctx.strokeStyle = 'rgba(201,209,217,.35)';
+      ctx.lineWidth   = 1;
+      ctx.setLineDash([3, 4]);
+      ctx.beginPath(); ctx.moveTo(mouseX, 0); ctx.lineTo(mouseX, CHART_H); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, mouseY); ctx.lineTo(W, mouseY);       ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Price at crosshair
+      const hoverP = lo + (1 - mouseY / CHART_H) * rngP;
+      const pLbl   = fmtPrice(hoverP);
+      ctx.font      = 'bold 10px monospace';
+      const plw    = ctx.measureText(pLbl).width;
+      ctx.fillStyle = '#21262d';
+      ctx.fillRect(W - plw - 11, mouseY - 9, plw + 10, 15);
+      ctx.fillStyle = '#c9d1d9';
+      ctx.fillText(pLbl, W - plw - 6, mouseY + 3);
+
+      // Time at crosshair
+      const hoverT = cutoff + (mouseX / W) * WINDOW_MS;
+      const tLbl   = new Date(hoverT).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+      const tlw    = ctx.measureText(tLbl).width;
+      ctx.fillStyle = '#21262d';
+      ctx.fillRect(mouseX - tlw / 2 - 4, CHART_H - 14, tlw + 8, 13);
+      ctx.fillStyle = '#c9d1d9';
+      ctx.fillText(tLbl, mouseX - tlw / 2, CHART_H - 4);
+
+      // Nearest trade tooltip
+      let nearest = null, bestDist = Infinity;
+      for (const tr of vis) {
+        const dx = Math.abs(xOf(tr.t) - mouseX);
+        if (dx < bestDist) { bestDist = dx; nearest = tr; }
+      }
+      if (nearest && bestDist < 30) {
+        const nx = xOf(nearest.t), ny = yOf(nearest.p);
+        ctx.beginPath();
+        ctx.arc(nx, ny, 5, 0, Math.PI * 2);
+        ctx.strokeStyle = nearest.sell ? '#f85149' : '#3fb950';
+        ctx.lineWidth   = 1.5;
+        ctx.stroke();
+
+        const lines = [
+          (nearest.sell ? 'SELL' : ' BUY') + '  ' + fmtPrice(nearest.p),
+          'Qty  ' + nearest.q.toFixed(4) + ' ₿',
+          new Date(nearest.t).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit', second:'2-digit' }),
+        ];
+        const tw   = 140, th = 54, MARGIN = 10;
+        let tx = nx + 10, ty = ny - th / 2;
+        if (tx + tw > W - MARGIN) tx = nx - tw - 10;
+        if (ty < MARGIN) ty = MARGIN;
+        if (ty + th > CHART_H) ty = CHART_H - th - MARGIN;
+
+        ctx.fillStyle   = 'rgba(13,17,23,.92)';
+        ctx.strokeStyle = '#21262d';
+        ctx.lineWidth   = 1;
+        ctx.beginPath();
+        ctx.roundRect(tx, ty, tw, th, 5);
+        ctx.fill(); ctx.stroke();
+
+        ctx.font      = '11px monospace';
+        ctx.fillStyle = nearest.sell ? '#f85149' : '#3fb950';
+        ctx.fillText(lines[0], tx + 8, ty + 17);
+        ctx.fillStyle = '#c9d1d9';
+        ctx.fillText(lines[1], tx + 8, ty + 32);
+        ctx.fillStyle = '#6e7681';
+        ctx.fillText(lines[2], tx + 8, ty + 47);
+      }
+    }
+
+    requestAnimationFrame(render);
+  }
+
+  requestAnimationFrame(render);
+</script>
+</body>
+</html>
