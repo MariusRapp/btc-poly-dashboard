@@ -19,7 +19,7 @@
       color-scheme: light;
       --page:#f9f9f7; --surface:#fcfcfb; --surface-2:#f1f0ec;
       --ink-1:#0b0b0b; --ink-2:#52514e; --muted:#898781; --muted-text:#6f6d68;
-      --grid:#e1e0d9; --axis:#c3c2b7; --border:rgba(11,11,11,.10);
+      --grid:#e1e0d9; --axis:#c3c2b7; --border:rgba(11,11,11,.10); --band:rgba(11,11,11,.035);
       --up:#0ca30c; --up-text:#006300; --up-wash:rgba(12,163,12,.10);
       --down:#d03b3b; --down-text:#d03b3b; --down-wash:rgba(208,59,59,.10);
       --warning:#fab219; --warning-wash:rgba(250,178,25,.22);
@@ -34,7 +34,7 @@
         color-scheme: dark;
         --page:#0d0d0d; --surface:#1a1a19; --surface-2:#252524;
         --ink-1:#f0efec; --ink-2:#c3c2b7; --muted:#898781; --muted-text:#898781;
-        --grid:#2c2c2a; --axis:#383835; --border:rgba(255,255,255,.10);
+        --grid:#2c2c2a; --axis:#383835; --border:rgba(255,255,255,.10); --band:rgba(255,255,255,.035);
         --up:#0ca30c; --up-text:#0ca30c; --up-wash:rgba(12,163,12,.14);
         --down:#d03b3b; --down-text:#e66767; --down-wash:rgba(208,59,59,.16);
         --warning-wash:rgba(250,178,25,.20);
@@ -48,7 +48,7 @@
       color-scheme: dark;
       --page:#0d0d0d; --surface:#1a1a19; --surface-2:#252524;
       --ink-1:#f0efec; --ink-2:#c3c2b7; --muted:#898781; --muted-text:#898781;
-      --grid:#2c2c2a; --axis:#383835; --border:rgba(255,255,255,.10);
+      --grid:#2c2c2a; --axis:#383835; --border:rgba(255,255,255,.10); --band:rgba(255,255,255,.035);
       --up:#0ca30c; --up-text:#0ca30c; --up-wash:rgba(12,163,12,.14);
       --down:#d03b3b; --down-text:#e66767; --down-wash:rgba(208,59,59,.16);
       --warning-wash:rgba(250,178,25,.20);
@@ -71,7 +71,7 @@
     .card-meta { font-size:12px; color:var(--muted-text); text-align:right; }
 
     /* ── Top bar ── */
-    .topbar { display:flex; align-items:center; gap:12px; padding:2px 2px 0; }
+    .topbar { display:flex; align-items:center; gap:10px; padding:2px 2px 0; }
     .brand { flex:1; min-width:0; }
     .brand-title { font-size:15px; font-weight:650; }
     .brand-sub { font-size:12px; color:var(--ink-2); }
@@ -86,6 +86,8 @@
       color:var(--ink-2); cursor:pointer;
     }
     .icon-btn:hover { color:var(--ink-1); }
+    .icon-btn[aria-pressed="true"] { color:var(--ink-1); background:var(--surface-2); }
+    .icon-btn[aria-pressed="true"] svg { fill:currentColor; }
 
     /* ── KPI row ── */
     .kpis { display:grid; grid-template-columns:minmax(0,1.6fr) minmax(0,1fr) minmax(0,1fr); gap:12px; }
@@ -124,7 +126,7 @@
     .toolbar { display:flex; align-items:center; justify-content:space-between; gap:10px 16px; flex-wrap:wrap; margin-bottom:6px; }
     .seg { display:inline-flex; gap:2px; padding:2px; border-radius:8px; background:var(--surface-2); }
     .seg button {
-      font:inherit; font-size:12px; font-weight:500; min-width:44px; padding:5px 12px;
+      font:inherit; font-size:12px; font-weight:500; min-width:44px; padding:5px 11px;
       color:var(--ink-2); background:transparent; border:0; border-radius:6px; cursor:pointer;
     }
     .seg button:hover { color:var(--ink-1); }
@@ -142,6 +144,7 @@
     .wk { display:inline-block; width:10px; height:10px; border-radius:2px; }
     .wk.up   { background:var(--up);   opacity:.4; }
     .wk.down { background:var(--down); opacity:.4; }
+    .wk.band { background:var(--ink-2); opacity:.15; }
 
     .plot { position:relative; height:clamp(280px, 44vh, 520px); }
     .plot-prob { height:clamp(150px, 20vh, 220px); }
@@ -187,6 +190,21 @@
     .sig-value { font-size:16px; font-weight:600; font-variant-numeric:tabular-nums; text-align:right; }
     .sig-sub { font-size:12px; color:var(--muted-text); margin-top:2px; }
 
+    /* ── Rounds + track record ── */
+    .rounds { display:grid; grid-template-columns:repeat(12, minmax(0,1fr)); gap:4px; }
+    .rchip {
+      height:26px; border-radius:6px; display:grid; place-items:center;
+      font-size:11px; font-weight:700; background:var(--surface-2); color:var(--muted-text);
+    }
+    .rchip.up   { background:var(--up-wash);   color:var(--up-text); }
+    .rchip.down { background:var(--down-wash); color:var(--down-text); }
+    .rounds-axis { display:flex; justify-content:space-between; font-size:11px; color:var(--muted-text); margin-top:4px; font-variant-numeric:tabular-nums; }
+    .track { margin-top:12px; }
+    .trow { display:flex; justify-content:space-between; align-items:baseline; gap:8px; font-size:12px; padding:6px 0; border-top:1px solid var(--grid); color:var(--ink-2); }
+    .trow b { font-weight:600; color:var(--ink-1); font-variant-numeric:tabular-nums; text-align:right; }
+    .track-foot { display:flex; justify-content:space-between; gap:8px; font-size:11px; color:var(--muted-text); margin-top:6px; }
+    .link-btn { font:inherit; color:var(--ink-2); background:none; border:0; text-decoration:underline; cursor:pointer; }
+
     /* ── Sources table ── */
     .src { display:grid; grid-template-columns:minmax(0,1fr) auto auto 8px; column-gap:16px; align-items:center; font-size:13px; }
     .src > * { padding:7px 0; border-top:1px solid var(--grid); }
@@ -198,14 +216,24 @@
     .src-d { color:var(--muted-text); }
     .src-s { display:flex; justify-content:center; }
 
-    /* ── Tablet: charts full width, order book + signals side by side ── */
+    /* ── Toast (alerts) ── */
+    .toast {
+      position:fixed; left:50%; bottom:16px; transform:translateX(-50%); z-index:10;
+      display:flex; flex-direction:column; gap:2px; max-width:calc(100% - 24px); min-width:240px;
+      padding:10px 14px; border-radius:10px; background:var(--ink-1); color:var(--surface);
+      box-shadow:var(--shadow); font-size:13px;
+    }
+    .toast span { opacity:.8; font-size:12px; }
+
+    /* ── Tablet: charts full width, order book next to signals + rounds ── */
     @media (max-width: 980px) {
       .layout { grid-template-columns:minmax(0,1fr) minmax(0,1fr); }
       .col { display:contents; }
       #card-charts  { order:1; grid-column:1 / -1; }
-      #card-book    { order:2; }
+      #card-book    { order:2; grid-row:span 2; }
       #card-signals { order:3; }
-      #card-sources { order:4; grid-column:1 / -1; }
+      #card-rounds  { order:4; }
+      #card-sources { order:5; grid-column:1 / -1; }
     }
 
     /* ── Phone ── */
@@ -213,12 +241,15 @@
       .wrap { padding:10px 10px 20px; gap:10px; }
       .card { padding:12px; border-radius:10px; }
       .layout { grid-template-columns:minmax(0,1fr); gap:10px; }
+      #card-book { grid-row:auto; }
       .kpis { grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:10px; }
       .kpi-hero { grid-column:1 / -1; }
       .hero { font-size:44px; }
       .kpi-value { font-size:26px; }
       .plot { height:280px; }
       .plot-prob { height:150px; }
+      .seg button { min-width:0; padding:5px 9px; }
+      .hide-sm, .src-name .muted { display:none; }
       .src { column-gap:10px; }
     }
   </style>
@@ -228,10 +259,14 @@
 
   <header class="topbar">
     <div class="brand">
-      <div class="brand-title">BTC Up or Down <span class="muted">· 5-minute rounds</span></div>
+      <div class="brand-title">BTC Up or Down <span class="muted hide-sm">· 5-minute rounds</span></div>
       <div class="brand-sub" id="market-title">Loading market…</div>
     </div>
     <span class="status"><i class="dot wait" id="live-dot"></i><span id="live-text">Connecting</span></span>
+    <button class="icon-btn" id="alert-btn" type="button" aria-pressed="false" aria-label="Alerts"
+            title="Alerts: strike crossings in the last minute and big market/model gaps">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+    </button>
     <button class="icon-btn" id="theme-btn" type="button" aria-label="Switch light/dark theme"></button>
   </header>
 
@@ -265,8 +300,9 @@
       <section class="card" id="card-charts" aria-label="Charts">
         <div class="toolbar">
           <div class="seg" role="group" aria-label="Time window">
+            <button type="button" data-mode="round" aria-pressed="true">Round</button>
             <button type="button" data-s="10"  aria-pressed="false">10s</button>
-            <button type="button" data-s="30"  aria-pressed="true">30s</button>
+            <button type="button" data-s="30"  aria-pressed="false">30s</button>
             <button type="button" data-s="60"  aria-pressed="false">1m</button>
             <button type="button" data-s="300" aria-pressed="false">5m</button>
           </div>
@@ -280,6 +316,7 @@
             <span><i class="lk dash"></i>Strike</span>
             <span><i class="wk up"></i>Above</span>
             <span><i class="wk down"></i>Below</span>
+            <span id="leg-band"><i class="wk band"></i>60s averaging windows</span>
             <span id="legend-ex" hidden></span>
           </div>
         </div>
@@ -324,55 +361,72 @@
       <section class="card" id="card-signals" aria-label="Signals">
         <div class="card-head"><h2>Signals</h2><span class="card-meta">heuristics, not advice</span></div>
         <div class="sig">
-          <div class="sig-top"><span class="sig-label">Market vs model</span><span class="sig-value" id="edge-val">—</span></div>
+          <div class="sig-top"><span class="sig-label" title="Model: normal approximation of the settlement average (60s TWAP), volatility from the last hour of 1-minute returns">Market vs model</span><span class="sig-value" id="edge-val">—</span></div>
           <div class="sig-sub" id="edge-sub">Needs order book, strike and price</div>
         </div>
         <div class="sig">
-          <div class="sig-top"><span class="sig-label">Projected close</span><span class="sig-value" id="proj-val">—</span></div>
-          <div class="sig-sub" id="proj-sub">Momentum of the last 30s, extrapolated</div>
+          <div class="sig-top"><span class="sig-label">Projected settlement</span><span class="sig-value" id="proj-val">—</span></div>
+          <div class="sig-sub" id="proj-sub">Momentum of the last 30s, extrapolated into the settlement average</div>
         </div>
         <div class="sig">
-          <div class="sig-top"><span class="sig-label" id="bp-label">Buy pressure · 30s</span><span class="sig-value" id="bp-val">—</span></div>
+          <div class="sig-top"><span class="sig-label" id="bp-label">Buy pressure</span><span class="sig-value" id="bp-val">—</span></div>
           <div class="segbar thin idle" id="bp-bar" aria-hidden="true"><span class="sb-up" id="bp-buy"></span><span class="sb-down" id="bp-sell"></span></div>
           <div class="sig-sub" id="bp-sub">—</div>
         </div>
+      </section>
+
+      <section class="card" id="card-rounds" aria-label="Recent rounds and track record">
+        <div class="card-head"><h2>Recent rounds</h2><span class="card-meta num" id="rounds-meta">official results</span></div>
+        <div class="rounds" id="rounds"></div>
+        <div class="rounds-axis"><span id="rounds-from"></span><span id="rounds-to"></span></div>
+        <div class="track" id="track"></div>
       </section>
 
     </div>
   </main>
 </div>
 
+<div class="toast" id="toast" role="status" aria-live="polite" hidden><b id="toast-title"></b><span id="toast-body"></span></div>
+
 <script>
 const $ = id => document.getElementById(id);
 
 // ── State ────────────────────────────────────────────────────────────────────
-let WINDOW_MS = 30_000;
-const MAX_BUF = 40_000;
+const ROUND_MS = 300_000;   // 5-minute rounds
+const TWAP_MS  = 60_000;    // strike and settlement are 60s time-weighted averages (Chainlink TWAP stream)
+const STALE_MS = 120_000;   // an exchange without trades for this long drops out of the median
+const MAX_BUF  = 40_000;
+
+let viewMode  = 'round';    // 'round' (whole round incl. strike window) or 'rolling'
+let WINDOW_MS = 30_000;     // rolling window
 
 // color is filled from the --ex-N tokens by readTheme()
 const EXCH = [
-  { key:'coinbase', name:'Coinbase', short:'CB', color:'', trades:[], lastP:null, enabled:true },
-  { key:'kraken',   name:'Kraken',   short:'KR', color:'', trades:[], lastP:null, enabled:true },
-  { key:'bitstamp', name:'Bitstamp', short:'BS', color:'', trades:[], lastP:null, enabled:true },
-  { key:'gemini',   name:'Gemini',   short:'GM', color:'', trades:[], lastP:null, enabled:true },
-  { key:'bitfinex', name:'Bitfinex', short:'BX', color:'', trades:[], lastP:null, enabled:true },
-  { key:'binance',  name:'Binance',  short:'BN', color:'', trades:[], lastP:null, enabled:true },
-];
+  { key:'coinbase', name:'Coinbase' },
+  { key:'kraken',   name:'Kraken' },
+  { key:'bitstamp', name:'Bitstamp' },
+  { key:'gemini',   name:'Gemini' },
+  { key:'bitfinex', name:'Bitfinex' },
+  { key:'binance',  name:'Binance', note:'USDT→USD' },
+].map(e => ({ ...e, color:'', trades:[], lastP:null, lastTT:0, enabled:true, ws:null, lastMsgT:0 }));
+const EX = Object.fromEntries(EXCH.map(e => [e.key, e]));
 
 let showExchanges = false;
+let usdtUsd = 1;            // converts Binance BTCUSDT to USD (live from Coinbase USDT-USD)
 
 let lastMedianP = null;
 let tpsCount = 0, tps = 0, tpsTick = Date.now();
-// medianHistory entries: {t, p, lo, hi}
-const medianHistory = [];
+const medianHistory = [];   // {t, p} — t is trade time, kept monotonic
 
 let polyBids = {}, polyAsks = {}, polyLastTrade = null, bookDirty = true;
-let upProb = null;                       // implied UP probability = book mid, in %
-let strike = null, strikeStatus = 'fetching…', windowTs = null;
-let polyWs = null, countdownTimer = null;
+let upProb = null;          // implied UP probability = book mid, in %
+let strike = null, strikeSrc = null, strikeRound = null, clStrike = null;
+let windowTs = null;
+let polyWs = null, polyLastMsgT = 0, countdownTimer = null, loadingMarket = false;
 let polyState = 'wait', polyStamp = 'Connecting…';
 
 let clPrice = null, clProvider = null, clState = 'wait';
+let volPerSqrtS = null;     // σ of log returns per √second, from 1-minute candles
 
 // probability history — trimmed by age, never by count
 const probHistory = [];
@@ -380,8 +434,7 @@ const PROB_MAX_AGE_MS = 300_000;
 let lastProbPushT = 0;
 let lastProbValue = null;
 
-// buy pressure snapshots for trend detection {t, pct}
-const buyPressureSnaps = [];
+const buyPressureSnaps = [];  // {t, pct}
 
 // crosshair: fraction of the plot width under the pointer, shared by both charts
 let hoverFrac = null, hoverSrc = null, touchClearTimer = null;
@@ -407,14 +460,232 @@ const fmtP     = n => '$' + n.toLocaleString('en-US', { minimumFractionDigits:2,
 const fmtNum   = n => n.toLocaleString('en-US', { minimumFractionDigits:2, maximumFractionDigits:2 });
 const fmtSz    = n => n.toLocaleString('en-US', { maximumFractionDigits: n >= 100 ? 0 : 1 });
 const fmtClock = t => new Date(t).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+const fmtHM    = t => new Date(t).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
 const signedUsd = d => (d >= 0 ? '+' : '−') + fmtP(Math.abs(d));
-const winLabel = () => WINDOW_MS < 60_000 ? (WINDOW_MS / 1000) + 's' : (WINDOW_MS / 60_000) + 'm';
+const winLabel = () => viewMode === 'round' ? 'this round' : WINDOW_MS < 60_000 ? (WINDOW_MS / 1000) + 's' : (WINDOW_MS / 60_000) + 'm';
+const getJSON  = async url => { const r = await fetch(url); if (!r.ok) throw new Error(r.status + ' ' + url); return r.json(); };
+
+function currentRound(now = Date.now()) {
+  const start = Math.floor(now / ROUND_MS) * ROUND_MS;
+  return { start, end: start + ROUND_MS };
+}
+function secsLeft() { return 300 - (Math.floor(Date.now() / 1000) % 300); }
 
 // first index with arr[i].t >= t (arrays are time-ordered)
 function firstIdx(arr, t) {
   let a = 0, b = arr.length;
   while (a < b) { const m = (a + b) >>> 1; arr[m].t < t ? (a = m + 1) : (b = m); }
   return a;
+}
+
+// time-weighted average of a step series over [a, b]; tolerates up to 10s missing at the start
+function twap(arr, a, b) {
+  let i = firstIdx(arr, a) - 1;
+  if (i < 0) {
+    if (!arr.length || arr[0].t > a + 10_000) return null;
+    i = 0; a = arr[0].t;
+  }
+  if (a >= b) return null;
+  let sum = 0, t = a, p = arr[i].p;
+  for (let j = i + 1; j < arr.length && arr[j].t < b; j++) { sum += p * (arr[j].t - t); t = arr[j].t; p = arr[j].p; }
+  sum += p * (b - t);
+  return sum / (b - a);
+}
+
+// ── Median of exchanges ──────────────────────────────────────────────────────
+// median of each enabled exchange's last trade; needs 3 fresh sources (one exchange alone can sit $100+ off)
+function medianAt(t) {
+  const prices = [];
+  let enabled = 0;
+  for (const ex of EXCH) {
+    if (!ex.enabled) continue;
+    enabled++;
+    if (ex.lastP !== null && t - ex.lastTT <= STALE_MS) prices.push(ex.lastP);
+  }
+  if (!prices.length || prices.length < Math.min(3, enabled)) return null;
+  prices.sort((a, b) => a - b);
+  const m = prices.length >> 1;
+  return prices.length % 2 ? prices[m] : (prices[m - 1] + prices[m]) / 2;
+}
+const getMedian = () => medianAt(Date.now());
+
+function onTrade(key, tr) {
+  const ex = EX[key];
+  const last = ex.trades[ex.trades.length - 1];
+  tr.t = Math.min(Date.now(), Math.max(tr.t, last ? last.t : 0));
+  ex.trades.push(tr);
+  if (ex.trades.length > MAX_BUF) ex.trades.splice(0, 2000);
+  ex.lastP = tr.p; ex.lastTT = tr.t;
+  if (!ex.enabled) return;
+  tpsCount++;
+  const med = medianAt(tr.t);
+  if (med === null) return;
+  const lastM = medianHistory[medianHistory.length - 1];
+  medianHistory.push({ t: Math.max(tr.t, lastM ? lastM.t : 0), p: med });
+  if (medianHistory.length > MAX_BUF) medianHistory.splice(0, 2000);
+  lastMedianP = med;
+}
+
+// ── Backfill: recent trades over REST so charts, strike and model work right after loading ──
+// (Coinbase, Kraken, Bitstamp and Binance allow browser requests; Gemini and Bitfinex don't)
+async function fetchCoinbaseTrades(since) {
+  const out = [];
+  let after = '';
+  for (let page = 0; page < 6; page++) {
+    const d = await getJSON(`https://api.exchange.coinbase.com/products/BTC-USD/trades?limit=1000${after}`);
+    if (!d.length) break;
+    // side is the maker side: maker 'buy' = taker sold
+    for (const x of d) out.push({ id: x.trade_id, t: Date.parse(x.time), p: +x.price, q: +x.size, sell: x.side === 'buy' });
+    const oldest = d[d.length - 1];
+    if (Date.parse(oldest.time) < since) break;
+    after = `&after=${oldest.trade_id}`;
+  }
+  return out.filter(x => x.t >= since).reverse();
+}
+
+async function fetchKrakenTrades(since) {
+  const out = [];
+  let cursor = Math.floor(since / 1000);
+  for (let page = 0; page < 6; page++) {
+    const d = await getJSON(`https://api.kraken.com/0/public/Trades?pair=XBTUSD&since=${cursor}`);
+    const pair = Object.keys(d.result || {}).find(k => k !== 'last');
+    const rows = pair ? d.result[pair] : [];
+    for (const x of rows) out.push({ t: Math.round(x[2] * 1000), p: +x[0], q: +x[1], sell: x[3] === 's' });
+    if (rows.length < 1000) break;
+    cursor = d.result.last;
+  }
+  return out;
+}
+
+async function fetchBitstampTrades(since) {
+  const d = await getJSON('https://www.bitstamp.net/api/v2/transactions/btcusd/?time=hour');
+  return d.map(x => ({ id: +x.tid, t: +x.date * 1000, p: +x.price, q: +x.amount, sell: x.type === '1' }))
+          .filter(x => x.t >= since).reverse();
+}
+
+async function fetchBinanceTrades(since) {
+  const get = q => getJSON(`https://api.binance.com/api/v3/aggTrades?symbol=BTCUSDT&limit=1000&${q}`)
+    .catch(() => getJSON(`https://data-api.binance.vision/api/v3/aggTrades?symbol=BTCUSDT&limit=1000&${q}`));
+  const out = [];
+  let q = `startTime=${since}`;
+  for (let page = 0; page < 10; page++) {
+    const d = await get(q);
+    for (const x of d) out.push({ id: x.a, t: x.T, p: +x.p * usdtUsd, q: +x.q, sell: x.m });
+    if (d.length < 1000) break;
+    q = `fromId=${d[d.length - 1].a + 1}`;
+  }
+  return out;
+}
+
+async function seedUsdt() {
+  try {
+    const p = +(await getJSON('https://api.exchange.coinbase.com/products/USDT-USD/ticker')).price;
+    if (p > 0.9 && p < 1.1) usdtUsd = p;
+  } catch {}
+}
+
+// merge fetched trades into an exchange's history (dedupe by trade id, or time|price|size)
+function mergeTrades(ex, list) {
+  const key = tr => tr.id ?? `${tr.t}|${tr.p}|${tr.q}`;
+  const seen = new Set(ex.trades.map(key));
+  let added = 0;
+  for (const tr of list) if (!seen.has(key(tr))) { ex.trades.push(tr); seen.add(key(tr)); added++; }
+  if (added) ex.trades.sort((a, b) => a.t - b.t);
+  return added;
+}
+
+// replay all trades from `from` on through the median logic (after a backfill filled history or a gap)
+function rebuildMedian(from) {
+  const warm = from - STALE_MS, evs = [];
+  for (const ex of EXCH) {
+    const i0 = firstIdx(ex.trades, warm);
+    const prev = ex.trades[i0 - 1];
+    ex.lastP = prev ? prev.p : null; ex.lastTT = prev ? prev.t : 0;
+    for (let i = i0; i < ex.trades.length; i++) evs.push([ex.trades[i], ex]);
+  }
+  evs.sort((a, b) => a[0].t - b[0].t);
+  const keep = firstIdx(medianHistory, from);
+  medianHistory.length = keep;
+  let lastT = keep ? medianHistory[keep - 1].t : 0;
+  for (const [tr, ex] of evs) {
+    ex.lastP = tr.p; ex.lastTT = tr.t;
+    if (!ex.enabled || tr.t < from) continue;
+    const m = medianAt(tr.t);
+    if (m === null) continue;
+    lastT = Math.max(lastT, tr.t);
+    medianHistory.push({ t: lastT, p: m });
+  }
+  lastMedianP = getMedian() ?? lastMedianP;
+}
+
+let backfilling = false;
+async function backfill(since) {
+  if (backfilling) return;
+  backfilling = true;
+  try {
+    await seedUsdt();
+    const jobs = [['coinbase', fetchCoinbaseTrades], ['kraken', fetchKrakenTrades], ['bitstamp', fetchBitstampTrades], ['binance', fetchBinanceTrades]];
+    const res = await Promise.allSettled(jobs.map(([, f]) => f(since)));
+    let added = 0;
+    res.forEach((r, i) => {
+      if (r.status === 'fulfilled') added += mergeTrades(EX[jobs[i][0]], r.value);
+      else console.warn('backfill', jobs[i][0], r.reason?.message);
+    });
+    if (added) rebuildMedian(since);
+  } finally {
+    backfilling = false;
+  }
+}
+
+// ── Strike, settlement, model ────────────────────────────────────────────────
+// strike = 60s average of our median before the round starts. Strike and settlement come from the
+// same price basis, so a constant offset to Chainlink's stream cancels out; on-chain Chainlink is the fallback.
+function updateStrike(now) {
+  const { start } = currentRound(now);
+  if (strikeRound !== start) {
+    strikeRound = start; strike = null; strikeSrc = null; clStrike = null;
+    delete yRange.btc; delete yRange.prob;
+    fetchStrike(start / 1000);
+  }
+  if (strikeSrc === 'twap') return;
+  const v = now >= start ? twap(medianHistory, start - TWAP_MS, start) : null;
+  if (v !== null) { strike = v; strikeSrc = 'twap'; return; }
+  if (clStrike !== null) { strike = clStrike; strikeSrc = 'chainlink'; }
+}
+
+// expected settlement average: the part of the final minute already observed + current price for the rest
+function expectedSettlement(now) {
+  if (lastMedianP === null) return null;
+  const ws = currentRound(now).end - TWAP_MS;
+  if (now <= ws) return { value: lastMedianP, locked: 0 };
+  const done = twap(medianHistory, ws, now);
+  if (done === null) return { value: lastMedianP, locked: 0 };
+  const e = Math.min(1, (now - ws) / TWAP_MS);
+  return { value: done * e + lastMedianP * (1 - e), locked: e };
+}
+
+// σ in $ per √s: last hour of 1-minute returns; until that loads, the 60s range as a rough proxy
+function sigmaUsd() {
+  if (volPerSqrtS !== null && lastMedianP !== null) return lastMedianP * volPerSqrtS;
+  const cut60 = Date.now() - 60_000;
+  let lo60 = Infinity, hi60 = -Infinity;
+  for (let i = medianHistory.length - 1; i >= 0 && medianHistory[i].t >= cut60; i--) {
+    lo60 = Math.min(lo60, medianHistory[i].p); hi60 = Math.max(hi60, medianHistory[i].p);
+  }
+  return (isFinite(lo60) ? Math.max(25, (hi60 - lo60) / 3) : 80) / Math.sqrt(60);
+}
+
+async function fetchVol() {
+  try {
+    const d = await getJSON('https://api.exchange.coinbase.com/products/BTC-USD/candles?granularity=60');
+    const closes = d.slice(1, 62).map(c => c[4]).reverse();   // newest first; skip the unfinished minute
+    const r = [];
+    for (let i = 1; i < closes.length; i++) r.push(Math.log(closes[i] / closes[i - 1]));
+    if (r.length < 20) return;
+    const mean = r.reduce((a, v) => a + v, 0) / r.length;
+    const sd1m = Math.sqrt(r.reduce((a, v) => a + (v - mean) ** 2, 0) / (r.length - 1));
+    volPerSqrtS = sd1m / Math.sqrt(60);
+  } catch (e) { console.warn('vol:', e.message); }
 }
 
 // Abramowitz & Stegun normal CDF approximation
@@ -425,49 +696,28 @@ function normalCDF(z) {
   return z >= 0 ? p : 1 - p;
 }
 
+// P(settlement average >= strike) with the price as Brownian motion:
+//   T >= 60s:  Var = σ²·(T − 40)          (40 = 60 − 60/3: averaging over the last minute removes a third)
+//   T <  60s:  mean includes the observed part, Var = σ²·T³ / (3·60²)
 function computeModelProb() {
   if (strike === null || lastMedianP === null) return null;
-  const s = secsLeft();
-  if (s <= 0) return null;
-  // estimate recent 60s price range as a vol proxy
-  const cut60 = Date.now() - 60_000;
-  let lo60 = Infinity, hi60 = -Infinity;
-  for (let i = medianHistory.length - 1; i >= 0 && medianHistory[i].t >= cut60; i--) {
-    if (medianHistory[i].p < lo60) lo60 = medianHistory[i].p;
-    if (medianHistory[i].p > hi60) hi60 = medianHistory[i].p;
+  const now = Date.now(), end = currentRound(now).end, T = (end - now) / 1000;
+  if (T <= 0) return null;
+  const sig = sigmaUsd();
+  let mean = lastMedianP, sd;
+  if (T >= 60) sd = sig * Math.sqrt(T - 40);
+  else {
+    const done = twap(medianHistory, end - TWAP_MS, now), e = (60 - T) / 60;
+    if (done !== null) mean = done * e + lastMedianP * (1 - e);
+    sd = sig * Math.sqrt(T ** 3 / 3) / 60;
   }
-  const vol60 = isFinite(lo60) ? Math.max(25, (hi60 - lo60) / 3) : 80;
-  // scale to remaining time using sqrt-time rule
-  const volT = vol60 * Math.sqrt(s / 60);
-  const z = (lastMedianP - strike) / Math.max(volT, 1);
-  return Math.max(1, Math.min(99, normalCDF(z) * 100));
+  return Math.max(0.5, Math.min(99.5, normalCDF((mean - strike) / Math.max(sd, 1e-6)) * 100));
 }
 
-function getMedian() {
-  const prices = EXCH.filter(e => e.enabled && e.lastP !== null).map(e => e.lastP).sort((a,b) => a-b);
-  if (!prices.length) return null;
-  const m = Math.floor(prices.length / 2);
-  return prices.length % 2 === 0 ? (prices[m-1] + prices[m]) / 2 : prices[m];
-}
-
-function onTrade(key, trade) {
-  const ex = EXCH.find(e => e.key === key);
-  if (!ex) return;
-  ex.trades.push(trade);
-  if (ex.trades.length > MAX_BUF) ex.trades.splice(0, 2000);
-  ex.lastP = trade.p;
-  if (!ex.enabled) return;
-  tpsCount++;
-
-  const prices = EXCH.filter(e => e.enabled && e.lastP !== null).map(e => e.lastP).sort((a,b) => a-b);
-  // wait for 3 sources before trusting the median — a single exchange (e.g. Binance USDT) can sit $100+ off
-  if (prices.length >= Math.min(3, EXCH.filter(e => e.enabled).length)) {
-    const m = Math.floor(prices.length / 2);
-    const med = prices.length % 2 === 0 ? (prices[m-1] + prices[m]) / 2 : prices[m];
-    medianHistory.push({ t: Date.now(), p: med, lo: prices[0], hi: prices[prices.length-1] });
-    if (medianHistory.length > MAX_BUF) medianHistory.splice(0, 2000);
-    lastMedianP = med;
-  }
+function velocity(now) {
+  const old = medianHistory[Math.max(0, firstIdx(medianHistory, now - 30_000) - 1)];
+  if (!old || lastMedianP === null || now - old.t < 1000) return null;
+  return (lastMedianP - old.p) / ((now - old.t) / 1000);   // $/s
 }
 
 // ── Theme ────────────────────────────────────────────────────────────────────
@@ -487,7 +737,7 @@ function readTheme() {
   const v = n => cs.getPropertyValue('--' + n).trim();
   Object.assign(T, {
     surface: v('surface'), ink1: v('ink-1'), ink2: v('ink-2'), muted: v('muted'),
-    grid: v('grid'), axis: v('axis'), upWash: v('up-wash'), downWash: v('down-wash'),
+    grid: v('grid'), axis: v('axis'), band: v('band'), upWash: v('up-wash'), downWash: v('down-wash'),
   });
   EXCH.forEach((ex, i) => ex.color = v('ex-' + (i + 1)));
   $('theme-btn').innerHTML = isDark() ? ICON_SUN : ICON_MOON;
@@ -532,18 +782,39 @@ function attachHover(el, name) {
   el.addEventListener('pointercancel', clear);
 }
 
-// visible slice reduced to one point per pixel column (+ the point just before the window)
-function series(arr, cutoff, xOf) {
+// x-domain of both charts: the whole round (incl. the strike window before it) or a rolling window
+function domain(now) {
+  if (viewMode === 'round') { const { start, end } = currentRound(now); return { t0: start - TWAP_MS, t1: end }; }
+  return { t0: now - WINDOW_MS, t1: now };
+}
+
+// visible slice (+ the point just before the window) reduced to one point per pixel-wide time bucket.
+// Buckets are aligned to absolute time, not to the moving window edge: a point never changes bucket
+// while the chart scrolls, so the line only translates instead of re-shaping every frame.
+function series(arr, cutoff, xOf, msPerPx) {
   const pts = [];
-  let lo = Infinity, hi = -Infinity;
+  let lo = Infinity, hi = -Infinity, lastB = null;
   for (let i = Math.max(0, firstIdx(arr, cutoff) - 1); i < arr.length; i++) {
-    const v = arr[i], x = Math.max(0, Math.round(xOf(v.t)));
+    const v = arr[i], b = Math.floor(v.t / msPerPx);
     if (v.p < lo) lo = v.p;
     if (v.p > hi) hi = v.p;
-    const last = pts[pts.length - 1];
-    if (last && last.x === x) last.p = v.p; else pts.push({ x, p: v.p });
+    if (b === lastB) pts[pts.length - 1].p = v.p;
+    else { pts.push({ x: xOf(b * msPerPx), p: v.p }); lastB = b; }
   }
   return { pts, lo, hi };
+}
+
+// y-axis range eased toward its target (grow fast, shrink slowly) — a hard rescale every frame
+// makes the whole line jump whenever an extreme scrolls out of the window
+const yRange = {};
+let frameDt = 16, lastFrameT = 0;
+function easeRange(key, lo, hi) {
+  const r = yRange[key];
+  if (!r) return (yRange[key] = { lo, hi });
+  const kGrow = 1 - Math.exp(-frameDt / 150), kShrink = 1 - Math.exp(-frameDt / 800);
+  r.lo += (lo - r.lo) * (lo < r.lo ? kGrow : kShrink);
+  r.hi += (hi - r.hi) * (hi > r.hi ? kGrow : kShrink);
+  return r;
 }
 
 // polyline vertices; step = hold each value until the next point; extends flat to xEnd ("now")
@@ -580,6 +851,18 @@ function washVerts(ctx, verts, baseY, PW, H) {
   ctx.save(); ctx.beginPath(); ctx.rect(0, baseY, PW, H - baseY); ctx.clip(); ctx.fillStyle = T.downWash; ctx.fill(path); ctx.restore();
 }
 
+// round view: the two 60s averaging windows (strike before the round, settlement at its end)
+function roundBands(ctx, xOf, Y1, labels) {
+  const { start, end } = currentRound();
+  ctx.font = '10px ' + FONT; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  for (const [a, b, lbl] of [[start - TWAP_MS, start, 'strike avg'], [end - TWAP_MS, end, 'settlement avg']]) {
+    const xa = xOf(a), xb = xOf(b);
+    ctx.fillStyle = T.band; ctx.fillRect(xa, 0, xb - xa, Y1);
+    if (labels) { ctx.fillStyle = T.muted; ctx.fillText(lbl, (xa + xb) / 2, 2); }
+  }
+  ctx.textAlign = 'left';
+}
+
 function niceStep(range, target) {
   const raw = range / Math.max(1, target);
   const p = Math.pow(10, Math.floor(Math.log10(raw)));
@@ -597,20 +880,21 @@ function yGrid(ctx, lo, hi, yOf, PW, Y0, Y1, target, fmt, tagY) {
     if (y < Y0 - 1 || y > Y1 + 1) continue;
     ctx.strokeStyle = T.grid;
     ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(PW, y); ctx.stroke();
-    if (Math.abs(y - tagY) < 15) continue;
+    if (tagY !== null && Math.abs(y - tagY) < 15) continue;
     ctx.fillStyle = T.muted;
     ctx.fillText(fmt(v, step), PW + 8, y);
   }
 }
 
-function xAxis(ctx, cutoff, PW, Y1) {
+function xAxis(ctx, t0, t1, PW, Y1) {
   ctx.strokeStyle = T.axis; ctx.lineWidth = 1;
   ctx.beginPath(); ctx.moveTo(0, Y1 + .5); ctx.lineTo(PW, Y1 + .5); ctx.stroke();
   ctx.font = '11px ' + FONT; ctx.fillStyle = T.muted; ctx.textBaseline = 'top';
   const n = Math.max(2, Math.min(6, Math.floor(PW / 110)));
+  const fmt = viewMode === 'round' ? fmtHM : fmtClock;
   for (let i = 0; i <= n; i++) {
     ctx.textAlign = i === 0 ? 'left' : i === n ? 'right' : 'center';
-    ctx.fillText(fmtClock(cutoff + WINDOW_MS * i / n), PW * i / n, Y1 + 7);
+    ctx.fillText(fmt(t0 + (t1 - t0) * i / n), PW * i / n, Y1 + 7);
   }
   ctx.textAlign = 'left';
 }
@@ -638,7 +922,7 @@ function rrect(ctx, x, y, w, h, r) {
   if (ctx.roundRect) ctx.roundRect(x, y, w, h, r); else ctx.rect(x, y, w, h);
 }
 
-// value at the line end, in the gutter (label inside a fill: surface-colored text)
+// value at the line end (label inside a fill: surface-colored text)
 function endTag(ctx, x, y, text, Y0, Y1) {
   ctx.font = '600 11px ' + FONT;
   const tw = ctx.measureText(text).width, h = 18;
@@ -679,6 +963,9 @@ function placeTip(tip, x, PW) {
   tip.el.style.left = Math.max(0, left) + 'px';
 }
 
+// hovered time, clamped to "now" (the round view has empty future space on the right)
+function hoverTime(t0, D, now) { return Math.min(now, t0 + hoverFrac * D); }
+
 // ── BTC chart ────────────────────────────────────────────────────────────────
 function drawBtc(now) {
   const c = btcC, ctx = c.ctx, W = c.w, H = c.h;
@@ -686,57 +973,61 @@ function drawBtc(now) {
   ctx.setTransform(c.dpr, 0, 0, c.dpr, 0, 0);
   ctx.clearRect(0, 0, W, H);
 
-  // gutter sized to the widest label so both charts share the same plot width
+  // gutter sized to the widest label so both charts share the same plot width;
+  // measured with every digit as 0 so it doesn't wobble as the price changes
   ctx.font = '600 11px ' + FONT;
-  plotGutter = Math.max(64, Math.ceil(ctx.measureText(lastMedianP !== null ? fmtNum(lastMedianP) : '00,000.00').width) + 26);
-  const PW = W - plotGutter, Y0 = 10, Y1 = H - 6;
-  const cutoff = now - WINDOW_MS;
-  const xOf = t => (t - cutoff) / WINDOW_MS * PW;
+  plotGutter = Math.max(64, Math.ceil(ctx.measureText((lastMedianP !== null ? fmtNum(lastMedianP) : '00,000.00').replace(/\d/g, '0')).width) + 26);
+  const PW = W - plotGutter, Y0 = 16, Y1 = H - 6;
+  if (PW < 40) return;
+  const { t0, t1 } = domain(now), D = t1 - t0, msPerPx = D / PW;
+  const xOf = t => (t - t0) / D * PW, xNow = Math.min(PW, xOf(now));
+  if (viewMode === 'round') roundBands(ctx, xOf, H, true);
 
-  const med = series(medianHistory, cutoff, xOf);
+  const med = series(medianHistory, t0, xOf, msPerPx);
   if (!med.pts.length) { btcTip.el.hidden = true; emptyState(ctx, PW, Y0, Y1, 'Waiting for trades…'); return; }
 
   let lo = med.lo, hi = med.hi;
   const exLines = [];
   if (showExchanges) for (const ex of EXCH) {
     if (!ex.enabled) continue;
-    const s = series(ex.trades, cutoff, xOf);
+    const s = series(ex.trades, t0, xOf, msPerPx);
     if (!s.pts.length) continue;
     exLines.push([ex, s]);
     lo = Math.min(lo, s.lo); hi = Math.max(hi, s.hi);
   }
   if (strike !== null) { lo = Math.min(lo, strike); hi = Math.max(hi, strike); }
   const pad = Math.max((hi - lo) * 0.12, 3);
-  lo -= pad; hi += pad;
+  ({ lo, hi } = easeRange('btc', lo - pad, hi + pad));
   const yOf = p => Y0 + (hi - p) / (hi - lo) * (Y1 - Y0);
 
   const lastP = med.pts[med.pts.length - 1].p;
   yGrid(ctx, lo, hi, yOf, PW, Y0, Y1, (Y1 - Y0) < 240 ? 4 : 6,
     (v, step) => '$' + v.toLocaleString('en-US', { minimumFractionDigits: step < 1 ? 2 : 0, maximumFractionDigits: step < 1 ? 2 : 0 }),
-    yOf(lastP));
+    xNow >= PW - 1 ? yOf(lastP) : null);
 
-  const verts = vertices(med.pts, yOf, false, PW);
+  const verts = vertices(med.pts, yOf, false, xNow);
   if (strike !== null) washVerts(ctx, verts, yOf(strike), PW, H);
-  for (const [ex, s] of exLines) strokeVerts(ctx, vertices(s.pts, yOf, false, PW), ex.color, 1.25);
+  for (const [ex, s] of exLines) strokeVerts(ctx, vertices(s.pts, yOf, false, xNow), ex.color, 1.25);
 
+  if (strike !== null) refLine(ctx, Math.round(yOf(strike)) + .5, PW);
+  strokeVerts(ctx, verts, T.ink1, 2);
+
+  // strike label on top of the line; in the round view it sits in the still-empty future on the right
   if (strike !== null) {
     const sy = Math.round(yOf(strike)) + .5;
-    refLine(ctx, sy, PW);
-    const lbl = 'Strike ' + fmtP(strike);
+    const lbl = (strikeSrc === 'chainlink' ? 'Strike ≈ ' : 'Strike ') + fmtP(strike);
     ctx.font = '11px ' + FONT;
     const lw = ctx.measureText(lbl).width;
+    const lx = xNow + 100 < PW - lw - 12 ? PW - lw - 12 : 4;
     const ly = sy - 12 > Y0 + 4 ? sy - 11 : sy + 11;
-    ctx.fillStyle = T.surface; rrect(ctx, 4, ly - 8, lw + 8, 16, 4); ctx.fill();
-    ctx.fillStyle = T.ink2; ctx.textBaseline = 'middle'; ctx.fillText(lbl, 8, ly);
+    ctx.fillStyle = T.surface; rrect(ctx, lx, ly - 8, lw + 8, 16, 4); ctx.fill();
+    ctx.fillStyle = T.ink2; ctx.textBaseline = 'middle'; ctx.fillText(lbl, lx + 4, ly);
   }
-
-  strokeVerts(ctx, verts, T.ink1, 2);
-  dot(ctx, PW, yOf(lastP), T.ink1);
-  endTag(ctx, PW, yOf(lastP), fmtNum(lastP), Y0, Y1);
+  dot(ctx, xNow, yOf(lastP), T.ink1);
+  endTag(ctx, xNow, yOf(lastP), fmtNum(lastP), Y0, Y1);
 
   if (hoverFrac === null) { btcTip.el.hidden = true; return; }
-  const x  = hoverFrac * PW;
-  const ht = cutoff + hoverFrac * WINDOW_MS;
+  const ht = hoverTime(t0, D, now), x = xOf(ht);
   const i  = firstIdx(medianHistory, ht);
   const a = medianHistory[i - 1], b = medianHistory[i];
   const v = !a ? b : !b ? a : (ht - a.t <= b.t - ht ? a : b);
@@ -766,32 +1057,33 @@ function drawProb(now) {
   ctx.clearRect(0, 0, W, H);
 
   const PW = W - plotGutter, Y0 = 10, Y1 = H - 24;
-  const cutoff = now - WINDOW_MS;
-  const xOf = t => (t - cutoff) / WINDOW_MS * PW;
-  xAxis(ctx, cutoff, PW, Y1);
+  if (PW < 40) return;
+  const { t0, t1 } = domain(now), D = t1 - t0, msPerPx = D / PW;
+  const xOf = t => (t - t0) / D * PW, xNow = Math.min(PW, xOf(now));
+  if (viewMode === 'round') roundBands(ctx, xOf, Y1, false);
+  xAxis(ctx, t0, t1, PW, Y1);
 
-  const s = series(probHistory, cutoff, xOf);
+  const s = series(probHistory, t0, xOf, msPerPx);
   if (!s.pts.length) { probTip.el.hidden = true; emptyState(ctx, PW, Y0, Y1, 'Waiting for market…'); return; }
 
   const pad = Math.max(5, (s.hi - s.lo) * 0.4);
-  const lo = Math.max(0, s.lo - pad), hi = Math.min(100, s.hi + pad);
+  const { lo, hi } = easeRange('prob', Math.max(0, s.lo - pad), Math.min(100, s.hi + pad));
   const yOf = p => Y0 + (hi - p) / ((hi - lo) || 1) * (Y1 - Y0);
 
   const lastP = s.pts[s.pts.length - 1].p;
-  yGrid(ctx, lo, hi, yOf, PW, Y0, Y1, 3, v => v.toFixed(0) + '%', yOf(lastP));
-  const verts = vertices(s.pts, yOf, true, PW);
+  yGrid(ctx, lo, hi, yOf, PW, Y0, Y1, 3, v => v.toFixed(0) + '%', xNow >= PW - 1 ? yOf(lastP) : null);
+  const verts = vertices(s.pts, yOf, true, xNow);
   const baseY = yOf(Math.max(lo, Math.min(hi, 50)));
   washVerts(ctx, verts, baseY, PW, Y1);
   const show50 = lo < 50 && hi > 50;
   if (show50) refLine(ctx, Math.round(baseY) + .5, PW);
   if (show50 === $('leg-50').hidden) $('leg-50').hidden = !show50;
   strokeVerts(ctx, verts, T.ink1, 2);
-  dot(ctx, PW, yOf(lastP), T.ink1);
-  endTag(ctx, PW, yOf(lastP), lastP.toFixed(1) + '%', Y0, Y1);
+  dot(ctx, xNow, yOf(lastP), T.ink1);
+  endTag(ctx, xNow, yOf(lastP), lastP.toFixed(1) + '%', Y0, Y1);
 
   if (hoverFrac === null) { probTip.el.hidden = true; return; }
-  const x  = hoverFrac * PW;
-  const ht = cutoff + hoverFrac * WINDOW_MS;
+  const ht = hoverTime(t0, D, now), x = xOf(ht);
   const j  = firstIdx(probHistory, ht + 1) - 1;
   vline(ctx, x, Y0, Y1);
   if (j < 0) { probTip.el.hidden = true; return; }
@@ -806,38 +1098,42 @@ function drawProb(now) {
 // ── Panels (text updates are throttled; charts redraw every frame) ───────────
 let lastUiT = 0, lastSlowT = 0;
 
-function setDelta(el, text, cls) { el.textContent = text; el.className = cls; }
-
 function updateTime() {
   const s = secsLeft(), m = Math.floor(s / 60), r = s % 60;
   $('time-left').textContent = `${m}:${String(r).padStart(2, '0')}`;
   $('time-fill').style.width = ((300 - s) / 300 * 100).toFixed(1) + '%';
   $('time-meter').dataset.level = s < 30 ? 'crit' : s < 60 ? 'warn' : 'ok';
-  $('round-end').textContent = 'Round ends ' + fmtClock((Math.floor(Date.now() / 300_000) + 1) * 300_000);
+  $('round-end').textContent = s > 60
+    ? 'Round ends ' + fmtClock(currentRound().end)
+    : `Settlement average · ${60 - s}s of 60s recorded`;
 }
 
 function updateUI(now) {
   if (bookDirty) renderBook();
+  updateStrike(now);
   updateTime();
 
   const med = lastMedianP;
+  const modelP = computeModelProb();
   $('btc-price').textContent = med !== null ? fmtP(med) : '—';
-  const chip = $('close-chip');
-  if (med !== null && strike !== null) {
-    const d = med - strike, above = d >= 0;
+  const chip = $('close-chip'), exp = expectedSettlement(now);
+  if (exp && strike !== null) {
+    const d = exp.value - strike, above = d >= 0;
     $('btc-delta').className = 'kpi-delta ' + (above ? 'up-t' : 'down-t');
     $('btc-delta-text').textContent =
-      `${above ? '▲' : '▼'} ${fmtP(Math.abs(d))} ${above ? 'above' : 'below'} strike (${above ? '+' : '−'}${Math.abs(d / strike * 100).toFixed(2)}%)`;
-    chip.hidden = Math.abs(d) >= 50;
+      `${above ? '▲' : '▼'} ${fmtP(Math.abs(d))} ${above ? 'above' : 'below'} strike` +
+      (exp.locked > 0 ? ' · settlement avg' : ` (${above ? '+' : '−'}${Math.abs(d / strike * 100).toFixed(2)}%)`);
+    // "close" = outcome still open according to the model (or within $50 until it is available)
+    chip.hidden = modelP !== null ? (modelP < 25 || modelP > 75) : Math.abs(d) >= 50;
   } else {
     $('btc-delta').className = 'kpi-delta muted';
     $('btc-delta-text').textContent = med === null ? 'Waiting for trades…' : 'Waiting for strike…';
     chip.hidden = true;
   }
   $('btc-sub').textContent =
-    `Strike ${strike !== null ? fmtP(strike) : strikeStatus} · Chainlink ${clPrice !== null ? fmtP(clPrice) : '—'}`;
+    (strike === null ? 'Strike fetching…' : strikeSrc === 'twap' ? `Strike ${fmtP(strike)} (60s avg)` : `Strike ≈ ${fmtP(strike)} (Chainlink)`) +
+    ` · Chainlink ${clPrice !== null ? fmtP(clPrice) : '—'}`;
 
-  const modelP = computeModelProb();
   if (upProb !== null) {
     $('up-prob').textContent = upProb.toFixed(1) + '%';
     $('up-bar').classList.remove('idle');
@@ -856,10 +1152,12 @@ function updateUI(now) {
     updateSignals(now, modelP);
     updateSources();
     updateLive();
+    recordTrack(now, modelP);
+    checkAlerts(now, modelP, exp);
     btcC.el.setAttribute('aria-label',
-      `BTC median price ${med !== null ? fmtP(med) : 'unknown'}${strike !== null ? ', strike ' + fmtP(strike) : ''}, last ${winLabel()}`);
+      `BTC median price ${med !== null ? fmtP(med) : 'unknown'}${strike !== null ? ', strike ' + fmtP(strike) : ''}, ${winLabel()}`);
     probC.el.setAttribute('aria-label',
-      `Implied UP probability ${upProb !== null ? upProb.toFixed(1) + '%' : 'unknown'}, last ${winLabel()}`);
+      `Implied UP probability ${upProb !== null ? upProb.toFixed(1) + '%' : 'unknown'}, ${winLabel()}`);
   }
 }
 
@@ -880,13 +1178,15 @@ function updateSignals(now, modelP) {
     $('edge-sub').textContent = 'Needs order book, strike and price';
   }
 
-  // Projected close — velocity from last 30s extrapolated to round end
-  const s = secsLeft();
-  const k = Math.max(0, firstIdx(medianHistory, now - 30_000) - 1);
-  const old = medianHistory[k];
-  if (lastMedianP !== null && s > 0 && old && now - old.t > 1000) {
-    const vel  = (lastMedianP - old.p) / ((now - old.t) / 1000);   // $/s
-    const proj = lastMedianP + vel * s;
+  // Projected settlement — 30s momentum extrapolated into the final-minute average
+  const s = secsLeft(), vel = velocity(now);
+  if (lastMedianP !== null && vel !== null) {
+    let proj;
+    if (s > 60) proj = lastMedianP + vel * (s - 30);
+    else {
+      const end = currentRound(now).end, done = twap(medianHistory, end - TWAP_MS, now) ?? lastMedianP, e = (60 - s) / 60;
+      proj = done * e + (lastMedianP + vel * s / 2) * (1 - e);
+    }
     $('proj-val').textContent = fmtP(proj);
     const sub = $('proj-sub');
     sub.replaceChildren();
@@ -901,9 +1201,9 @@ function updateSignals(now, modelP) {
     $('proj-val').textContent = '—';
   }
 
-  // Buy pressure over the chart window + trend vs ~90s ago
+  // Buy pressure over the chart window (round view: since round start, at least 30s) + trend vs ~90s ago
   $('bp-label').textContent = 'Buy pressure · ' + winLabel();
-  const cut = now - WINDOW_MS;
+  const cut = viewMode === 'round' ? Math.min(now - 30_000, currentRound(now).start) : now - WINDOW_MS;
   let b = 0, sl = 0;
   for (const ex of EXCH) {
     if (!ex.enabled) continue;
@@ -936,28 +1236,33 @@ function updateSignals(now, modelP) {
 }
 
 function updateSources() {
-  const med = lastMedianP;
+  const med = lastMedianP, now = Date.now();
   for (const ex of EXCH) {
+    const fresh = ex.lastP !== null && now - ex.lastTT <= STALE_MS;
     $('sp-' + ex.key).textContent = ex.lastP !== null ? fmtP(ex.lastP) : '—';
-    $('sd-' + ex.key).textContent = ex.lastP !== null && med !== null ? signedUsd(ex.lastP - med) : '—';
-    $('sdot-' + ex.key).className = 'dot ' + (!ex.enabled ? '' : ex.lastP !== null ? 'live' : 'wait');
+    $('sd-' + ex.key).textContent = fresh && med !== null ? signedUsd(ex.lastP - med) : '—';
+    $('sdot-' + ex.key).className = 'dot ' + (!ex.enabled ? '' : fresh ? 'live' : 'wait');
   }
   $('sp-cl').textContent = clPrice !== null ? fmtP(clPrice) : '—';
   $('sd-cl').textContent = clPrice !== null && med !== null ? signedUsd(clPrice - med) : '—';
   $('sdot-cl').className = 'dot ' + clState;
+  $('sp-cls').textContent = clStrike !== null ? fmtP(clStrike) : '—';
+  $('sd-cls').textContent = clStrike !== null && strike !== null && strikeSrc === 'twap' ? signedUsd(clStrike - strike) : '—';
+  $('sdot-cls').className = 'dot ' + (clStrike !== null ? 'live' : 'wait');
   $('sp-pm').textContent = polyStamp;
   $('sdot-pm').className = 'dot ' + polyState;
 
   // data quality 0–100 from exchange consensus and trade activity
-  const live = EXCH.filter(e => e.enabled && e.lastP !== null).map(e => e.lastP);
+  const live = EXCH.filter(e => e.enabled && e.lastP !== null && now - e.lastTT <= STALE_MS).map(e => e.lastP);
   const mean = live.reduce((a, v) => a + v, 0) / (live.length || 1);
   const stdDev = live.length > 1 ? Math.sqrt(live.reduce((a, v) => a + (v - mean) ** 2, 0) / live.length) : 999;
   const quality = Math.round(Math.max(0, 100 - stdDev * 5) * 0.6 + Math.min(100, tps * 10) * 0.4);
-  $('src-meta').textContent = `${tps} trades/s · data quality ${quality}%`;
+  $('src-meta').textContent = `${tps} trades/s · USDT ${usdtUsd.toFixed(4)} · quality ${quality}%`;
 }
 
 function updateLive() {
-  const live = EXCH.filter(e => e.enabled && e.lastP !== null).length;
+  const now = Date.now();
+  const live = EXCH.filter(e => e.enabled && e.lastP !== null && now - e.lastTT <= STALE_MS).length;
   let cls = 'wait', txt = 'Connecting';
   if (polyState === 'live' && live >= 3) { cls = 'live'; txt = 'Live'; }
   else if (polyState === 'err') { cls = 'err'; txt = 'Reconnecting'; }
@@ -965,91 +1270,243 @@ function updateLive() {
   $('live-text').textContent = txt;
 }
 
-// ── Exchange WebSocket connections ───────────────────────────────────────────
-function connectCoinbase() {
-  const ws = new WebSocket('wss://ws-feed.exchange.coinbase.com');
-  ws.onopen = () => ws.send(JSON.stringify({ type:'subscribe', channels:['matches'], product_ids:['BTC-USD'] }));
-  ws.onmessage = e => {
-    const d = JSON.parse(e.data);
-    if (d.type !== 'match' && d.type !== 'last_match') return;
-    onTrade('coinbase', { t: new Date(d.time).getTime(), p: parseFloat(d.price), q: parseFloat(d.size), sell: d.side === 'sell' });
-  };
-  ws.onclose = () => { EXCH.find(e=>e.key==='coinbase').lastP = null; setTimeout(connectCoinbase, 2500); };
-  ws.onerror = () => ws.close();
+// ── Recent rounds + track record ─────────────────────────────────────────────
+// official results from Polymarket; the track record (market + model 60s before the end, own result)
+// lives in this browser's localStorage
+const TRACK_KEY = 'btc5m-track-v1';
+const roundResults = new Map();   // round start (s) → 'up' | 'down' | 'pending'
+let track = (() => { try { return JSON.parse(localStorage.getItem(TRACK_KEY)) || {}; } catch { return {}; } })();
+
+function saveTrack() {
+  try {
+    const keys = Object.keys(track).sort();
+    while (keys.length > 600) delete track[keys.shift()];
+    localStorage.setItem(TRACK_KEY, JSON.stringify(track));
+  } catch {}
 }
 
-function connectKraken() {
-  const ws = new WebSocket('wss://ws.kraken.com');
-  ws.onopen = () => ws.send(JSON.stringify({ event:'subscribe', pair:['XBT/USD'], subscription:{ name:'trade' } }));
-  ws.onmessage = e => {
-    const d = JSON.parse(e.data);
-    if (!Array.isArray(d) || d[2] !== 'trade') return;
-    for (const t of d[1])
-      onTrade('kraken', { t: Math.round(parseFloat(t[2]) * 1000), p: parseFloat(t[0]), q: parseFloat(t[1]), sell: t[3] === 's' });
-  };
-  ws.onclose = () => { EXCH.find(e=>e.key==='kraken').lastP = null; setTimeout(connectKraken, 2500); };
-  ws.onerror = () => ws.close();
+async function fetchRoundResult(ts) {
+  try {
+    const d = await getJSON(`${GAMMA}/events?slug=btc-updown-5m-${ts}`);
+    const m = d[0]?.markets?.[0];
+    if (!m) return;
+    const outcomes = JSON.parse(m.outcomes || '[]'), prices = JSON.parse(m.outcomePrices || '[]').map(Number);
+    const win = m.closed ? outcomes[prices.indexOf(1)] : null;
+    const res = win === 'Up' ? 'up' : win === 'Down' ? 'down' : 'pending';
+    roundResults.set(ts, res);
+    if (res !== 'pending' && track[ts] && !track[ts].outcome) { track[ts].outcome = res; saveTrack(); }
+  } catch {}
 }
 
-function connectBitstamp() {
-  const ws = new WebSocket('wss://ws.bitstamp.net');
-  ws.onopen = () => ws.send(JSON.stringify({ event:'bts:subscribe', data:{ channel:'live_trades_btcusd' } }));
-  ws.onmessage = e => {
-    const d = JSON.parse(e.data);
-    if (d.event !== 'trade') return;
-    const td = d.data;
-    onTrade('bitstamp', { t: parseInt(td.timestamp) * 1000, p: parseFloat(td.price), q: parseFloat(td.amount), sell: td.type === 1 });
-  };
-  ws.onclose = () => { EXCH.find(e=>e.key==='bitstamp').lastP = null; setTimeout(connectBitstamp, 2500); };
-  ws.onerror = () => ws.close();
+async function refreshRounds() {
+  const cur = currentRound().start / 1000, jobs = [];
+  for (let k = 1; k <= 12; k++) {
+    const ts = cur - 300 * k, r = roundResults.get(ts);
+    if (r !== 'up' && r !== 'down') jobs.push(fetchRoundResult(ts));
+  }
+  // tracked rounds from earlier visits that still miss their result
+  for (const ts of Object.keys(track).filter(ts => !track[ts].outcome && +ts < cur - 3600).slice(-10)) jobs.push(fetchRoundResult(+ts));
+  await Promise.all(jobs);
+  renderRounds();
 }
 
-function connectGemini() {
-  const ws = new WebSocket('wss://api.gemini.com/v1/marketdata/BTCUSD');
-  ws.onmessage = e => {
-    const d = JSON.parse(e.data);
-    if (d.type !== 'update') return;
-    for (const ev of (d.events || [])) {
-      if (ev.type !== 'trade') continue;
-      onTrade('gemini', { t: d.timestampms || Date.now(), p: parseFloat(ev.price), q: parseFloat(ev.amount), sell: ev.makerSide === 'bid' });
+function renderRounds() {
+  const cur = currentRound().start / 1000, chips = [];
+  let ups = 0, downs = 0;
+  for (let k = 12; k >= 1; k--) {
+    const ts = cur - 300 * k, res = roundResults.get(ts), time = fmtHM(ts * 1000);
+    if (res === 'up') ups++; else if (res === 'down') downs++;
+    const name = res === 'up' ? 'Up' : res === 'down' ? 'Down' : 'pending';
+    chips.push(`<span class="rchip ${res === 'up' || res === 'down' ? res : ''}" title="${time} · ${name}" aria-label="${time} ${name}">${res === 'up' ? '▲' : res === 'down' ? '▼' : '·'}</span>`);
+  }
+  $('rounds').innerHTML = chips.join('');
+  $('rounds-from').textContent = fmtHM((cur - 3600) * 1000);
+  $('rounds-to').textContent = fmtHM((cur - 300) * 1000);
+  $('rounds-meta').textContent = `▲ ${ups} · ▼ ${downs} · official`;
+  renderTrack();
+}
+
+function renderTrack() {
+  const recs = Object.values(track);
+  const scored = recs.filter(r => r.outcome && r.mkt != null && r.model != null);
+  const basis  = recs.filter(r => r.outcome && r.own);
+  const el = $('track');
+  if (!scored.length && !basis.length) {
+    el.innerHTML = '<div class="sig-sub">Track record fills in while the dashboard is open: market and model are recorded 60s before each round ends and checked against the official result.</div>';
+    return;
+  }
+  const o = r => r.outcome === 'up' ? 1 : 0;
+  const brier = k => scored.reduce((a, r) => a + (r[k] / 100 - o(r)) ** 2, 0) / scored.length;
+  const favWon = scored.filter(r => (r.mkt >= 50) === (r.outcome === 'up')).length;
+  const match = basis.filter(r => r.own === r.outcome).length;
+  const rows = [];
+  if (scored.length) {
+    rows.push(['Rounds scored', scored.length]);
+    rows.push(['Market favourite won <span class="muted">· at −60s</span>', Math.round(favWon / scored.length * 100) + '%']);
+    rows.push(['Brier score <span class="muted">· lower is better</span>', `market ${brier('mkt').toFixed(3)} · model ${brier('model').toFixed(3)}`]);
+  }
+  if (basis.length) rows.push(['Own price basis = official result', `${match} / ${basis.length}`]);
+  el.innerHTML = rows.map(([k, v]) => `<div class="trow"><span>${k}</span><b>${v}</b></div>`).join('') +
+    '<div class="track-foot"><span>Stored in this browser</span><button class="link-btn" type="button" id="track-reset">Reset</button></div>';
+  $('track-reset').addEventListener('click', () => {
+    if (!confirm('Reset the track record in this browser?')) return;
+    track = {}; saveTrack(); renderTrack();
+  });
+}
+
+function recordTrack(now, modelP) {
+  const { start, end } = currentRound(now), key = start / 1000, T = (end - now) / 1000;
+  const rec = track[key] || {};
+  // snapshot when the settlement window opens
+  if (T <= 60 && T > 45 && rec.mkt == null && upProb !== null && modelP !== null) {
+    track[key] = { ...rec, mkt: +upProb.toFixed(1), model: +modelP.toFixed(1) };
+    saveTrack();
+  }
+  // own result from our price basis, just before the round ends
+  if (T <= 3 && !rec.own && strikeSrc === 'twap') {
+    const settle = twap(medianHistory, end - TWAP_MS, now);
+    if (settle !== null) { track[key] = { ...track[key], own: settle >= strike ? 'up' : 'down' }; saveTrack(); }
+  }
+}
+
+// ── Alerts: toast + beep + vibration, system notification while the tab is in the background ──
+let alertsOn = false, audioCtx = null, lastSide = null, lastSideRound = null, lastCrossAlertT = 0, edgeAlertRound = null, toastTimer = null;
+
+function toast(title, body) {
+  $('toast-title').textContent = title;
+  $('toast-body').textContent = body;
+  $('toast').hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { $('toast').hidden = true; }, 5000);
+}
+
+function beep() {
+  if (!audioCtx) return;
+  try {
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain(), t = audioCtx.currentTime;
+    o.frequency.value = 880;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.2, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.25);
+    o.connect(g).connect(audioCtx.destination);
+    o.start(t); o.stop(t + 0.26);
+  } catch {}
+}
+
+function alertUser(title, body) {
+  toast(title, body);
+  beep();
+  try { navigator.vibrate?.(150); } catch {}
+  if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
+    try { new Notification(title, { body, tag: 'btc5m' }); } catch {}
+  }
+}
+
+async function setAlerts(on, fromClick) {
+  alertsOn = on;
+  $('alert-btn').setAttribute('aria-pressed', String(on));
+  try { localStorage.setItem('alerts', on ? '1' : '0'); } catch {}
+  if (!on || !fromClick) return;
+  try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); await audioCtx.resume(); } catch {}
+  if ('Notification' in window && Notification.permission === 'default') { try { await Notification.requestPermission(); } catch {} }
+  toast('Alerts on', 'Strike crossings in the last minute, and market/model gaps of 8+ pts');
+}
+
+function checkAlerts(now, modelP, exp) {
+  const { start, end } = currentRound(now), T = (end - now) / 1000;
+  if (lastSideRound !== start) { lastSideRound = start; lastSide = null; }
+  if (exp && strike !== null) {
+    const side = exp.value >= strike ? 'up' : 'down';
+    if (alertsOn && T <= 60 && lastSide && side !== lastSide && now - lastCrossAlertT > 8000) {
+      lastCrossAlertT = now;
+      alertUser(side === 'up' ? '▲ Now above strike' : '▼ Now below strike',
+        `${Math.round(T)}s left · settlement avg ${signedUsd(exp.value - strike)} vs strike`);
     }
+    lastSide = side;
+  }
+  if (alertsOn && upProb !== null && modelP !== null && T > 60 && T < 270 && edgeAlertRound !== start && Math.abs(upProb - modelP) >= 8) {
+    edgeAlertRound = start;
+    alertUser(`UP looks ${upProb > modelP ? 'overpriced' : 'underpriced'}`, `market ${upProb.toFixed(0)}% vs model ${modelP.toFixed(0)}%`);
+  }
+}
+
+// ── Exchange WebSocket feeds ─────────────────────────────────────────────────
+// one socket per exchange; reconnects on close, the watchdog below closes silent ones
+function openFeed(key, url, subscribe, makeHandler) {
+  const ex = EX[key], ws = new WebSocket(url), handle = makeHandler();
+  ex.ws = ws;
+  ws.onopen = () => { ex.lastMsgT = Date.now(); if (subscribe) ws.send(JSON.stringify(subscribe)); };
+  ws.onmessage = e => {
+    ex.lastMsgT = Date.now();
+    let d;
+    try { d = JSON.parse(e.data); } catch { return; }
+    handle(d);
   };
-  ws.onclose = () => { EXCH.find(e=>e.key==='gemini').lastP = null; setTimeout(connectGemini, 2500); };
+  ws.onclose = () => {
+    if (ex.ws !== ws) return;
+    ex.ws = null;
+    setTimeout(() => openFeed(key, url, subscribe, makeHandler), 2500);
+  };
   ws.onerror = () => ws.close();
 }
 
-function connectBitfinex() {
-  let chanId = null;
-  const ws = new WebSocket('wss://api-pub.bitfinex.com/ws/2');
-  ws.onopen = () => ws.send(JSON.stringify({ event:'subscribe', channel:'trades', symbol:'tBTCUSD' }));
-  ws.onmessage = e => {
-    const d = JSON.parse(e.data);
-    if (d.event === 'subscribed' && d.channel === 'trades') { chanId = d.chanId; return; }
-    if (!Array.isArray(d) || d[0] !== chanId || d[1] !== 'te') return;
-    const t = d[2]; // [ID, timestamp_ms, amount, price]
-    onTrade('bitfinex', { t: t[1], p: t[3], q: Math.abs(t[2]), sell: t[2] < 0 });
-  };
-  ws.onclose = () => { EXCH.find(e=>e.key==='bitfinex').lastP = null; chanId = null; setTimeout(connectBitfinex, 2500); };
-  ws.onerror = () => ws.close();
-}
+function connectExchanges() {
+  openFeed('coinbase', 'wss://ws-feed.exchange.coinbase.com',
+    { type:'subscribe', channels:['matches'], product_ids:['BTC-USD', 'USDT-USD'] },
+    () => d => {
+      if (d.type !== 'match') return;   // skips last_match, a stale replay on subscribe
+      if (d.product_id === 'USDT-USD') { const p = parseFloat(d.price); if (p > 0.9 && p < 1.1) usdtUsd = p; return; }
+      // side is the maker side: maker 'buy' = taker sold
+      onTrade('coinbase', { id: d.trade_id, t: Date.parse(d.time), p: parseFloat(d.price), q: parseFloat(d.size), sell: d.side === 'buy' });
+    });
 
-function connectBinance() {
-  const ws = new WebSocket('wss://stream.binance.com:9443/ws/btcusdt@aggTrade');
-  ws.onmessage = e => {
-    const d = JSON.parse(e.data);
-    if (d.e !== 'aggTrade') return;
-    onTrade('binance', { t: d.T, p: parseFloat(d.p), q: parseFloat(d.q), sell: d.m });
-  };
-  ws.onclose = () => { EXCH.find(e=>e.key==='binance').lastP = null; setTimeout(connectBinance, 2500); };
-  ws.onerror = () => ws.close();
+  openFeed('kraken', 'wss://ws.kraken.com',
+    { event:'subscribe', pair:['XBT/USD'], subscription:{ name:'trade' } },
+    () => d => {
+      if (!Array.isArray(d) || d[2] !== 'trade') return;
+      for (const t of d[1])
+        onTrade('kraken', { t: Math.round(parseFloat(t[2]) * 1000), p: parseFloat(t[0]), q: parseFloat(t[1]), sell: t[3] === 's' });
+    });
+
+  openFeed('bitstamp', 'wss://ws.bitstamp.net',
+    { event:'bts:subscribe', data:{ channel:'live_trades_btcusd' } },
+    () => d => {
+      if (d.event !== 'trade') return;
+      const td = d.data;
+      onTrade('bitstamp', { id: td.id, t: Math.round(+td.microtimestamp / 1000), p: +td.price, q: +td.amount, sell: td.type === 1 });
+    });
+
+  openFeed('gemini', 'wss://api.gemini.com/v1/marketdata/BTCUSD', null,
+    () => d => {
+      if (d.type !== 'update') return;
+      for (const ev of (d.events || [])) {
+        if (ev.type !== 'trade') continue;
+        onTrade('gemini', { id: ev.tid, t: d.timestampms || Date.now(), p: parseFloat(ev.price), q: parseFloat(ev.amount), sell: ev.makerSide === 'bid' });
+      }
+    });
+
+  openFeed('bitfinex', 'wss://api-pub.bitfinex.com/ws/2',
+    { event:'subscribe', channel:'trades', symbol:'tBTCUSD' },
+    () => {
+      let chanId = null;
+      return d => {
+        if (d.event === 'subscribed' && d.channel === 'trades') { chanId = d.chanId; return; }
+        if (!Array.isArray(d) || d[0] !== chanId || d[1] !== 'te') return;
+        const t = d[2]; // [ID, timestamp_ms, amount, price]
+        onTrade('bitfinex', { id: t[0], t: t[1], p: t[3], q: Math.abs(t[2]), sell: t[2] < 0 });
+      };
+    });
+
+  openFeed('binance', 'wss://stream.binance.com:9443/ws/btcusdt@aggTrade', null,
+    () => d => {
+      if (d.e !== 'aggTrade') return;
+      onTrade('binance', { id: d.a, t: d.T, p: parseFloat(d.p) * usdtUsd, q: parseFloat(d.q), sell: d.m });
+    });
 }
 
 // ── Polymarket ───────────────────────────────────────────────────────────────
 const GAMMA = 'https://gamma-api.polymarket.com';
 const PM_WS = 'wss://ws-subscriptions-clob.polymarket.com/ws/market';
-
-function getWindowTs() { return Math.floor(Date.now() / 1000 / 300) * 300; }
-function secsLeft()    { return 300 - (Math.floor(Date.now() / 1000) % 300); }
 
 async function findMarket() {
   const base = Math.floor(Date.now() / 1000 / 300) * 300;
@@ -1135,10 +1592,12 @@ function connectPoly(yesId, onExpire) {
   const ws = polyWs = new WebSocket(PM_WS);
   ws.onopen = () => {
     ws.send(JSON.stringify({ assets_ids: [yesId], type: 'market' }));
-    polyState = 'live'; polyStamp = 'Live';
+    polyState = 'live'; polyStamp = 'Live'; polyLastMsgT = Date.now();
   };
   ws.onmessage = e => {
-    const msgs = JSON.parse(e.data);
+    polyLastMsgT = Date.now();
+    let msgs;
+    try { msgs = JSON.parse(e.data); } catch { return; }
     for (const msg of (Array.isArray(msgs) ? msgs : [msgs])) {
       const et = msg.event_type;
       if (et === 'book') {
@@ -1184,34 +1643,41 @@ async function backfillProbHistory(yesId) {
 
 // ── Master loader ────────────────────────────────────────────────────────────
 async function loadPolymarket() {
-  $('market-title').textContent = 'Loading market…';
-  strike = null; strikeStatus = 'fetching…'; upProb = null;
+  if (loadingMarket) return;
+  loadingMarket = true;
+  try {
+    $('market-title').textContent = 'Loading market…';
+    upProb = null;
+    fetchVol();
+    refreshRounds();
 
-  const result = await findMarket();
-  if (!result) {
-    $('market-title').textContent = 'No active market – retrying…';
-    setTimeout(loadPolymarket, 8000);
-    return;
+    const result = await findMarket();
+    if (!result) {
+      $('market-title').textContent = 'No active market – retrying…';
+      setTimeout(loadPolymarket, 8000);
+      return;
+    }
+
+    const { slug, wts, event } = result;
+    windowTs = wts;
+    probHistory.length = 0;
+    const market = parseMarket(event);
+    $('market-title').textContent = market.question || event.title || slug;
+
+    if (!market.yesId) {
+      $('market-title').textContent += ' (no token ID)';
+      return;
+    }
+
+    await backfillProbHistory(market.yesId);
+    connectPoly(market.yesId, loadPolymarket);
+    startCountdown(loadPolymarket);
+  } finally {
+    loadingMarket = false;
   }
-
-  const { slug, wts, event } = result;
-  windowTs = wts;
-  probHistory.length = 0;
-  const market = parseMarket(event);
-  $('market-title').textContent = market.question || event.title || slug;
-
-  if (!market.yesId) {
-    $('market-title').textContent += ' (no token ID)';
-    return;
-  }
-
-  await backfillProbHistory(market.yesId);
-  connectPoly(market.yesId, loadPolymarket);
-  startCountdown(loadPolymarket);
-  fetchStrike(wts);
 }
 
-// ── Chainlink (Polygon) — shared provider + strike fetch ─────────────────────
+// ── Chainlink (Polygon) — shared provider + on-chain strike cross-check ──────
 const CL_RPCS   = ['https://polygon-bor-rpc.publicnode.com','https://polygon-rpc.com'];
 const CL_ABI    = ['function latestRoundData() external view returns (uint80,int256,uint256,uint256,uint80)',
                    'function getRoundData(uint80) external view returns (uint80,int256,uint256,uint256,uint80)'];
@@ -1248,7 +1714,9 @@ async function pollChainlink() {
   setTimeout(pollChainlink, 12000);
 }
 
+// on-chain Chainlink round in force at the round start (fallback strike + cross-check)
 async function fetchStrike(wts) {
+  const done = v => { if (strikeRound === wts * 1000) clStrike = v; };
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
       const provider = await ensureClProvider();
@@ -1257,10 +1725,7 @@ async function fetchStrike(wts) {
       const latest = await feed.latestRoundData();
 
       const latestTs = Number(latest[3]);
-      if (latestTs > 0 && latestTs <= wts) {
-        strike = Number(latest[1]) / 1e8;
-        return;
-      }
+      if (latestTs > 0 && latestTs <= wts) return done(Number(latest[1]) / 1e8);
 
       const phaseId = latest[0].toBigInt() >> 64n;
       let   roundN  = latest[0].toBigInt() & 0xFFFFFFFFFFFFFFFFn;
@@ -1269,24 +1734,20 @@ async function fetchStrike(wts) {
         const rid  = (phaseId << 64n) | (roundN - BigInt(i));
         const data = await feed.getRoundData(rid);
         const ts   = Number(data[3]);
-        if (ts > 0 && ts <= wts) {
-          strike = Number(data[1]) / 1e8;
-          return;
-        }
+        if (ts > 0 && ts <= wts) return done(Number(data[1]) / 1e8);
       }
-      strikeStatus = 'not found';
       return;
     } catch (e) {
       clProvider = null;
       console.warn('fetchStrike attempt', attempt, ':', e.message);
     }
   }
-  strikeStatus = 'unavailable';
 }
 
 // ── Render loop ──────────────────────────────────────────────────────────────
 function render() {
   const now = Date.now();
+  frameDt = Math.min(100, now - (lastFrameT || now)); lastFrameT = now;
   if (now - tpsTick >= 1000) { tps = tpsCount; tpsCount = 0; tpsTick = now; }
   if (now - lastUiT >= 200) { lastUiT = now; updateUI(now); }
   drawBtc(now);
@@ -1299,17 +1760,19 @@ function render() {
 const srcEl = $('src');
 EXCH.forEach((ex, i) => {
   srcEl.insertAdjacentHTML('beforeend',
-    `<label class="src-name"><input type="checkbox" checked data-key="${ex.key}"><i class="lk" style="background:var(--ex-${i + 1})"></i>${ex.name}</label>` +
+    `<label class="src-name"><input type="checkbox" checked data-key="${ex.key}"><i class="lk" style="background:var(--ex-${i + 1})"></i>${ex.name}${ex.note ? ` <span class="muted">· ${ex.note}</span>` : ''}</label>` +
     `<span class="src-v" id="sp-${ex.key}">—</span><span class="src-d" id="sd-${ex.key}">—</span>` +
     `<span class="src-s"><i class="dot" id="sdot-${ex.key}"></i></span>`);
 });
 srcEl.insertAdjacentHTML('beforeend',
   `<span class="src-name"><i class="lk ghost"></i>Chainlink · Polygon</span>` +
   `<span class="src-v" id="sp-cl">—</span><span class="src-d" id="sd-cl">—</span><span class="src-s"><i class="dot" id="sdot-cl"></i></span>` +
+  `<span class="src-name"><i class="lk ghost"></i>Chainlink strike <span class="muted">· vs 60s avg</span></span>` +
+  `<span class="src-v" id="sp-cls">—</span><span class="src-d" id="sd-cls">—</span><span class="src-s"><i class="dot" id="sdot-cls"></i></span>` +
   `<span class="src-name"><i class="lk ghost"></i>Polymarket book</span>` +
   `<span class="src-v" id="sp-pm" style="grid-column:span 2">—</span><span class="src-s"><i class="dot" id="sdot-pm"></i></span>`);
 srcEl.addEventListener('change', e => {
-  const ex = EXCH.find(x => x.key === e.target.dataset.key);
+  const ex = EX[e.target.dataset.key];
   if (!ex) return;
   ex.enabled = e.target.checked;
   e.target.closest('.src-name').classList.toggle('off', !ex.enabled);
@@ -1325,9 +1788,19 @@ $('show-ex').addEventListener('change', e => {
 
 document.querySelectorAll('.seg button').forEach(btn => btn.addEventListener('click', () => {
   document.querySelectorAll('.seg button').forEach(b => b.setAttribute('aria-pressed', String(b === btn)));
-  WINDOW_MS = parseInt(btn.dataset.s) * 1000;
+  if (btn.dataset.s) { viewMode = 'rolling'; WINDOW_MS = parseInt(btn.dataset.s) * 1000; }
+  else viewMode = 'round';
+  $('leg-band').hidden = viewMode !== 'round';
   lastSlowT = 0;
+  delete yRange.btc; delete yRange.prob;   // new window: snap the y-axis instead of easing
 }));
+
+$('alert-btn').addEventListener('click', () => setAlerts(!alertsOn, true));
+try { if (localStorage.getItem('alerts') === '1') setAlerts(true, false); } catch {}
+// browsers only allow audio after an interaction: unlock the beep on the first tap if alerts were already on
+document.addEventListener('pointerdown', () => {
+  if (alertsOn && !audioCtx) try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch {}
+}, { once: true });
 
 const btcTip = makeTip('btc-tip', [
   { id:'med', label:'Median',    key:' ' },
@@ -1341,16 +1814,40 @@ const btcC  = setupCanvas('btc-canvas');
 const probC = setupCanvas('prob-canvas');
 attachHover(btcC.el, 'btc');
 attachHover(probC.el, 'prob');
+renderRounds();
 
-connectCoinbase(); connectKraken(); connectBitstamp();
-connectGemini(); connectBitfinex(); connectBinance();
-
+seedUsdt().finally(connectExchanges);   // rate first, so no Binance trade is stored unconverted
+// history for the chart, the strike window before the round and the model — then live feeds take over
+backfill(Math.min(Date.now() - 300_000, currentRound().start - TWAP_MS - 10_000));
 pollChainlink();
 loadPolymarket();
 requestAnimationFrame(render);
 
 // Safety sampler: ensure probHistory always has a recent point even during quiet markets
 setInterval(() => { if (lastProbValue !== null) pushProbPoint(lastProbValue); }, 1000);
+setInterval(refreshRounds, 30_000);
+
+// watchdog: mobile browsers can leave sockets open but silent — close them so they reconnect
+setInterval(() => {
+  const now = Date.now();
+  for (const ex of EXCH) if (ex.ws && ex.ws.readyState === 1 && now - ex.lastMsgT > 90_000) ex.ws.close();
+  if (polyWs && polyWs.readyState === 1 && now - polyLastMsgT > 90_000) polyWs.close();
+}, 10_000);
+
+// back from the background (phone locked, tab switched): reconnect stale feeds and refill the gap
+let hiddenAt = null;
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { hiddenAt = Date.now(); return; }
+  const away = hiddenAt ? Date.now() - hiddenAt : 0;
+  hiddenAt = null;
+  if (away < 15_000) return;
+  const now = Date.now();
+  for (const ex of EXCH) if (ex.ws && now - ex.lastMsgT > 10_000) ex.ws.close();
+  if (polyWs && now - polyLastMsgT > 10_000) polyWs.close();
+  if (windowTs !== null && windowTs * 1000 + ROUND_MS <= now) loadPolymarket();
+  backfill(now - Math.min(away + 30_000, 6 * 60_000));
+  refreshRounds();
+});
 </script>
 </body>
 </html>
