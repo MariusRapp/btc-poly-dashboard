@@ -184,8 +184,15 @@
     .tip-row b { font-weight:600; font-variant-numeric:tabular-nums; }
 
     /* ── Order book ladder: fixed price rows, the mid line moves ── */
-    .card-head.center { align-items:center; }
+    .card-head.center { align-items:center; flex-wrap:wrap; }
     .seg.sm button { min-width:0; padding:3px 10px; font-size:11px; }
+    .book-ctl { display:flex; gap:6px; }
+    .seg button[data-side="up"][aria-pressed="true"]   { color:var(--up-text); }
+    .seg button[data-side="down"][aria-pressed="true"] { color:var(--down-text); }
+    /* which round the book belongs to; becomes a note while the charts show a past round */
+    .lround { margin:-4px 0 8px; font-size:12px; color:var(--muted-text); font-variant-numeric:tabular-nums; }
+    .lround.note { margin-top:0; padding:8px 10px; border-radius:8px; background:var(--surface-2); color:var(--ink-2); }
+    .lround b { color:var(--ink-1); font-weight:600; }
     .ladder { font-size:13px; }
     .lrow {
       position:relative; display:grid; grid-template-columns:repeat(3, minmax(0,1fr));
@@ -396,13 +403,20 @@
 
       <section class="card" id="card-book" aria-label="Order book">
         <div class="card-head center">
-          <h2>Order book <span class="muted">· UP shares</span></h2>
-          <div class="seg sm" role="group" aria-label="Which round's order book">
-            <button type="button" data-book="now" aria-pressed="true">Now</button>
-            <button type="button" data-book="next" aria-pressed="false" title="The next round's market, already trading">Next</button>
+          <h2>Order book</h2>
+          <div class="book-ctl">
+            <div class="seg sm" role="group" aria-label="Which shares">
+              <button type="button" data-side="up" aria-pressed="true" title="Book for UP shares">Up</button>
+              <button type="button" data-side="down" aria-pressed="false" title="Book for DOWN shares (the UP book mirrored: 100¢ − price, bids ↔ asks)">Down</button>
+            </div>
+            <div class="seg sm" role="group" aria-label="Which round's order book">
+              <button type="button" data-book="now" aria-pressed="true">Now</button>
+              <button type="button" data-book="next" aria-pressed="false" title="The next round's market, already trading">Next</button>
+            </div>
           </div>
         </div>
-        <div class="ladder" role="table" aria-label="Order book for UP shares">
+        <div class="lround" id="lround">—</div>
+        <div class="ladder" id="ladder" role="table" aria-label="Order book for UP shares">
           <div class="lrow lhead" role="row"><span role="columnheader">Price</span><span role="columnheader">Size</span><span role="columnheader">Total</span></div>
           <div class="lview" id="lview" role="rowgroup">
             <div id="lrows"></div>
@@ -485,7 +499,8 @@ let bookView = 'now';       // order book card: 'now' or 'next'
 const OPTS_KEY = 'btc5m-opts';
 const opts = (() => { try { return JSON.parse(localStorage.getItem(OPTS_KEY)) || {}; } catch { return {}; } })();
 let showBands = !!opts.bands;   // the two 60s averaging windows (off by default)
-const saveOpts = () => { try { localStorage.setItem(OPTS_KEY, JSON.stringify({ ex: showExchanges, bands: showBands })); } catch {} };
+let bookSide = opts.side === 'down' ? 'down' : 'up';   // order book card: UP shares, or DOWN (the UP book mirrored)
+const saveOpts = () => { try { localStorage.setItem(OPTS_KEY, JSON.stringify({ ex: showExchanges, bands: showBands, side: bookSide })); } catch {} };
 
 // past round shown in the charts (null = live)
 const ROUNDS_SHOWN = 24;
@@ -1707,8 +1722,21 @@ function checkRoundSwitch(now) {
     return;
   }
   if (loadingMarket) return;
-  if (nxt && nxt.wts === rs) promoteNext();
-  else if (now >= marketRetryT) loadPolymarket();
+  if (nxt && nxt.wts === rs) return promoteNext();
+  retireFeed(cur);
+  if (nxt && nxt.wts < rs) retireFeed(nxt);   // away for over a round: the preloaded one has ended too
+  if (now >= marketRetryT) loadPolymarket();
+}
+
+// the round is over and nothing is ready to take over (load failed, or back from the background):
+// stop its feed and drop its book. Polymarket keeps an ended round trading until it resolves,
+// and that after-hours book must not pass for the running round's.
+function retireFeed(f) {
+  if (!f || f.closed) return;
+  closeFeed(f);
+  f.bids = {}; f.asks = {}; f.mid = null; f.last = null; f.ver++;
+  f.stamp = 'Round ended · loading the next market…';
+  if (f === cur) upProb = lastProbValue = null;
 }
 
 async function preloadNext() {
@@ -1805,7 +1833,7 @@ async function loadPolymarket() {
 // smoothly — a move shows as the line travelling, instead of every label changing under a fixed mid.
 const LROWS = 16, LROW_H = 25, LEDGE = 3;
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
-const lad = { feed: undefined, ver: -1, gen: 0, M: null, step: 0, T: null, target: null, mid: null, drawn: '', pool: [] };
+const lad = { feed: undefined, side: null, ver: -1, gen: 0, M: null, step: 0, T: null, target: null, mid: null, drawn: '', pool: [] };
 const fmtC = (v, d = 1) => String(Math.round(v * 100 * 10 ** d) / 10 ** d) + '¢';
 
 for (let k = 0; k <= LROWS; k++) {
@@ -1821,8 +1849,17 @@ function setBookView(v) {
   document.querySelectorAll('[data-book]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.book === v)));
 }
 
+function setBookSide(s) {
+  bookSide = s;
+  document.querySelectorAll('[data-side]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.side === s)));
+  $('ladder').setAttribute('aria-label', `Order book for ${s.toUpperCase()} shares`);
+}
+
+// DOWN book = UP book mirrored: buying DOWN at p is selling UP at 100¢ − p (the CLOB shows both tokens this way)
+const mirrorBook = book => { const m = {}; for (const k in book) m[1000 - k] = book[k]; return m; };
+
 // rows indexed by price / tick (1¢, or 0.1¢ once the market uses 0.1¢ ticks); totals add up from the touch outwards
-function ladderModel(f) {
+function ladderModel(f, down) {
   const unit = f.fine ? 1 : 10;
   const side = (book, desc) => {
     const ks = Object.keys(book).map(Number).sort((a, b) => desc ? b - a : a - b), m = new Map();
@@ -1830,7 +1867,7 @@ function ladderModel(f) {
     for (const k of ks) { cum += book[k]; m.set(Math.round(k / unit), { sz: book[k], cum }); }
     return { m, best: ks.length ? Math.round(ks[0] / unit) : null };
   };
-  const b = side(f.bids, true), a = side(f.asks, false);
+  const b = side(down ? mirrorBook(f.asks) : f.bids, true), a = side(down ? mirrorBook(f.bids) : f.asks, false);
   const mid = b.best !== null && a.best !== null ? (b.best + a.best) / 2 : b.best ?? a.best;
   // bar scale and largest level from the levels around the mid, so they hold still while the window scrolls
   let maxSz = 1e-9, wallB = 0, wallA = 0;
@@ -1841,22 +1878,40 @@ function ladderModel(f) {
 
 function ladderMeta(f, M) {
   const both = M && M.bb !== null && M.ba !== null;
-  $('lspread').textContent = (f && bookView === 'next' ? roundSpan(f.wts) + ' · ' : '') +
-    (both ? 'Spread ' + fmtC((M.ba - M.bb) * M.step) : 'Spread —');
-  $('last-trade').textContent = f && f.last !== null ? 'Last ' + fmtC(f.last) : 'Last —';
+  $('lspread').textContent = both ? 'Spread ' + fmtC((M.ba - M.bb) * M.step) : 'Spread —';
+  $('last-trade').textContent = f && f.last !== null ? 'Last ' + fmtC(bookSide === 'down' ? 1 - f.last : f.last) : 'Last —';
   $('lmid-tag').textContent = !M || M.mid === null ? '' :
     (both ? 'Mid ' : M.bb === null ? 'Ask ' : 'Bid ') + fmtC(M.mid * M.step, M.step < 0.01 ? 2 : 1);
+}
+
+// the line above the ladder: which round this book is, and a note while the charts show another round
+let lroundKey = '';
+function ladderRound(f) {
+  const ts = f ? f.wts : currentRound().start / 1000 + (bookView === 'next' ? 300 : 0);
+  const key = `${bookView}|${ts}|${f?.closed}|${review?.ts}`;
+  if (key === lroundKey) return;
+  lroundKey = key;
+  const el = $('lround'), span = roundSpan(ts), note = !!review && bookView === 'now' && !f?.closed;
+  el.classList.toggle('note', note);
+  if (note) el.innerHTML = `<b>Live round ${span}</b> — not the ${roundSpan(review.ts)} round in the charts. ` +
+                           `Polymarket keeps no order book history, so past rounds have none.`;
+  else el.textContent = f?.closed ? `Round ${span} ended`
+                      : bookView === 'next' ? `Next round · ${span} · already trading` : `Live round · ${span}`;
 }
 
 // runs every frame; touches the DOM only when the book changed or the window / mid line is moving
 function renderLadder(dt) {
   const f = bookView === 'next' ? nxt : cur;
-  if (f !== lad.feed) { lad.feed = f; lad.ver = -1; lad.M = null; lad.T = null; lad.target = null; ladderMeta(f, null); }
-  if (f && f.ver !== lad.ver) { lad.ver = f.ver; lad.M = ladderModel(f); lad.gen++; ladderMeta(f, lad.M); }
+  ladderRound(f);
+  if (f !== lad.feed || bookSide !== lad.side) {   // other book: jump to it instead of scrolling there
+    lad.feed = f; lad.side = bookSide; lad.ver = -1; lad.M = null; lad.T = null; lad.target = null; ladderMeta(f, null);
+  }
+  if (f && f.ver !== lad.ver) { lad.ver = f.ver; lad.M = ladderModel(f, bookSide === 'down'); lad.gen++; ladderMeta(f, lad.M); }
 
   const M = lad.M, emptyEl = $('lempty');
   if (!M || M.mid === null) {
-    const msg = !f ? (bookView === 'next' ? 'Next round not listed yet…' : 'Waiting for market…') : 'Waiting for book…';
+    const msg = !f ? (bookView === 'next' ? 'Next round not listed yet…' : 'Waiting for market…')
+              : f.closed ? 'Round over · loading the next market…' : 'Waiting for book…';
     if (lad.drawn !== msg) {
       lad.drawn = msg; emptyEl.textContent = msg; emptyEl.hidden = false; $('lmid').hidden = true;
       for (const r of lad.pool) r.el.hidden = true;
@@ -2158,6 +2213,8 @@ $('rounds').addEventListener('click', e => {
   if (top < 0 || top > innerHeight * 0.6) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
 });
 document.querySelectorAll('[data-book]').forEach(b => b.addEventListener('click', () => setBookView(b.dataset.book)));
+document.querySelectorAll('[data-side]').forEach(b => b.addEventListener('click', () => { setBookSide(b.dataset.side); saveOpts(); }));
+setBookSide(bookSide);
 
 $('alert-btn').addEventListener('click', () => setAlerts(!alertsOn, true));
 try { if (localStorage.getItem('alerts') === '1') setAlerts(true, false); } catch {}
