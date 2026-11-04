@@ -10,3 +10,7 @@ venv/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Cloudflare Wrangler (kalshi-proxy): local cache incl. account id
+.wrangler/
+node_modules/

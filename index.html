@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="color-scheme" content="light dark" />
-  <title>BTC 5m · Polymarket Dashboard</title>
+  <title>BTC Up/Down · Polymarket &amp; Kalshi</title>
   <script src="https://unpkg.com/ethers@5.7.2/dist/ethers.umd.min.js"></script>
   <script>
     // apply a saved theme choice before first paint (no flash)
@@ -27,6 +27,8 @@
       --ex-1:#2a78d6; --ex-2:#eb6834; --ex-3:#1baf7a; --ex-4:#eda100; --ex-5:#e87ba4; --ex-6:#008300;
       --shadow:0 6px 20px rgba(11,11,11,.10);
       --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      /* venues (categorical slots 1 and 2, validated as a pair in both modes); follow --ex-1/2 per theme */
+      --v-pm:var(--ex-1); --v-ks:var(--ex-2);
     }
     /* ── Tokens: dark (OS setting, unless the viewer picked light) ── */
     @media (prefers-color-scheme: dark) {
@@ -89,6 +91,13 @@
     .icon-btn[aria-pressed="true"] { color:var(--ink-1); background:var(--surface-2); }
     .icon-btn[aria-pressed="true"] svg { fill:currentColor; }
 
+    /* ── Market switch: Polymarket / Kalshi / both, round length ── */
+    .venuebar { display:flex; align-items:center; flex-wrap:wrap; gap:8px 10px; }
+    .venuebar .seg button { display:inline-flex; align-items:center; gap:6px; }
+    .seg button:disabled { opacity:.4; cursor:default; }
+    .seg button:disabled:hover { color:var(--ink-2); }
+    .venue-note { font-size:12px; color:var(--muted-text); }
+
     /* ── KPI row ── */
     .kpis { display:grid; grid-template-columns:minmax(0,1.6fr) minmax(0,1fr) minmax(0,1fr); gap:12px; }
     .kpi { display:flex; flex-direction:column; gap:4px; }
@@ -97,6 +106,11 @@
     .kpi-value { font-size:32px; font-weight:600; line-height:1.1; font-variant-numeric:tabular-nums; }
     .kpi-delta { font-size:14px; font-weight:600; display:flex; flex-wrap:wrap; align-items:center; gap:4px 8px; }
     .kpi-sub { font-size:12px; color:var(--muted-text); margin-top:auto; padding-top:2px; }
+    /* both venues: two values side by side, each named by its line key */
+    .kpi-pair { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:4px 12px; }
+    .kpi-pair > div { display:flex; flex-direction:column; min-width:0; }
+    .kpi-pair .kpi-value { font-size:28px; }
+    .vname { display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--ink-2); }
     .chip {
       font-size:11px; font-weight:600; padding:1px 8px; border-radius:999px;
       background:var(--warning-wash); color:var(--ink-1);
@@ -164,10 +178,14 @@
     .lk { display:inline-block; width:14px; height:2px; border-radius:1px; background:var(--ink-1); flex-shrink:0; }
     .lk.dash { background:repeating-linear-gradient(90deg, var(--ink-2) 0 4px, transparent 4px 7px); }
     .lk.ghost { background:transparent; }
+    .lk.pm { background:var(--v-pm); }
+    .lk.ks { background:var(--v-ks); }
+    .lk.thick { height:3px; }
     .wk { display:inline-block; width:10px; height:10px; border-radius:2px; }
     .wk.up   { background:var(--up);   opacity:.4; }
     .wk.down { background:var(--down); opacity:.4; }
     .wk.band { background:var(--ink-2); opacity:.15; }
+    .wk.gap  { background:var(--ink-2); opacity:.14; }
 
     .plot { position:relative; height:clamp(280px, 44vh, 520px); }
     .plot-prob { height:clamp(150px, 20vh, 220px); }
@@ -228,6 +246,8 @@
     .sig-label { font-size:12px; color:var(--ink-2); }
     .sig-value { font-size:16px; font-weight:600; font-variant-numeric:tabular-nums; text-align:right; }
     .sig-sub { font-size:12px; color:var(--muted-text); margin-top:2px; }
+    .sig-value.good { color:var(--up-text); }
+    .sig-value.warn::before { content:'◆ '; color:var(--warning); }
 
     /* ── Rounds + track record ── */
     .rounds { display:grid; grid-template-columns:repeat(12, minmax(0,1fr)); gap:4px; }
@@ -239,6 +259,7 @@
     .rchip[aria-pressed="true"] { box-shadow:0 0 0 1.5px var(--ink-1); }
     .rchip.up   { background:var(--up-wash);   color:var(--up-text); }
     .rchip.down { background:var(--down-wash); color:var(--down-text); }
+    .rchip.split { background:var(--warning-wash); color:var(--ink-1); }
     .rounds-axis { display:flex; justify-content:space-between; font-size:11px; color:var(--muted-text); margin-top:4px; font-variant-numeric:tabular-nums; }
     .track { margin-top:12px; }
     .trow { display:flex; justify-content:space-between; align-items:baseline; gap:8px; font-size:12px; padding:6px 0; border-top:1px solid var(--grid); color:var(--ink-2); }
@@ -272,9 +293,11 @@
       .col { display:contents; }
       #card-charts  { order:1; grid-column:1 / -1; }
       #card-book    { order:2; grid-row:span 2; }
-      #card-signals { order:3; }
-      #card-rounds  { order:4; }
-      #card-sources { order:5; grid-column:1 / -1; }
+      #card-arb     { order:3; }
+      #card-signals { order:4; }
+      #card-rounds  { order:5; }
+      #card-sources { order:6; grid-column:1 / -1; }
+      body.both #card-book { grid-row:span 3; }
     }
 
     /* ── Phone ── */
@@ -287,6 +310,8 @@
       .kpi-hero { grid-column:1 / -1; }
       .hero { font-size:44px; }
       .kpi-value { font-size:26px; }
+      .kpi-pair .kpi-value { font-size:22px; }
+      .kpi-pair { gap:4px 8px; }
       .plot { height:280px; }
       .plot-prob { height:150px; }
       .seg button { min-width:0; padding:5px 9px; }
@@ -300,7 +325,7 @@
 
   <header class="topbar">
     <div class="brand">
-      <div class="brand-title">BTC Up or Down <span class="muted hide-sm">· 5-minute rounds</span></div>
+      <div class="brand-title">BTC Up or Down <span class="muted hide-sm" id="brand-len">· 5-minute rounds</span></div>
       <div class="brand-sub" id="market-title">Loading market…</div>
     </div>
     <span class="status"><i class="dot wait" id="live-dot"></i><span id="live-text">Connecting</span></span>
@@ -310,6 +335,19 @@
     </button>
     <button class="icon-btn" id="theme-btn" type="button" aria-label="Switch light/dark theme"></button>
   </header>
+
+  <nav class="venuebar" aria-label="Market">
+    <div class="seg" id="venue-seg" role="group" aria-label="Which market">
+      <button type="button" data-venue="poly"   aria-pressed="true"><i class="lk pm thick"></i>Polymarket</button>
+      <button type="button" data-venue="kalshi" aria-pressed="false"><i class="lk ks thick"></i>Kalshi</button>
+      <button type="button" data-venue="both"   aria-pressed="false" title="Both venues on the same 15-minute round: probabilities overlaid, price gap and arbitrage">Both</button>
+    </div>
+    <div class="seg" id="len-seg" role="group" aria-label="Round length">
+      <button type="button" data-len="5"  aria-pressed="true">5m</button>
+      <button type="button" data-len="15" aria-pressed="false">15m</button>
+    </div>
+    <span class="venue-note" id="venue-note" hidden>Kalshi only lists 15-minute rounds</span>
+  </nav>
 
   <section class="kpis" aria-label="Current round">
     <div class="card kpi kpi-hero">
@@ -322,8 +360,12 @@
       <div class="kpi-sub num" id="btc-sub">Strike — · Chainlink —</div>
     </div>
     <div class="card kpi">
-      <div class="kpi-label">UP probability <span class="muted">· market</span></div>
+      <div class="kpi-label">UP probability <span class="muted" id="up-venue">· Polymarket</span></div>
       <div class="kpi-value" id="up-prob">—</div>
+      <div class="kpi-pair" id="up-pair" hidden>
+        <div><span class="vname"><i class="lk pm thick"></i>Poly</span><span class="kpi-value num" id="up-pm">—</span></div>
+        <div><span class="vname"><i class="lk ks thick"></i>Kalshi</span><span class="kpi-value num" id="up-ks">—</span></div>
+      </div>
       <div class="segbar idle" id="up-bar" aria-hidden="true"><span class="sb-up" id="seg-up"></span><span class="sb-down" id="seg-down"></span></div>
       <div class="kpi-sub num" id="up-sub">Waiting for order book…</div>
     </div>
@@ -353,6 +395,7 @@
           <div class="tools">
             <label class="toggle"><input type="checkbox" id="show-ex"> Exchange lines</label>
             <label class="toggle" title="The two 60s windows the result is computed from: average before the round start (strike) and over its last minute (settlement)"><input type="checkbox" id="show-bands"> Averaging windows</label>
+            <label class="toggle" id="gap-toggle" title="Shade the gap between the Polymarket and Kalshi probability" hidden><input type="checkbox" id="show-gap"> Price gap</label>
           </div>
         </div>
 
@@ -380,7 +423,12 @@
 
         <div class="chart-head">
           <h2>Implied UP probability</h2>
-          <div class="legend"><span id="leg-50"><i class="lk dash"></i>50%</span></div>
+          <div class="legend">
+            <span id="leg-pm" hidden><i class="lk pm"></i>Polymarket</span>
+            <span id="leg-ks" hidden><i class="lk ks"></i>Kalshi</span>
+            <span id="leg-gap" hidden><i class="wk gap"></i>Gap</span>
+            <span id="leg-50"><i class="lk dash"></i>50%</span>
+          </div>
         </div>
         <div class="plot plot-prob" id="prob-plot">
           <canvas id="prob-canvas" role="img" aria-label="Implied UP probability chart"></canvas>
@@ -405,6 +453,10 @@
         <div class="card-head center">
           <h2>Order book</h2>
           <div class="book-ctl">
+            <div class="seg sm" id="book-venue" role="group" aria-label="Which venue's book" hidden>
+              <button type="button" data-bv="poly" aria-pressed="true">Poly</button>
+              <button type="button" data-bv="kalshi" aria-pressed="false">Kalshi</button>
+            </div>
             <div class="seg sm" role="group" aria-label="Which shares">
               <button type="button" data-side="up" aria-pressed="true" title="Book for UP shares">Up</button>
               <button type="button" data-side="down" aria-pressed="false" title="Book for DOWN shares (the UP book mirrored: 100¢ − price, bids ↔ asks)">Down</button>
@@ -425,6 +477,26 @@
           </div>
         </div>
         <div class="lfoot"><span id="lspread">Spread —</span><span id="last-trade">Last —</span></div>
+      </section>
+
+      <section class="card" id="card-arb" aria-label="Polymarket vs Kalshi" hidden>
+        <div class="card-head"><h2>Poly vs Kalshi</h2><span class="card-meta">same round · taker fees incl.</span></div>
+        <div class="sig">
+          <div class="sig-top"><span class="sig-label" title="UP mid on Polymarket minus YES mid on Kalshi">Price gap</span><span class="sig-value" id="gap-val">—</span></div>
+          <div class="sig-sub" id="gap-sub">Needs both order books</div>
+        </div>
+        <div class="sig">
+          <div class="sig-top"><span class="sig-label" title="Buy UP on Polymarket and NO on Kalshi at the best asks: one of the two pays $1 if both venues settle the same way">Poly UP + Kalshi NO</span><span class="sig-value" id="arb1-val">—</span></div>
+          <div class="sig-sub" id="arb1-sub">—</div>
+        </div>
+        <div class="sig">
+          <div class="sig-top"><span class="sig-label" title="Buy DOWN on Polymarket and YES on Kalshi at the best asks: one of the two pays $1 if both venues settle the same way">Poly DOWN + Kalshi YES</span><span class="sig-value" id="arb2-val">—</span></div>
+          <div class="sig-sub" id="arb2-sub">—</div>
+        </div>
+        <div class="sig">
+          <div class="sig-top"><span class="sig-label" title="Polymarket settles on Chainlink, Kalshi on CF Benchmarks. If the settlement lands right at the strike they can disagree, and then both legs of a pair lose.">Settle-apart risk</span><span class="sig-value" id="risk-val">—</span></div>
+          <div class="sig-sub" id="risk-sub">—</div>
+        </div>
       </section>
 
       <section class="card" id="card-signals" aria-label="Signals">
@@ -461,10 +533,26 @@
 const $ = id => document.getElementById(id);
 
 // ── State ────────────────────────────────────────────────────────────────────
-const ROUND_MS = 300_000;   // 5-minute rounds
-const TWAP_MS  = 60_000;    // strike and settlement are 60s time-weighted averages (Chainlink TWAP stream)
+const TWAP_MS  = 60_000;    // strike and settlement are 60s averages (Chainlink TWAP stream / CF Benchmarks BRTI)
 const STALE_MS = 120_000;   // an exchange without trades for this long drops out of the median
-const MAX_BUF  = 40_000;
+const MAX_BUF  = 40_000;    // trades kept per exchange
+const MED_BUF  = 150_000;   // median points kept: a 15-minute round plus the minute before it at busy times
+
+// chart options and the market choice, remembered per browser
+const OPTS_KEY = 'btc5m-opts';
+const opts = (() => { try { return JSON.parse(localStorage.getItem(OPTS_KEY)) || {}; } catch { return {}; } })();
+
+// which venue(s): 'poly', 'kalshi' or 'both'. Kalshi only lists 15-minute rounds, so Kalshi and both run on 15m;
+// Polymarket alone runs on 5m or 15m.
+let venueMode  = ['poly', 'kalshi', 'both'].includes(opts.venue) ? opts.venue : 'poly';
+let polyLenMin = opts.len === 15 ? 15 : 5;
+let ROUND_MS = 300_000, ROUND_S = 300;
+function applyRoundLen() {
+  const min = venueMode === 'poly' ? polyLenMin : 15;
+  ROUND_MS = min * 60_000; ROUND_S = min * 60;
+}
+applyRoundLen();
+let modeGen = 0;            // bumped on every market switch; async loads started before it are dropped
 
 let viewMode  = 'round';    // 'round' (whole round incl. strike window) or 'rolling'
 let WINDOW_MS = 30_000;     // rolling window
@@ -480,42 +568,47 @@ const EXCH = [
 ].map(e => ({ ...e, color:'', trades:[], lastP:null, lastTT:0, enabled:true, ws:null, lastMsgT:0 }));
 const EX = Object.fromEntries(EXCH.map(e => [e.key, e]));
 
-let showExchanges = (() => { try { return !!JSON.parse(localStorage.getItem('btc5m-opts')).ex; } catch { return false; } })();
+let showExchanges = !!opts.ex;
 let usdtUsd = 1;            // converts Binance BTCUSDT to USD (live from Coinbase USDT-USD)
 
 let lastMedianP = null;
 let tpsCount = 0, tps = 0, tpsTick = Date.now();
 const medianHistory = [];   // {t, p} — t is trade time, kept monotonic
 
-// Polymarket feeds (own socket + book each): `cur` = running round, `nxt` = next round, preloaded
-let cur = null, nxt = null;
-let upProb = null;          // implied UP probability = book mid, in %
+// One object per venue. Feeds hold a book each: `cur` = running round, `nxt` = next round (Polymarket preloads
+// it and it already trades; Kalshi's next market only opens at the round start, `upcoming` is just its ticker).
+// `up` = implied UP probability = book mid, in %; `prob` = its history, trimmed by age, never by count.
+function makeVenue(key, name, short) {
+  return { key, name, short, on: false, cur: null, nxt: null, upcoming: null,
+           up: null, lastProb: null, prob: [], lastPushT: 0,
+           archive: new Map(),   // round start (s) → live probability history recorded while it ran
+           results: new Map(),   // round start (s) → 'up' | 'down' | 'pending' (official)
+           meta: new Map(),      // round start (s) → parsed market
+           loading: false, retryT: 0, preloading: false, preloadRetryT: 0 };
+}
+const PM = makeVenue('poly', 'Polymarket', 'Poly');
+const KS = makeVenue('kalshi', 'Kalshi', 'Kalshi');
+const VENUES = [PM, KS];
+const activeVenues = () => VENUES.filter(V => V.on);
+const mainVenue = () => venueMode === 'kalshi' ? KS : PM;   // the venue the single-venue panels show
+const both = () => venueMode === 'both';
+
 let strike = null, strikeSrc = null, strikeRound = null, clStrike = null;
-let windowTs = null;
-let loadingMarket = false, marketRetryT = 0, preloading = false, preloadRetryT = 0;
 let bookView = 'now';       // order book card: 'now' or 'next'
 
-// chart options, remembered per browser
-const OPTS_KEY = 'btc5m-opts';
-const opts = (() => { try { return JSON.parse(localStorage.getItem(OPTS_KEY)) || {}; } catch { return {}; } })();
 let showBands = !!opts.bands;   // the two 60s averaging windows (off by default)
+let showGap = opts.gap !== false;   // both venues: shade the gap between the two probabilities
 let bookSide = opts.side === 'down' ? 'down' : 'up';   // order book card: UP shares, or DOWN (the UP book mirrored)
-const saveOpts = () => { try { localStorage.setItem(OPTS_KEY, JSON.stringify({ ex: showExchanges, bands: showBands, side: bookSide })); } catch {} };
+let bookVenue = opts.bv === 'kalshi' ? 'kalshi' : 'poly';   // order book card with both venues on
+const saveOpts = () => { try { localStorage.setItem(OPTS_KEY, JSON.stringify({
+  ex: showExchanges, bands: showBands, gap: showGap, side: bookSide, bv: bookVenue, venue: venueMode, len: polyLenMin })); } catch {} };
 
 // past round shown in the charts (null = live)
 const ROUNDS_SHOWN = 24;
 let review = null;
-const probArchive = new Map();   // round start (s) → live probability history recorded while it ran
-const roundMeta   = new Map();   // round start (s) → parsed market (token ids, condition id)
 
 let clPrice = null, clProvider = null, clState = 'wait';
 let volPerSqrtS = null;     // σ of log returns per √second, from 1-minute candles
-
-// probability history — trimmed by age, never by count
-const probHistory = [];
-const PROB_MAX_AGE_MS = 400_000;   // whole round incl. the minute before it
-let lastProbPushT = 0;
-let lastProbValue = null;
 
 const buyPressureSnaps = [];  // {t, pct}
 
@@ -523,19 +616,19 @@ const buyPressureSnaps = [];  // {t, pct}
 let hoverFrac = null, hoverSrc = null, touchClearTimer = null;
 let plotGutter = 72;
 
-function pushProbPoint(pct) {
-  const now = Date.now();
+function pushProbPoint(V, pct) {
+  const now = Date.now(), h = V.prob;
   if (!Number.isFinite(pct)) return;
-  lastProbValue = pct;
-  const last = probHistory[probHistory.length - 1];
+  V.lastProb = pct;
+  const last = h[h.length - 1];
   const changed = !last || Math.abs(last.p - pct) >= 0.05;
-  const enoughTimePassed = now - lastProbPushT >= 100;
+  const enoughTimePassed = now - V.lastPushT >= 100;
   if (!changed && !enoughTimePassed) return;
   if (!enoughTimePassed && last && Math.abs(last.p - pct) < 0.25) return;
-  probHistory.push({ t: now, p: pct });
-  lastProbPushT = now;
-  const cutoff = now - PROB_MAX_AGE_MS;
-  while (probHistory.length && probHistory[0].t < cutoff) probHistory.shift();
+  h.push({ t: now, p: pct });
+  V.lastPushT = now;
+  const cutoff = now - ROUND_MS - 100_000;   // whole round incl. the minute before it
+  while (h.length && h[0].t < cutoff) h.shift();
 }
 
 // ── Formatting & small helpers ───────────────────────────────────────────────
@@ -552,7 +645,7 @@ function currentRound(now = Date.now()) {
   const start = Math.floor(now / ROUND_MS) * ROUND_MS;
   return { start, end: start + ROUND_MS };
 }
-function secsLeft() { return 300 - (Math.floor(Date.now() / 1000) % 300); }
+function secsLeft() { return ROUND_S - (Math.floor(Date.now() / 1000) % ROUND_S); }
 
 // first index with arr[i].t >= t (arrays are time-ordered)
 function firstIdx(arr, t) {
@@ -605,7 +698,7 @@ function onTrade(key, tr) {
   if (med === null) return;
   const lastM = medianHistory[medianHistory.length - 1];
   medianHistory.push({ t: Math.max(tr.t, lastM ? lastM.t : 0), p: med });
-  if (medianHistory.length > MAX_BUF) medianHistory.splice(0, 2000);
+  if (medianHistory.length > MED_BUF) medianHistory.splice(0, 5000);
   lastMedianP = med;
 }
 
@@ -614,7 +707,7 @@ function onTrade(key, tr) {
 async function fetchCoinbaseTrades(since) {
   const out = [];
   let after = '';
-  for (let page = 0; page < 6; page++) {
+  for (let page = 0; page < 14; page++) {   // a 15-minute round plus the minute before it
     const d = await getJSON(`https://api.exchange.coinbase.com/products/BTC-USD/trades?limit=1000${after}`);
     if (!d.length) break;
     // side is the maker side: maker 'buy' = taker sold
@@ -629,7 +722,7 @@ async function fetchCoinbaseTrades(since) {
 async function fetchKrakenTrades(since) {
   const out = [];
   let cursor = Math.floor(since / 1000);
-  for (let page = 0; page < 6; page++) {
+  for (let page = 0; page < 8; page++) {
     const d = await getJSON(`https://api.kraken.com/0/public/Trades?pair=XBTUSD&since=${cursor}`);
     const pair = Object.keys(d.result || {}).find(k => k !== 'last');
     const rows = pair ? d.result[pair] : [];
@@ -645,7 +738,7 @@ async function fetchBinanceTrades(since) {
     .catch(() => getJSON(`https://data-api.binance.vision/api/v3/aggTrades?symbol=BTCUSDT&limit=1000&${q}`));
   const out = [];
   let q = `startTime=${since}`;
-  for (let page = 0; page < 10; page++) {
+  for (let page = 0; page < 24; page++) {
     const d = await get(q);
     for (const x of d) out.push({ id: x.a, t: x.T, p: +x.p * usdtUsd, q: +x.q, sell: x.m });
     if (d.length < 1000) break;
@@ -716,7 +809,8 @@ async function backfill(since) {
 
 // ── Strike, settlement, model ────────────────────────────────────────────────
 // strike = 60s average of our median before the round starts. Strike and settlement come from the
-// same price basis, so a constant offset to Chainlink's stream cancels out; on-chain Chainlink is the fallback.
+// same price basis, so a constant offset to Chainlink's stream or CF Benchmarks' BRTI cancels out.
+// Fallbacks: Kalshi's published target (exact for Kalshi), else on-chain Chainlink.
 function updateStrike(now) {
   const { start } = currentRound(now);
   if (strikeRound !== start) {
@@ -727,8 +821,18 @@ function updateStrike(now) {
   if (strikeSrc === 'twap') return;
   const v = now >= start ? twap(medianHistory, start - TWAP_MS, start) : null;
   if (v !== null) { strike = v; strikeSrc = 'twap'; return; }
+  const kt = ksTarget();
+  if (kt !== null) { strike = kt; strikeSrc = 'kalshi'; return; }
   if (clStrike !== null) { strike = clStrike; strikeSrc = 'chainlink'; }
 }
+
+// Kalshi's official start average for the running round (null until it is published)
+function ksTarget() {
+  const f = KS.on ? KS.cur : null;
+  return f && f.wts * 1000 === currentRound().start && f.strike != null ? f.strike : null;
+}
+
+const strikeNote = () => strikeSrc === 'twap' ? '60s avg' : strikeSrc === 'kalshi' ? 'Kalshi target' : 'Chainlink';
 
 // expected settlement average: the part of the final minute already observed + current price for the rest
 function expectedSettlement(now) {
@@ -776,7 +880,7 @@ function normalCDF(z) {
 // P(settlement average >= strike) with the price as Brownian motion:
 //   T >= 60s:  Var = σ²·(T − 40)          (40 = 60 − 60/3: averaging over the last minute removes a third)
 //   T <  60s:  mean includes the observed part, Var = σ²·T³ / (3·60²)
-function computeModelProb() {
+function modelDist() {
   if (strike === null || lastMedianP === null) return null;
   const now = Date.now(), end = currentRound(now).end, T = (end - now) / 1000;
   if (T <= 0) return null;
@@ -788,7 +892,20 @@ function computeModelProb() {
     if (done !== null) mean = done * e + lastMedianP * (1 - e);
     sd = sig * Math.sqrt(T ** 3 / 3) / 60;
   }
-  return Math.max(0.5, Math.min(99.5, normalCDF((mean - strike) / Math.max(sd, 1e-6)) * 100));
+  return { mean, sd: Math.max(sd, 1e-6) };
+}
+
+function computeModelProb() {
+  const d = modelDist();
+  return d && Math.max(0.5, Math.min(99.5, normalCDF((d.mean - strike) / d.sd) * 100));
+}
+
+// model chance that the settlement average lands within ±band of the strike
+function nearStrikeProb(band) {
+  const d = modelDist();
+  if (!d) return null;
+  const z = (d.mean - strike) / d.sd, w = band / d.sd;
+  return Math.max(0, normalCDF(w - z) - normalCDF(-w - z)) * 100;
 }
 
 function velocity(now) {
@@ -815,6 +932,7 @@ function readTheme() {
   Object.assign(T, {
     surface: v('surface'), ink1: v('ink-1'), ink2: v('ink-2'), muted: v('muted'),
     grid: v('grid'), axis: v('axis'), band: v('band'), upWash: v('up-wash'), downWash: v('down-wash'),
+    vpm: v('v-pm'), vks: v('v-ks'),
   });
   EXCH.forEach((ex, i) => ex.color = v('ex-' + (i + 1)));
   $('theme-btn').innerHTML = isDark() ? ICON_SUN : ICON_MOON;
@@ -866,16 +984,18 @@ function domain(now) {
 }
 
 // what both charts show: the live round / rolling window, or a past round picked in the menu
+// `lines`: one probability series per active venue
 function chartView(now) {
   if (review) {
     const r = review;
     return { live: false, t0: r.start - TWAP_MS, t1: r.end, tNow: r.end, start: r.start, end: r.end, round: true,
-             med: r.btc, prob: r.prob, strike: r.strike ?? null, strikeSrc: 'twap',
+             med: r.btc, lines: activeVenues().map(V => ({ V, hist: r.probs[V.key] || [] })),
+             strike: r.strike ?? null, strikeSrc: 'twap',
              empty: r.loading ? 'Loading round…' : 'No data for this round' };
   }
   const { start, end } = currentRound(now);
   return { live: true, ...domain(now), tNow: now, start, end, round: viewMode === 'round',
-           med: medianHistory, prob: probHistory, strike, strikeSrc, empty: null };
+           med: medianHistory, lines: activeVenues().map(V => ({ V, hist: V.prob })), strike, strikeSrc, empty: null };
 }
 
 // visible slice (+ the point just before the window) reduced to one point per pixel-wide time bucket.
@@ -1107,7 +1227,7 @@ function drawBtc(v) {
   // strike label on top of the line; in the round view it sits in the still-empty future on the right
   if (strike !== null) {
     const sy = Math.round(yOf(strike)) + .5;
-    const lbl = (strikeSrc === 'chainlink' ? 'Strike ≈ ' : 'Strike ') + fmtP(strike);
+    const lbl = (strikeSrc === 'twap' ? 'Strike ' : 'Strike ≈ ') + fmtP(strike);
     ctx.font = '11px ' + FONT;
     const lw = ctx.measureText(lbl).width;
     const lx = xNow + 100 < PW - lw - 12 ? PW - lw - 12 : 4;
@@ -1142,12 +1262,14 @@ function drawBtc(v) {
 }
 
 // ── Probability chart ────────────────────────────────────────────────────────
+// one venue: ink line with the up/down wash against 50%. Both venues: a line per venue in its color,
+// optionally the gap between them shaded (the price gap / mispricing between the two markets).
 function drawProb(v) {
   const c = probC, ctx = c.ctx, W = c.w, H = c.h;
   if (!W || !H) return;
   ctx.setTransform(c.dpr, 0, 0, c.dpr, 0, 0);
   ctx.clearRect(0, 0, W, H);
-  const now = v.tNow, hist = v.prob;
+  const now = v.tNow, dual = v.lines.length > 1;
 
   const PW = W - plotGutter, Y0 = 10, Y1 = H - 24;
   if (PW < 40) return;
@@ -1156,37 +1278,74 @@ function drawProb(v) {
   if (v.round) roundBands(ctx, xOf, Y1, false, v.start, v.end);
   xAxis(ctx, t0, t1, PW, Y1, v.round ? fmtHM : fmtClock);
 
-  const s = series(hist, t0, xOf, msPerPx);
-  if (!s.pts.length) { probTip.el.hidden = true; emptyState(ctx, PW, Y0, Y1, v.empty ?? 'Waiting for market…'); return; }
+  const lines = [];
+  let sLo = Infinity, sHi = -Infinity;
+  for (const L of v.lines) {
+    const s = series(L.hist, t0, xOf, msPerPx);
+    if (!s.pts.length) continue;
+    lines.push({ ...L, s, color: dual ? (L.V === PM ? T.vpm : T.vks) : T.ink1 });
+    sLo = Math.min(sLo, s.lo); sHi = Math.max(sHi, s.hi);
+  }
+  if (!lines.length) {
+    probTip.el.hidden = true;
+    emptyState(ctx, PW, Y0, Y1, v.empty ?? (v.lines.some(L => L.V === KS) && !KALSHI_PROXY ? 'Kalshi needs its proxy (see README)' : 'Waiting for market…'));
+    return;
+  }
 
-  const pad = Math.max(5, (s.hi - s.lo) * 0.4);
-  const { lo, hi } = easeRange('prob', Math.max(0, s.lo - pad), Math.min(100, s.hi + pad));
+  const pad = Math.max(5, (sHi - sLo) * 0.4);
+  const { lo, hi } = easeRange('prob', Math.max(0, sLo - pad), Math.min(100, sHi + pad));
   const yOf = p => Y0 + (hi - p) / ((hi - lo) || 1) * (Y1 - Y0);
 
-  const lastP = s.pts[s.pts.length - 1].p;
-  yGrid(ctx, lo, hi, yOf, PW, Y0, Y1, 3, v => v.toFixed(0) + '%', xNow >= PW - 1 ? yOf(lastP) : null);
-  const verts = vertices(s.pts, yOf, true, xNow);
+  for (const L of lines) { L.last = L.s.pts[L.s.pts.length - 1].p; L.verts = vertices(L.s.pts, yOf, true, xNow); }
+  yGrid(ctx, lo, hi, yOf, PW, Y0, Y1, 3, v => v.toFixed(0) + '%', xNow >= PW - 1 && !dual ? yOf(lines[0].last) : null);
   const baseY = yOf(Math.max(lo, Math.min(hi, 50)));
-  washVerts(ctx, verts, baseY, PW, Y1);
+  if (!dual) washVerts(ctx, lines[0].verts, baseY, PW, Y1);
+  else if (showGap && lines.length === 2) {
+    // the band between the two step lines: one forward, the other back
+    const [a, b] = lines, path = new Path2D();
+    path.moveTo(a.verts[0][0], a.verts[0][1]);
+    for (const [x, y] of a.verts) path.lineTo(x, y);
+    for (let i = b.verts.length - 1; i >= 0; i--) path.lineTo(b.verts[i][0], b.verts[i][1]);
+    path.closePath();
+    ctx.save(); ctx.beginPath(); ctx.rect(Math.max(a.verts[0][0], b.verts[0][0]), 0, PW, Y1); ctx.clip();
+    ctx.globalAlpha = 0.14; ctx.fillStyle = T.ink2; ctx.fill(path);   // neutral: the gap has no side
+    ctx.restore();
+  }
   const show50 = lo < 50 && hi > 50;
   if (show50) refLine(ctx, Math.round(baseY) + .5, PW);
   if (show50 === $('leg-50').hidden) $('leg-50').hidden = !show50;
-  strokeVerts(ctx, verts, T.ink1, 2);
-  dot(ctx, xNow, yOf(lastP), T.ink1);
-  endTag(ctx, xNow, yOf(lastP), lastP.toFixed(1) + '%', Y0, Y1);
+  for (const L of lines) strokeVerts(ctx, L.verts, L.color, 2);
+  for (const L of lines) dot(ctx, xNow, yOf(L.last), L.color);
+  // end tags; with two lines, pushed apart so they never overlap
+  const tags = lines.map(L => ({ y: yOf(L.last), text: (dual ? L.V.short + ' ' : '') + L.last.toFixed(1) + '%' }));
+  if (tags.length === 2 && Math.abs(tags[0].y - tags[1].y) < 20) {
+    const [u, d] = tags[0].y <= tags[1].y ? tags : [tags[1], tags[0]], mid = (u.y + d.y) / 2;
+    u.y = mid - 10; d.y = mid + 10;
+  }
+  for (const tg of tags) endTag(ctx, xNow, tg.y, tg.text, Y0, Y1);
 
   if (hoverFrac === null) { probTip.el.hidden = true; return; }
   const ht = hoverTime(t0, D, now), x = xOf(ht);
-  const j  = firstIdx(hist, ht + 1) - 1;
   vline(ctx, x, Y0, Y1);
-  if (j < 0) { probTip.el.hidden = true; return; }
-  const p = hist[j].p;
-  dot(ctx, x, yOf(Math.max(lo, Math.min(hi, p))), T.ink1);
+  const at = L => { const j = firstIdx(L.hist, ht + 1) - 1; return j >= 0 ? L.hist[j].p : null; };
+  const vals = lines.map(L => ({ L, p: at(L) }));
+  if (vals.every(o => o.p === null)) { probTip.el.hidden = true; return; }
+  for (const o of vals) if (o.p !== null) dot(ctx, x, yOf(Math.max(lo, Math.min(hi, o.p))), o.L.color);
   if (hoverSrc !== 'prob') { probTip.el.hidden = true; return; }
   probTip.time.textContent = fmtClock(ht);
-  probTip.refs.up.val.textContent = p.toFixed(1) + '%';
+  const R = probTip.refs, get = V => vals.find(o => o.L.V === V)?.p ?? null;
+  R.up.row.hidden = dual; R.pm.row.hidden = R.ks.row.hidden = R.gap.row.hidden = !dual;
+  if (!dual) R.up.val.textContent = vals[0].p !== null ? vals[0].p.toFixed(1) + '%' : '—';
+  else {
+    const pp = get(PM), pk = get(KS);
+    R.pm.val.textContent = pp !== null ? pp.toFixed(1) + '%' : '—';
+    R.ks.val.textContent = pk !== null ? pk.toFixed(1) + '%' : '—';
+    R.gap.val.textContent = pp !== null && pk !== null ? fmtPts(pp - pk) : '—';
+  }
   placeTip(probTip, x, PW);
 }
+
+const fmtPts = d => (d >= 0 ? '+' : '−') + Math.abs(d).toFixed(1) + ' pts';
 
 // ── Panels (text updates are throttled; charts redraw every frame) ───────────
 let lastUiT = 0, lastSlowT = 0;
@@ -1194,7 +1353,7 @@ let lastUiT = 0, lastSlowT = 0;
 function updateTime() {
   const s = secsLeft(), m = Math.floor(s / 60), r = s % 60;
   $('time-left').textContent = `${m}:${String(r).padStart(2, '0')}`;
-  $('time-fill').style.width = ((300 - s) / 300 * 100).toFixed(1) + '%';
+  $('time-fill').style.width = ((ROUND_S - s) / ROUND_S * 100).toFixed(1) + '%';
   $('time-meter').dataset.level = s < 30 ? 'crit' : s < 60 ? 'warn' : 'ok';
   $('round-end').textContent = s > 60
     ? 'Round ends ' + fmtClock(currentRound().end)
@@ -1202,7 +1361,8 @@ function updateTime() {
 }
 
 function updateUI(now) {
-  checkRoundSwitch(now);
+  if (PM.on) checkRoundSwitch(now);
+  if (KS.on) ksCheckSwitch(now);
   updateStrike(now);
   updateTime();
 
@@ -1223,48 +1383,69 @@ function updateUI(now) {
     $('btc-delta-text').textContent = med === null ? 'Waiting for trades…' : 'Waiting for strike…';
     chip.hidden = true;
   }
+  const kt = ksTarget();
   $('btc-sub').textContent =
-    (strike === null ? 'Strike fetching…' : strikeSrc === 'twap' ? `Strike ${fmtP(strike)} (60s avg)` : `Strike ≈ ${fmtP(strike)} (Chainlink)`) +
-    ` · Chainlink ${clPrice !== null ? fmtP(clPrice) : '—'}`;
+    (strike === null ? 'Strike fetching…' : `Strike ${strikeSrc === 'twap' ? '' : '≈ '}${fmtP(strike)} (${strikeNote()})`) +
+    (KS.on ? ` · Kalshi target ${kt !== null ? fmtP(kt) : '—'}` : '') +
+    (PM.on ? ` · Chainlink ${clPrice !== null ? fmtP(clPrice) : '—'}` : '');
 
-  if (upProb !== null) {
-    $('up-prob').textContent = upProb.toFixed(1) + '%';
-    $('up-bar').classList.remove('idle');
-    $('seg-up').style.flexGrow   = upProb;
-    $('seg-down').style.flexGrow = 100 - upProb;
-    $('up-sub').textContent = `Down ${(100 - upProb).toFixed(1)}% · Model ${modelP !== null ? modelP.toFixed(1) + '%' : '—'}`;
+  const modelTxt = `Model ${modelP !== null ? modelP.toFixed(1) + '%' : '—'}`;
+  if (both()) {
+    $('up-pm').textContent = PM.up !== null ? PM.up.toFixed(1) + '%' : '—';
+    $('up-ks').textContent = KS.up !== null ? KS.up.toFixed(1) + '%' : '—';
+    $('up-sub').textContent = PM.up === null && KS.up === null ? 'Waiting for order books…' : modelTxt;
   } else {
-    $('up-prob').textContent = '—';
-    $('up-bar').classList.add('idle');
-    $('seg-up').style.flexGrow = $('seg-down').style.flexGrow = 1;
-    $('up-sub').textContent = 'Waiting for order book…';
+    const up = mainVenue().up;
+    if (up !== null) {
+      $('up-prob').textContent = up.toFixed(1) + '%';
+      $('up-bar').classList.remove('idle');
+      $('seg-up').style.flexGrow   = up;
+      $('seg-down').style.flexGrow = 100 - up;
+      $('up-sub').textContent = `Down ${(100 - up).toFixed(1)}% · ${modelTxt}`;
+    } else {
+      $('up-prob').textContent = '—';
+      $('up-bar').classList.add('idle');
+      $('seg-up').style.flexGrow = $('seg-down').style.flexGrow = 1;
+      $('up-sub').textContent = venueMode === 'kalshi' && !KALSHI_PROXY ? 'Kalshi proxy not set up' : 'Waiting for order book…';
+    }
   }
 
   if (now - lastSlowT >= 1000) {
     lastSlowT = now;
+    const arb = both() ? arbState() : null;
     updateSignals(now, modelP);
+    if (arb) updateArb(arb);
     updateSources();
     updateLive();
     recordTrack(now, modelP);
-    checkAlerts(now, modelP, exp);
+    checkAlerts(now, modelP, exp, arb);
     btcC.el.setAttribute('aria-label',
       `BTC median price ${med !== null ? fmtP(med) : 'unknown'}${strike !== null ? ', strike ' + fmtP(strike) : ''}, ${winLabel()}`);
-    probC.el.setAttribute('aria-label',
-      `Implied UP probability ${upProb !== null ? upProb.toFixed(1) + '%' : 'unknown'}, ${winLabel()}`);
+    probC.el.setAttribute('aria-label', 'Implied UP probability: ' + activeVenues().map(V =>
+      `${V.name} ${V.up !== null ? V.up.toFixed(1) + '%' : 'unknown'}`).join(', ') + `, ${winLabel()}`);
   }
 }
 
 function updateSignals(now, modelP) {
-  // Market vs model (mispricing)
-  if (upProb !== null && modelP !== null) {
-    const prem = upProb - modelP;
-    const both = `market ${upProb.toFixed(1)}% vs model ${modelP.toFixed(1)}%`;
-    if (Math.abs(prem) < 3) {
-      $('edge-val').textContent = 'Fair';
-      $('edge-sub').textContent = 'Within 3 pts · ' + both;
+  // Market vs model (mispricing): per venue
+  const vs = activeVenues().filter(V => V.up !== null);
+  if (vs.length && modelP !== null) {
+    if (vs.length === 1) {
+      const up = vs[0].up, prem = up - modelP;
+      const txt = `${both() ? vs[0].short + ' ' : 'market '}${up.toFixed(1)}% vs model ${modelP.toFixed(1)}%`;
+      if (Math.abs(prem) < 3) {
+        $('edge-val').textContent = 'Fair';
+        $('edge-sub').textContent = 'Within 3 pts · ' + txt;
+      } else {
+        $('edge-val').textContent = fmtPts(prem);
+        $('edge-sub').textContent = `UP looks ${prem > 0 ? 'overpriced' : 'underpriced'} · ` + txt;
+      }
     } else {
-      $('edge-val').textContent = `${prem > 0 ? '+' : '−'}${Math.abs(prem).toFixed(1)} pts`;
-      $('edge-sub').textContent = `UP looks ${prem > 0 ? 'overpriced' : 'underpriced'} · ` + both;
+      $('edge-val').textContent = vs.map(V => `${V.short} ${Math.abs(V.up - modelP) < 3 ? 'fair' : fmtPts(V.up - modelP).replace(' pts', '')}`).join(' · ');
+      const worst = vs.reduce((a, V) => Math.abs(V.up - modelP) > Math.abs(a.up - modelP) ? V : a);
+      const prem = worst.up - modelP;
+      $('edge-sub').textContent = (Math.abs(prem) < 3 ? 'Both within 3 pts' : `UP looks ${prem > 0 ? 'overpriced' : 'underpriced'} on ${worst.name}`) +
+        ` · market minus model ${modelP.toFixed(1)}%, in pts`;
     }
   } else {
     $('edge-val').textContent = '—';
@@ -1328,6 +1509,87 @@ function updateSignals(now, modelP) {
   }
 }
 
+// ── Polymarket vs Kalshi: price gap and arbitrage ────────────────────────────
+// Both venues charge takers rate × p × (1 − p) per share/contract: Polymarket crypto 0.07, Kalshi 0.07 × the
+// series multiplier (1 for KXBTC15M), rounded up to the cent per order — that rounding only matters for tiny orders.
+const PM_FEE = 0.07, KS_FEE = 0.07;
+// how far Chainlink's and CF Benchmarks' 60s averages may move apart over one round — an estimate, not measured
+const SETTLE_BAND = 5;
+
+// one book side as [price 0..1, size], best level first; `mirror` turns UP prices into DOWN / NO prices
+function bookLevels(book, desc, mirror) {
+  return Object.keys(book).map(Number).sort((a, b) => desc ? b - a : a - b)
+    .map(k => [(mirror ? 1000 - k : k) / 1000, book[k]]);
+}
+
+// buy one share on each venue at the asks; walk both books while a pair still costs under $1 after fees
+function walkPair(A, feeA, B, feeB) {
+  let i = 0, j = 0, qa = A[0]?.[1] ?? 0, qb = B[0]?.[1] ?? 0, pairs = 0, profit = 0, top = null;
+  while (i < A.length && j < B.length) {
+    const pa = A[i][0], pb = B[j][0], fees = feeA * pa * (1 - pa) + feeB * pb * (1 - pb), edge = 1 - pa - pb - fees;
+    if (!top) top = { pa, pb, fees, edge };
+    if (edge <= 0) break;
+    const q = Math.min(qa, qb);
+    pairs += q; profit += q * edge; qa -= q; qb -= q;
+    if (qa <= 1e-9) { i++; qa = A[i]?.[1] ?? 0; }
+    if (qb <= 1e-9) { j++; qb = B[j]?.[1] ?? 0; }
+  }
+  return top && { ...top, pairs, profit };
+}
+
+// both books of the running round: price gap, and the two ways to hold both sides of the same question
+function arbState() {
+  const ok = f => f && !f.closed && f.wts * 1000 === currentRound().start && f.mid !== null;
+  const a = PM.cur, b = KS.cur;
+  if (!ok(a) || !ok(b)) return null;
+  return {
+    gap: (a.mid - b.mid) * 100,
+    // UP on Polymarket (its asks) + NO on Kalshi (NO asks = YES bids mirrored)
+    upPm:   walkPair(bookLevels(a.asks, false), PM_FEE, bookLevels(b.bids, true, true), KS_FEE),
+    // DOWN on Polymarket (UP bids mirrored) + YES on Kalshi (its asks)
+    downPm: walkPair(bookLevels(a.bids, true, true), PM_FEE, bookLevels(b.asks, false), KS_FEE),
+  };
+}
+
+// rounds in the list where both official results are in, and how many of them agree
+function venueAgreement() {
+  const cur = currentRound().start / 1000;
+  let n = 0, same = 0;
+  for (let k = 1; k <= ROUNDS_SHOWN; k++) {
+    const a = PM.results.get(cur - ROUND_S * k), b = KS.results.get(cur - ROUND_S * k);
+    if ((a === 'up' || a === 'down') && (b === 'up' || b === 'down')) { n++; if (a === b) same++; }
+  }
+  return n ? { n, same } : null;
+}
+
+function arbRow(id, r) {
+  const val = $(id + '-val'), sub = $(id + '-sub');
+  if (!r) { val.textContent = '—'; val.className = 'sig-value'; sub.textContent = 'One side of the books is empty'; return; }
+  val.textContent = (r.edge > 0 ? '+' : r.edge < 0 ? '−' : '') + fmtC(Math.abs(r.edge)) + ' / pair';
+  val.className = 'sig-value' + (r.edge > 0 ? ' good' : '');
+  sub.textContent = `${fmtC(r.pa)} + ${fmtC(r.pb)} + fees ${fmtC(r.fees, 2)} = ${fmtC(r.pa + r.pb + r.fees)} for a $1 payout` +
+    (r.pairs > 0 ? ` · up to ${fmtSz(r.pairs)} pairs, +$${r.profit.toFixed(2)}` : '');
+}
+
+function updateArb(arb) {
+  if (!arb) {
+    for (const id of ['gap', 'arb1', 'arb2']) { $(id + '-val').textContent = '—'; $(id + '-val').className = 'sig-value'; }
+    $('gap-sub').textContent = 'Needs both order books of the running round';
+    $('arb1-sub').textContent = $('arb2-sub').textContent = '—';
+  } else {
+    $('gap-val').textContent = Math.abs(arb.gap) < 0.05 ? '0.0 pts' : fmtPts(arb.gap);
+    $('gap-sub').textContent = `UP mid: Poly ${(PM.cur.mid * 100).toFixed(1)}% vs Kalshi ${(KS.cur.mid * 100).toFixed(1)}% · ` +
+      (Math.abs(arb.gap) < 1 ? 'in line' : `UP cheaper on ${arb.gap > 0 ? 'Kalshi' : 'Polymarket'}`);
+    arbRow('arb1', arb.upPm);
+    arbRow('arb2', arb.downPm);
+  }
+  const near = nearStrikeProb(SETTLE_BAND), agree = venueAgreement();
+  $('risk-val').textContent = near === null ? '—' : near < 0.1 ? '<0.1%' : near.toFixed(1) + '%';
+  $('risk-val').className = 'sig-value' + (near !== null && near >= 5 ? ' warn' : '');
+  $('risk-sub').textContent = `Model chance the settlement ends within ±$${SETTLE_BAND} of the strike, where the two indices can disagree` +
+    (agree ? ` · same result in ${agree.same} of the last ${agree.n} rounds` : '');
+}
+
 function updateSources() {
   const med = lastMedianP, now = Date.now();
   for (const ex of EXCH) {
@@ -1342,8 +1604,14 @@ function updateSources() {
   $('sp-cls').textContent = clStrike !== null ? fmtP(clStrike) : '—';
   $('sd-cls').textContent = clStrike !== null && strike !== null && strikeSrc === 'twap' ? signedUsd(clStrike - strike) : '—';
   $('sdot-cls').className = 'dot ' + (clStrike !== null ? 'live' : 'wait');
-  $('sp-pm').textContent = cur ? cur.stamp : 'Connecting…';
-  $('sdot-pm').className = 'dot ' + (cur ? cur.state : 'wait');
+  $('sp-pm').textContent = PM.cur ? PM.cur.stamp : 'Connecting…';
+  $('sdot-pm').className = 'dot ' + (PM.cur ? PM.cur.state : 'wait');
+  const kt = ksTarget();
+  $('sp-kst').textContent = kt !== null ? fmtP(kt) : '—';
+  $('sd-kst').textContent = kt !== null && strike !== null && strikeSrc === 'twap' ? signedUsd(kt - strike) : '—';
+  $('sdot-kst').className = 'dot ' + (kt !== null ? 'live' : 'wait');
+  $('sp-ks').textContent = !KALSHI_PROXY ? 'No proxy set (see README)' : KS.cur ? KS.cur.stamp : 'Connecting…';
+  $('sdot-ks').className = 'dot ' + (!KALSHI_PROXY ? 'err' : KS.cur ? KS.cur.state : 'wait');
 
   // data quality 0–100 from exchange consensus and trade activity
   const live = EXCH.filter(e => e.enabled && e.lastP !== null && now - e.lastTT <= STALE_MS).map(e => e.lastP);
@@ -1357,123 +1625,167 @@ function updateLive() {
   const now = Date.now();
   const live = EXCH.filter(e => e.enabled && e.lastP !== null && now - e.lastTT <= STALE_MS).length;
   let cls = 'wait', txt = 'Connecting';
-  const pm = cur ? cur.state : 'wait';
-  if (pm === 'live' && live >= 3) { cls = 'live'; txt = 'Live'; }
-  else if (pm === 'err') { cls = 'err'; txt = 'Reconnecting'; }
+  const states = activeVenues().map(V => V.cur ? V.cur.state : 'wait');
+  if (KS.on && !KALSHI_PROXY) { cls = 'err'; txt = 'No Kalshi proxy'; }
+  else if (states.every(s => s === 'live') && live >= 3) { cls = 'live'; txt = 'Live'; }
+  else if (states.includes('err')) { cls = 'err'; txt = 'Reconnecting'; }
   $('live-dot').className = 'dot ' + cls;
   $('live-text').textContent = txt;
 }
 
 // ── Recent rounds + track record ─────────────────────────────────────────────
-// official results from Polymarket; the track record (market + model 60s before the end, own result)
-// lives in this browser's localStorage
-const TRACK_KEY = 'btc5m-track-v1';
-const roundResults = new Map();   // round start (s) → 'up' | 'down' | 'pending'
-let track = (() => { try { return JSON.parse(localStorage.getItem(TRACK_KEY)) || {}; } catch { return {}; } })();
+// official results from each venue; the track record (market + model 60s before the end, own result)
+// lives in this browser's localStorage, one store per venue and round length
+const TRACK_KEYS = { poly5: 'btc5m-track-v1', poly15: 'btc-track-poly15-v1', kalshi15: 'btc-track-kalshi15-v1' };
+const tracks = {};
+const trackId = V => V === KS ? 'kalshi15' : 'poly' + ROUND_S / 60;
+function trackOf(V) {
+  const id = trackId(V);
+  if (!tracks[id]) tracks[id] = (() => { try { return JSON.parse(localStorage.getItem(TRACK_KEYS[id])) || {}; } catch { return {}; } })();
+  return tracks[id];
+}
 
-function saveTrack() {
+function saveTrack(V) {
+  const t = trackOf(V);
   try {
-    const keys = Object.keys(track).sort();
-    while (keys.length > 600) delete track[keys.shift()];
-    localStorage.setItem(TRACK_KEY, JSON.stringify(track));
+    const keys = Object.keys(t).sort();
+    while (keys.length > 600) delete t[keys.shift()];
+    localStorage.setItem(TRACK_KEYS[trackId(V)], JSON.stringify(t));
   } catch {}
 }
 
-async function fetchRoundResult(ts) {
+function setResult(V, ts, res) {
+  V.results.set(ts, res);
+  const t = trackOf(V);
+  if (res !== 'pending' && t[ts] && !t[ts].outcome) { t[ts].outcome = res; saveTrack(V); }
+}
+
+async function pmFetchResult(ts) {
+  const gen = modeGen;
   try {
     const ev = await fetchEvent(ts);
     const m = ev?.markets[0];
-    if (!m) return;
-    roundMeta.set(ts, parseMarket(ev, ts));
+    if (!m || gen !== modeGen) return;
+    PM.meta.set(ts, parseMarket(ev, ts));
     const outcomes = JSON.parse(m.outcomes || '[]'), prices = JSON.parse(m.outcomePrices || '[]').map(Number);
     const win = m.closed ? outcomes[prices.indexOf(1)] : null;
-    const res = win === 'Up' ? 'up' : win === 'Down' ? 'down' : 'pending';
-    roundResults.set(ts, res);
-    if (res !== 'pending' && track[ts] && !track[ts].outcome) { track[ts].outcome = res; saveTrack(); }
+    setResult(PM, ts, win === 'Up' ? 'up' : win === 'Down' ? 'down' : 'pending');
   } catch {}
 }
 
 async function refreshRounds() {
-  const cur = currentRound().start / 1000, jobs = [];
-  for (let k = 1; k <= ROUNDS_SHOWN; k++) {
-    const ts = cur - 300 * k, r = roundResults.get(ts);
-    if (r !== 'up' && r !== 'down') jobs.push(fetchRoundResult(ts));
+  const cur = currentRound().start / 1000, gen = modeGen, jobs = [];
+  if (PM.on) {
+    for (let k = 1; k <= ROUNDS_SHOWN; k++) {
+      const ts = cur - ROUND_S * k, r = PM.results.get(ts);
+      if (r !== 'up' && r !== 'down') jobs.push(pmFetchResult(ts));
+    }
   }
+  if (KS.on) jobs.push(ksRefreshResults());
   // tracked rounds from earlier visits that still miss their result
-  for (const ts of Object.keys(track).filter(ts => !track[ts].outcome && +ts < cur - 3600).slice(-10)) jobs.push(fetchRoundResult(+ts));
+  for (const V of activeVenues()) {
+    const t = trackOf(V), fetchOne = V === PM ? pmFetchResult : ksFetchResult;
+    // (few for Kalshi: its API allows only ~5–10 requests a second)
+    for (const ts of Object.keys(t).filter(ts => !t[ts].outcome && +ts < cur - ROUND_S * ROUNDS_SHOWN).slice(V === PM ? -10 : -3)) jobs.push(fetchOne(+ts));
+  }
   await Promise.all(jobs);
-  renderRounds();
+  if (gen === modeGen) renderRounds();
 }
 
 const roundSpan = ts => `${fmtHM(ts * 1000)}–${fmtHM(ts * 1000 + ROUND_MS)}`;
 
+// a round's official result in the current mode; with both venues 'split' when they settled differently
+function roundResult(ts) {
+  if (!both()) return mainVenue().results.get(ts);
+  const a = PM.results.get(ts), b = KS.results.get(ts), done = r => r === 'up' || r === 'down';
+  if (done(a) && done(b)) return a === b ? a : 'split';
+  if (a === undefined || b === undefined) return a ?? b;   // one venue has no data (e.g. no Kalshi proxy)
+  return 'pending';
+}
+const resultName = (ts, res) => res === 'up' ? '▲ Up' : res === 'down' ? '▼ Down' :
+  res === 'split' ? `≠ Poly ${PM.results.get(ts) === 'up' ? '▲' : '▼'} · Kalshi ${KS.results.get(ts) === 'up' ? '▲' : '▼'}` : 'pending';
+
 // chips (oldest → newest, tap to open in the charts) and the same rounds in the chart menu (newest first)
 function renderRounds() {
   const cur = currentRound().start / 1000, chips = [], options = [];
-  let ups = 0, downs = 0;
+  let ups = 0, downs = 0, splits = 0;
   for (let k = ROUNDS_SHOWN; k >= 1; k--) {
-    const ts = cur - 300 * k, res = roundResults.get(ts), time = fmtHM(ts * 1000);
-    if (res === 'up') ups++; else if (res === 'down') downs++;
-    const name = res === 'up' ? 'Up' : res === 'down' ? 'Down' : 'pending';
-    chips.push(`<button type="button" class="rchip ${res === 'up' || res === 'down' ? res : ''}" data-ts="${ts}" aria-pressed="${review?.ts === ts}" title="${time} · ${name} — show in the charts" aria-label="${time} ${name}">${res === 'up' ? '▲' : res === 'down' ? '▼' : '·'}</button>`);
-    options.unshift(`<option value="${ts}">${roundSpan(ts)} · ${res === 'up' ? '▲ Up' : res === 'down' ? '▼ Down' : 'pending'}</option>`);
+    const ts = cur - ROUND_S * k, res = roundResult(ts), time = fmtHM(ts * 1000), name = resultName(ts, res);
+    if (res === 'up') ups++; else if (res === 'down') downs++; else if (res === 'split') splits++;
+    const cls = res === 'up' || res === 'down' || res === 'split' ? res : '';
+    chips.push(`<button type="button" class="rchip ${cls}" data-ts="${ts}" aria-pressed="${review?.ts === ts}" title="${time} · ${name} — show in the charts" aria-label="${time} ${name}">${res === 'up' ? '▲' : res === 'down' ? '▼' : res === 'split' ? '≠' : '·'}</button>`);
+    options.unshift(`<option value="${ts}">${roundSpan(ts)} · ${name}</option>`);
   }
-  if (review && review.ts < cur - 300 * ROUNDS_SHOWN) options.push(`<option value="${review.ts}">${roundSpan(review.ts)}</option>`);
+  if (review && review.ts < cur - ROUND_S * ROUNDS_SHOWN) options.push(`<option value="${review.ts}">${roundSpan(review.ts)}</option>`);
   $('rounds').innerHTML = chips.join('');
   $('round-pick').innerHTML = `<option value="">Live · ${roundSpan(cur)}</option>` + options.join('');
   $('round-pick').value = review ? String(review.ts) : '';
-  $('rounds-from').textContent = fmtHM((cur - 300 * ROUNDS_SHOWN) * 1000);
-  $('rounds-to').textContent = fmtHM((cur - 300) * 1000);
-  $('rounds-meta').textContent = `▲ ${ups} · ▼ ${downs} · official`;
+  $('rounds-from').textContent = fmtHM((cur - ROUND_S * ROUNDS_SHOWN) * 1000);
+  $('rounds-to').textContent = fmtHM((cur - ROUND_S) * 1000);
+  $('rounds-meta').textContent = `▲ ${ups} · ▼ ${downs}` + (both() ? ` · ≠ ${splits}` : '') + ' · official';
+  $('rounds-meta').title = both() ? '≠ = Polymarket and Kalshi settled the round differently' : '';
   if (review) syncReview();
   renderTrack();
 }
 
-function renderTrack() {
-  const recs = Object.values(track);
+function trackStats(V) {
+  const recs = Object.values(trackOf(V));
   const scored = recs.filter(r => r.outcome && r.mkt != null && r.model != null);
   const basis  = recs.filter(r => r.outcome && r.own);
-  const el = $('track');
-  if (!scored.length && !basis.length) {
+  const o = r => r.outcome === 'up' ? 1 : 0;
+  const brier = k => scored.reduce((a, r) => a + (r[k] / 100 - o(r)) ** 2, 0) / scored.length;
+  return { V, n: scored.length, nb: basis.length,
+           fav: scored.length ? Math.round(scored.filter(r => (r.mkt >= 50) === (r.outcome === 'up')).length / scored.length * 100) : null,
+           bm: scored.length ? brier('mkt') : null, bmod: scored.length ? brier('model') : null,
+           match: basis.filter(r => r.own === r.outcome).length };
+}
+
+function renderTrack() {
+  const st = activeVenues().map(trackStats), el = $('track');
+  if (!st.some(s => s.n || s.nb)) {
     el.innerHTML = '<div class="sig-sub">Track record fills in while the dashboard is open: market and model are recorded 60s before each round ends and checked against the official result.</div>';
     return;
   }
-  const o = r => r.outcome === 'up' ? 1 : 0;
-  const brier = k => scored.reduce((a, r) => a + (r[k] / 100 - o(r)) ** 2, 0) / scored.length;
-  const favWon = scored.filter(r => (r.mkt >= 50) === (r.outcome === 'up')).length;
-  const match = basis.filter(r => r.own === r.outcome).length;
-  const rows = [];
-  if (scored.length) {
-    rows.push(['Rounds scored', scored.length]);
-    rows.push(['Market favourite won <span class="muted">· at −60s</span>', Math.round(favWon / scored.length * 100) + '%']);
-    rows.push(['Brier score <span class="muted">· lower is better</span>', `market ${brier('mkt').toFixed(3)} · model ${brier('model').toFixed(3)}`]);
+  const rows = [], two = st.length > 1, per = (f, s) => two ? `${s.V.short} ${f(s)}` : f(s);
+  const join = (f, cond) => st.filter(cond).map(s => per(f, s)).join(' · ');
+  const scored = s => s.n > 0;
+  if (st.some(scored)) {
+    rows.push(['Rounds scored', join(s => s.n, scored)]);
+    rows.push(['Market favourite won <span class="muted">· at −60s</span>', join(s => s.fav + '%', scored)]);
+    rows.push(['Brier score <span class="muted">· lower is better</span>',
+      join(s => two ? s.bm.toFixed(3) : `market ${s.bm.toFixed(3)}`, scored) +
+      ` · model ${st.find(scored).bmod.toFixed(3)}`]);
   }
-  if (basis.length) rows.push(['Own price basis = official result', `${match} / ${basis.length}`]);
+  if (st.some(s => s.nb)) rows.push(['Own price basis = official result', join(s => `${s.match} / ${s.nb}`, s => s.nb > 0)]);
   el.innerHTML = rows.map(([k, v]) => `<div class="trow"><span>${k}</span><b>${v}</b></div>`).join('') +
     '<div class="track-foot"><span>Stored in this browser</span><button class="link-btn" type="button" id="track-reset">Reset</button></div>';
   $('track-reset').addEventListener('click', () => {
-    if (!confirm('Reset the track record in this browser?')) return;
-    track = {}; saveTrack(); renderTrack();
+    if (!confirm(`Reset the ${activeVenues().map(V => V.name).join(' and ')} track record (${ROUND_S / 60}-minute rounds) in this browser?`)) return;
+    for (const V of activeVenues()) { tracks[trackId(V)] = {}; saveTrack(V); }
+    renderTrack();
   });
 }
 
 function recordTrack(now, modelP) {
   const { start, end } = currentRound(now), key = start / 1000, T = (end - now) / 1000;
-  const rec = track[key] || {};
-  // snapshot when the settlement window opens
-  if (T <= 60 && T > 45 && rec.mkt == null && upProb !== null && modelP !== null) {
-    track[key] = { ...rec, mkt: +upProb.toFixed(1), model: +modelP.toFixed(1) };
-    saveTrack();
-  }
-  // own result from our price basis, just before the round ends
-  if (T <= 3 && !rec.own && strikeSrc === 'twap') {
-    const settle = twap(medianHistory, end - TWAP_MS, now);
-    if (settle !== null) { track[key] = { ...track[key], own: settle >= strike ? 'up' : 'down' }; saveTrack(); }
+  for (const V of activeVenues()) {
+    const t = trackOf(V), rec = t[key] || {};
+    // snapshot when the settlement window opens
+    if (T <= 60 && T > 45 && rec.mkt == null && V.up !== null && modelP !== null && V.cur?.wts === key) {
+      t[key] = { ...rec, mkt: +V.up.toFixed(1), model: +modelP.toFixed(1) };
+      saveTrack(V);
+    }
+    // own result from our price basis, just before the round ends
+    if (T <= 3 && !t[key]?.own && strikeSrc === 'twap') {
+      const settle = twap(medianHistory, end - TWAP_MS, now);
+      if (settle !== null) { t[key] = { ...t[key], own: settle >= strike ? 'up' : 'down' }; saveTrack(V); }
+    }
   }
 }
 
 // ── Alerts: toast + beep + vibration, system notification while the tab is in the background ──
-let alertsOn = false, audioCtx = null, lastSide = null, lastSideRound = null, lastCrossAlertT = 0, edgeAlertRound = null, toastTimer = null;
+let alertsOn = false, audioCtx = null, lastSide = null, lastSideRound = null, lastCrossAlertT = 0, toastTimer = null;
+const alerted = new Set();   // `${kind}|${round start}`: each kind fires once per round
 
 function toast(title, body) {
   $('toast-title').textContent = title;
@@ -1512,10 +1824,18 @@ async function setAlerts(on, fromClick) {
   if (!on || !fromClick) return;
   try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); await audioCtx.resume(); } catch {}
   if ('Notification' in window && Notification.permission === 'default') { try { await Notification.requestPermission(); } catch {} }
-  toast('Alerts on', 'Strike crossings in the last minute, and market/model gaps of 8+ pts');
+  toast('Alerts on', 'Strike crossings in the last minute, market/model gaps of 8+ pts' + (both() ? ', Poly/Kalshi arbitrage' : ''));
 }
 
-function checkAlerts(now, modelP, exp) {
+function alertOnce(kind, start, title, body) {
+  const k = kind + '|' + start;
+  if (alerted.has(k)) return;
+  alerted.add(k);
+  if (alerted.size > 200) alerted.delete(alerted.values().next().value);
+  alertUser(title, body);
+}
+
+function checkAlerts(now, modelP, exp, arb) {
   const { start, end } = currentRound(now), T = (end - now) / 1000;
   if (lastSideRound !== start) { lastSideRound = start; lastSide = null; }
   if (exp && strike !== null) {
@@ -1527,9 +1847,16 @@ function checkAlerts(now, modelP, exp) {
     }
     lastSide = side;
   }
-  if (alertsOn && upProb !== null && modelP !== null && T > 60 && T < 270 && edgeAlertRound !== start && Math.abs(upProb - modelP) >= 8) {
-    edgeAlertRound = start;
-    alertUser(`UP looks ${upProb > modelP ? 'overpriced' : 'underpriced'}`, `market ${upProb.toFixed(0)}% vs model ${modelP.toFixed(0)}%`);
+  if (!alertsOn) return;
+  if (modelP !== null && T > 60 && T < ROUND_S - 30) for (const V of activeVenues()) {
+    if (V.up === null || Math.abs(V.up - modelP) < 8) continue;
+    alertOnce('edge-' + V.key, start, `UP looks ${V.up > modelP ? 'overpriced' : 'underpriced'}${both() ? ' on ' + V.name : ''}`,
+      `market ${V.up.toFixed(0)}% vs model ${modelP.toFixed(0)}%`);
+  }
+  // both venues: a pair (UP on one, DOWN on the other) below $1 after fees, with some size behind it
+  if (arb && T > 5) for (const [k, r, name] of [['arb-up', arb.upPm, 'Poly UP + Kalshi NO'], ['arb-down', arb.downPm, 'Poly DOWN + Kalshi YES']]) {
+    if (!r || r.edge < 0.005 || r.pairs < 5) continue;
+    alertOnce(k, start, `Arbitrage: ${name}`, `${fmtC(r.pa)} + ${fmtC(r.pb)} + fees → +${fmtC(r.edge)} per pair, up to ${fmtSz(r.pairs)} pairs`);
   }
 }
 
@@ -1613,15 +1940,16 @@ function connectExchanges() {
 const GAMMA = 'https://gamma-api.polymarket.com';
 const PM_WS = 'wss://ws-subscriptions-clob.polymarket.com/ws/market';
 
+// rounds are listed as btc-updown-5m-<start> and btc-updown-15m-<start>
 async function fetchEvent(wts) {
-  const d = await getJSON(`${GAMMA}/events?slug=btc-updown-5m-${wts}`);
+  const d = await getJSON(`${GAMMA}/events?slug=btc-updown-${ROUND_S / 60}m-${wts}`);
   return d[0]?.markets?.length ? d[0] : null;
 }
 
 // market of the running round (Gamma lists the rounds about an hour ahead)
 async function findMarket() {
   const base = currentRound().start / 1000;
-  for (const wts of [base, base + 300]) {
+  for (const wts of [base, base + ROUND_S]) {
     try { const event = await fetchEvent(wts); if (event) return { wts, event }; } catch {}
   }
   return null;
@@ -1633,9 +1961,9 @@ function parseMarket(event, wts) {
   return { wts, question: m.question || event.title, yesId: ids[0] || null, cid: m.conditionId, tick: +m.orderPriceMinTickSize || 0.01 };
 }
 
-// ── Market feeds: one socket and one book per round ──────────────────────────
+// ── Market feeds: one book per round (Polymarket: own socket each; Kalshi: polled) ──
 function makeFeed(m) {
-  return { ...m, bids: {}, asks: {}, last: null, fine: m.tick < 0.01, mid: null, ver: 0, hist: [],
+  return { ...m, bids: {}, asks: {}, last: m.last ?? null, fine: m.tick < 0.01, mid: null, ver: 0, hist: [],
            ws: null, state: 'wait', stamp: 'Connecting…', lastMsgT: 0, closed: false };
 }
 
@@ -1688,7 +2016,7 @@ function connectFeed(f) {
       }
     }
     if (!changed) return;
-    onBookChange(f);
+    onBookChange(PM, f);
     f.stamp = 'Live · ' + fmtClock(f.lastMsgT);
   };
   ws.onclose = () => {
@@ -1700,132 +2028,398 @@ function connectFeed(f) {
 }
 
 // mid = implied probability: the running round drives the KPI and chart, the next one records its own history
-function onBookChange(f) {
+function onBookChange(V, f) {
   let bb = 0, ba = 1000;
   for (const k in f.bids) if (+k > bb) bb = +k;
   for (const k in f.asks) if (+k < ba) ba = +k;
   f.mid = bb > 0 && ba < 1000 ? (bb + ba) / 2000 : null;
   f.ver++;
   if (f.mid === null) return;
-  if (f === cur) { upProb = f.mid * 100; pushProbPoint(upProb); return; }
+  if (f === V.cur) { V.up = f.mid * 100; pushProbPoint(V, V.up); return; }
   const now = Date.now(), p = f.mid * 100, last = f.hist[f.hist.length - 1];
   if (last && Math.abs(last.p - p) < 0.05 && now - last.t < 1000) return;
   f.hist.push({ t: now, p });
-  while (f.hist[0].t < now - 600_000) f.hist.shift();
+  while (f.hist[0].t < now - 2 * ROUND_MS) f.hist.shift();
 }
 
 // ── Round switch: the preloaded next market takes over at the boundary, no reload ──
 function checkRoundSwitch(now) {
-  const rs = currentRound(now).start / 1000;
+  const rs = currentRound(now).start / 1000, cur = PM.cur, nxt = PM.nxt;
   if (cur && cur.wts >= rs) {
-    if (!preloading && now >= preloadRetryT && (!nxt || nxt.wts !== cur.wts + 300)) preloadNext();
+    if (!PM.preloading && now >= PM.preloadRetryT && (!nxt || nxt.wts !== cur.wts + ROUND_S)) preloadNext();
     return;
   }
-  if (loadingMarket) return;
+  if (PM.loading) return;
   if (nxt && nxt.wts === rs) return promoteNext();
-  retireFeed(cur);
-  if (nxt && nxt.wts < rs) retireFeed(nxt);   // away for over a round: the preloaded one has ended too
-  if (now >= marketRetryT) loadPolymarket();
+  retireFeed(PM, cur);
+  if (nxt && nxt.wts < rs) retireFeed(PM, nxt);   // away for over a round: the preloaded one has ended too
+  if (now >= PM.retryT) loadPolymarket();
 }
 
 // the round is over and nothing is ready to take over (load failed, or back from the background):
 // stop its feed and drop its book. Polymarket keeps an ended round trading until it resolves,
 // and that after-hours book must not pass for the running round's.
-function retireFeed(f) {
+function retireFeed(V, f) {
   if (!f || f.closed) return;
   closeFeed(f);
   f.bids = {}; f.asks = {}; f.mid = null; f.last = null; f.ver++;
   f.stamp = 'Round ended · loading the next market…';
-  if (f === cur) upProb = lastProbValue = null;
+  if (f === V.cur) V.up = V.lastProb = null;
 }
 
 async function preloadNext() {
-  const wts = cur.wts + 300;
-  preloading = true;
+  const wts = PM.cur.wts + ROUND_S, gen = modeGen;
+  PM.preloading = true;
   try {
     const event = await fetchEvent(wts);
     const m = event && parseMarket(event, wts);
     if (!m?.yesId) throw new Error('next round not listed yet');
-    if (!cur || cur.wts + 300 !== wts) return;
-    closeFeed(nxt);
-    nxt = makeFeed(m);
-    roundMeta.set(wts, m);
-    connectFeed(nxt);
+    if (gen !== modeGen || !PM.cur || PM.cur.wts + ROUND_S !== wts) return;
+    closeFeed(PM.nxt);
+    PM.nxt = makeFeed(m);
+    PM.meta.set(wts, m);
+    connectFeed(PM.nxt);
   } catch (e) {
-    preloadRetryT = Date.now() + 10_000;
+    if (gen === modeGen) PM.preloadRetryT = Date.now() + 10_000;
   } finally {
-    preloading = false;
+    if (gen === modeGen) PM.preloading = false;
   }
 }
 
 // keep a finished round's live probability path for the round menu
-function archiveRound(f) {
-  if (!f || !probHistory.length) return;
-  probArchive.set(f.wts, probHistory.slice());
-  if (probArchive.size > 8) probArchive.delete(probArchive.keys().next().value);
+function archiveRound(V) {
+  if (!V.cur || !V.prob.length) return;
+  V.archive.set(V.cur.wts, V.prob.slice());
+  if (V.archive.size > 12) V.archive.delete(V.archive.keys().next().value);
 }
 
 function promoteNext() {
-  archiveRound(cur);
-  closeFeed(cur);
-  cur = nxt; nxt = null;
-  windowTs = cur.wts;
+  archiveRound(PM);
+  closeFeed(PM.cur);
+  const cur = PM.cur = PM.nxt;
+  PM.nxt = null;
   const from = cur.wts * 1000 - TWAP_MS;
-  probHistory.length = 0;
-  for (const p of cur.hist) if (p.t >= from) probHistory.push(p);
+  PM.prob.length = 0;
+  for (const p of cur.hist) if (p.t >= from) PM.prob.push(p);
   cur.hist = [];
-  upProb = lastProbValue = cur.mid !== null ? cur.mid * 100 : null;
-  $('market-title').textContent = cur.question;
+  PM.up = PM.lastProb = cur.mid !== null ? cur.mid * 100 : null;
+  updateTitle();
   if (bookView === 'next') setBookView('now');
-  preloadRetryT = 0;
+  PM.preloadRetryT = 0;
   fetchVol();
   refreshRounds();
 }
 
-async function backfillProbHistory(yesId) {
-  const roundStart = windowTs * 1000;
-  const roundEnd   = roundStart + 300_000;
+// probability so far in the running round (Polymarket keeps about one point a minute), ahead of the live points
+async function backfillProbHistory(f) {
+  const roundStart = f.wts * 1000, roundEnd = roundStart + ROUND_MS;
   try {
-    const r = await fetch(`https://clob.polymarket.com/prices-history?market=${yesId}&interval=all&fidelity=1`);
+    // a time range, not interval=all: that thins out markets listed long before (15m rounds: ~1 point per round)
+    const r = await fetch(`https://clob.polymarket.com/prices-history?market=${f.yesId}&startTs=${f.wts - 60}&endTs=${Math.floor(Date.now() / 1000)}&fidelity=1`);
     if (!r.ok) return;
     const d = await r.json();
-    if (!Array.isArray(d.history)) return;
-    const slice = d.history
-      .filter(h => { const ts = h.t * 1000; return ts >= roundStart && ts < roundEnd; })
-      .sort((a, b) => a.t - b.t);
-    for (const { t, p } of slice) probHistory.push({ t: t * 1000, p: p * 100 });
+    if (!Array.isArray(d.history) || PM.cur !== f) return;
+    const first = PM.prob[0]?.t ?? Infinity;
+    PM.prob.unshift(...d.history.map(h => ({ t: h.t * 1000, p: h.p * 100 }))
+      .filter(h => h.t >= roundStart - TWAP_MS && h.t < roundEnd && h.t < first).sort((a, b) => a.t - b.t));
   } catch {}
 }
 
 // full (re)load: first start, or when no preloaded market fits (e.g. back after a long time in the background)
 async function loadPolymarket() {
-  if (loadingMarket) return;
-  loadingMarket = true;
+  if (PM.loading) return;
+  PM.loading = true;
+  const gen = modeGen;
   try {
-    $('market-title').textContent = 'Loading market…';
+    updateTitle('Loading market…');
     fetchVol();
     refreshRounds();
     const result = await findMarket();
+    if (gen !== modeGen) return;
     const m = result && parseMarket(result.event, result.wts);
     if (!m?.yesId) {
-      $('market-title').textContent = 'No active market – retrying…';
-      marketRetryT = Date.now() + 8000;
+      updateTitle('No active market – retrying…');
+      PM.retryT = Date.now() + 8000;
       return;
     }
-    if (cur && cur.wts !== m.wts) archiveRound(cur);
-    closeFeed(cur);
-    if (nxt && nxt.wts <= m.wts) { closeFeed(nxt); nxt = null; }
-    cur = makeFeed(m);
-    roundMeta.set(m.wts, m);
-    windowTs = m.wts;
-    probHistory.length = 0;
-    upProb = lastProbValue = null;
-    $('market-title').textContent = m.question;
-    await backfillProbHistory(m.yesId);
-    connectFeed(cur);
+    if (PM.cur && PM.cur.wts !== m.wts) archiveRound(PM);
+    closeFeed(PM.cur);
+    if (PM.nxt && PM.nxt.wts <= m.wts) { closeFeed(PM.nxt); PM.nxt = null; }
+    const f = PM.cur = makeFeed(m);
+    PM.meta.set(m.wts, m);
+    PM.prob.length = 0;
+    PM.up = PM.lastProb = null;
+    updateTitle();
+    await backfillProbHistory(f);
+    if (gen === modeGen && PM.cur === f) connectFeed(f);
   } finally {
-    loadingMarket = false;
+    if (gen === modeGen) PM.loading = false;
   }
+}
+
+// ── Kalshi ───────────────────────────────────────────────────────────────────
+// Series KXBTC15M, "BTC price up in next 15 mins?": Yes if the average of the 60 CF Benchmarks BRTI prints
+// before the end is at least the same average before the start — Polymarket's rule on another index. Kalshi
+// publishes that start average as the market's target price (floor_strike).
+// Its REST API only answers browsers on kalshi.com (CORS) and its WebSocket needs an API key, so requests go
+// through a small proxy (kalshi-proxy/, a Cloudflare Worker) and the book is polled once a second.
+// ?kalshi=<proxy url> sets another proxy and is remembered in this browser (?kalshi= with nothing clears it).
+const KALSHI_PROXY_DEFAULT = 'https://kalshi-proxy.mariusrapp-kit.workers.dev';
+const KALSHI_PROXY = (() => {
+  let q = null;
+  try { q = new URLSearchParams(location.search).get('kalshi'); } catch {}
+  try {
+    if (q !== null) q ? localStorage.setItem('kalshi-proxy', q) : localStorage.removeItem('kalshi-proxy');
+    q = localStorage.getItem('kalshi-proxy') || q;
+  } catch {}
+  return (q || KALSHI_PROXY_DEFAULT).replace(/\/+$/, '');
+})();
+const KS_SERIES = 'KXBTC15M';
+// with a timeout: a hung request must not stall the once-a-second poll
+const kapi = async path => {
+  const url = `${KALSHI_PROXY}/trade-api/v2${path}`, r = await fetch(url, { signal: AbortSignal.timeout(8000) });
+  if (!r.ok) throw new Error(r.status + ' ' + url);
+  return r.json();
+};
+
+function ksParse(m) {
+  const last = +m.last_price_dollars;
+  return { wts: Date.parse(m.close_time) / 1000 - 900, ticker: m.ticker, question: m.title || 'BTC price up in next 15 mins?',
+           status: m.status, strike: m.floor_strike ?? null, settle: m.expiration_value ? +m.expiration_value : null,
+           result: m.result === 'yes' ? 'up' : m.result === 'no' ? 'down' : 'pending', last: last > 0 ? last : null };
+}
+
+// the market that closes when the round starting at `wts` ends
+async function ksMarket(wts) {
+  const e = wts + 900;
+  const d = await kapi(`/markets?series_ticker=${KS_SERIES}&min_close_ts=${e}&max_close_ts=${e}`);
+  const m = (d.markets || []).find(x => Date.parse(x.close_time) / 1000 === e);
+  return m ? ksParse(m) : null;
+}
+
+function ksNote(m) {
+  KS.meta.set(m.wts, m);
+  setResult(KS, m.wts, m.result);
+}
+
+// official results: one call lists the last rounds with result, target and settlement value
+async function ksRefreshResults() {
+  if (!KALSHI_PROXY) return;
+  try {
+    const d = await kapi(`/markets?series_ticker=${KS_SERIES}&status=settled&limit=${ROUNDS_SHOWN + 4}`);
+    for (const x of d.markets || []) ksNote(ksParse(x));
+  } catch (e) { console.warn('kalshi results:', e.message); }
+}
+
+async function ksFetchResult(ts) {
+  if (!KALSHI_PROXY) return;
+  try { const m = await ksMarket(ts); if (m) ksNote(m); } catch {}
+}
+
+// book: YES bids are UP bids; a NO bid at q is an UP ask at 1 − q. Prices in 0.1¢ units, like Polymarket's.
+function ksSetBook(f, ob) {
+  const bids = {}, asks = {};
+  for (const [p, s] of ob.yes_dollars || []) { const k = Math.round(p * 1000); if (k > 0 && k < 1000 && +s > 0) bids[k] = +s; }
+  for (const [p, s] of ob.no_dollars  || []) { const k = 1000 - Math.round(p * 1000); if (k > 0 && k < 1000 && +s > 0) asks[k] = +s; }
+  f.bids = bids; f.asks = asks;
+  // Kalshi quotes 0.1¢ steps below 10¢ and above 90¢: 0.1¢ rows only while the touch is out there
+  let bb = 0, ba = 1000;
+  for (const k in bids) if (+k > bb) bb = +k;
+  for (const k in asks) if (+k < ba) ba = +k;
+  f.fine = bb >= 900 || ba <= 100;
+  onBookChange(KS, f);
+}
+
+let ksTimer = null, ksPolls = 0, ksFails = 0;
+function ksSchedule(ms) { clearTimeout(ksTimer); ksTimer = setTimeout(ksPoll, ms); }
+
+// book every second; the market itself (target price, last trade) every 5th time, more often until the target is out
+async function ksPoll() {
+  const f = KS.cur;
+  if (!KS.on || !f || f.closed) return;
+  const n = ksPolls++, withMarket = n % 5 === 0 || (f.strike == null && n % 2 === 0);
+  try {
+    const [ob, md] = await Promise.all([
+      kapi(`/markets/${f.ticker}/orderbook`),
+      withMarket ? kapi(`/markets/${f.ticker}`) : null,
+    ]);
+    if (f !== KS.cur || f.closed) return;
+    if (md?.market) {
+      const m = ksParse(md.market);
+      if (m.strike != null) f.strike = m.strike;
+      if (m.last !== null) f.last = m.last;
+      f.status = m.status;
+    }
+    ksSetBook(f, ob.orderbook_fp || {});
+    ksFails = 0;
+    f.state = 'live'; f.lastMsgT = Date.now(); f.stamp = 'Live · polled ' + fmtClock(f.lastMsgT);
+  } catch (e) {
+    ksFails++;
+    if (f === KS.cur) { f.state = 'err'; f.stamp = 'Proxy unreachable · retrying…'; }
+    console.warn('kalshi poll:', e.message);
+  } finally {
+    if (f === KS.cur && !f.closed) ksSchedule(ksFails ? Math.min(15_000, 1000 * 2 ** ksFails) : document.hidden ? 5000 : 1000);
+  }
+}
+
+function ksStart(m, backfill) {
+  if (KS.cur && KS.cur.wts !== m.wts) archiveRound(KS);
+  closeFeed(KS.cur);
+  const f = KS.cur = makeFeed(m);
+  KS.meta.set(m.wts, m);
+  KS.prob.length = 0;
+  KS.up = KS.lastProb = null;
+  if (KS.upcoming && KS.upcoming.wts <= m.wts) KS.upcoming = null;
+  if (backfill) ksBackfillProb(f);
+  ksPolls = 0; ksFails = 0;
+  ksSchedule(0);
+  updateTitle();
+}
+
+async function ksLoad() {
+  if (KS.loading) return;
+  if (!KALSHI_PROXY) { KS.retryT = Date.now() + 60_000; if (!PM.on) updateTitle('Kalshi needs its proxy — see README'); return; }
+  KS.loading = true;
+  const gen = modeGen, wts = currentRound().start / 1000;
+  try {
+    if (!PM.on) { fetchVol(); refreshRounds(); }
+    const m = await ksMarket(wts);
+    if (gen !== modeGen || !KS.on) return;
+    if (!m) throw new Error('no market for this round yet');
+    ksStart(m, true);
+  } catch (e) {
+    if (gen === modeGen) KS.retryT = Date.now() + 8000;
+    console.warn('kalshi load:', e.message);
+  } finally {
+    if (gen === modeGen) KS.loading = false;
+  }
+}
+
+// Kalshi's next market only opens when the round starts: fetch its ticker ahead, switch at the boundary
+function ksCheckSwitch(now) {
+  const rs = currentRound(now).start / 1000;
+  if (KS.cur && KS.cur.wts >= rs) {
+    if (!KS.preloading && now >= KS.preloadRetryT && (!KS.upcoming || KS.upcoming.wts !== KS.cur.wts + 900)) ksPreload();
+    return;
+  }
+  if (KS.loading) return;
+  if (KS.upcoming && KS.upcoming.wts === rs) {
+    ksStart(KS.upcoming, false);
+    if (!PM.on) { fetchVol(); refreshRounds(); }
+    return;
+  }
+  retireFeed(KS, KS.cur);
+  if (now >= KS.retryT) ksLoad();
+}
+
+async function ksPreload() {
+  const wts = KS.cur.wts + 900, gen = modeGen;
+  KS.preloading = true;
+  try {
+    const m = await ksMarket(wts);
+    if (gen !== modeGen) return;
+    if (!m) throw new Error('next market not listed yet');
+    KS.upcoming = m;
+  } catch {
+    if (gen === modeGen) KS.preloadRetryT = Date.now() + 15_000;
+  } finally {
+    if (gen === modeGen) KS.preloading = false;
+  }
+}
+
+// one point per minute: mid of each minute's closing YES bid and ask (minutes with an empty side are skipped)
+function ksCandlePoints(d) {
+  const out = [];
+  for (const c of d.candlesticks || []) {
+    const b = +c.yes_bid?.close_dollars, a = +c.yes_ask?.close_dollars;
+    if (b > 0 && a < 1 && a >= b) out.push({ t: c.end_period_ts * 1000, p: (a + b) / 2 * 100 });
+  }
+  return out;
+}
+
+const ksCandles = (ticker, ts) =>
+  kapi(`/series/${KS_SERIES}/markets/${ticker}/candlesticks?start_ts=${ts}&end_ts=${ts + 900}&period_interval=1`);
+
+// probability so far in the running round, from 1-minute candles, ahead of the live points
+async function ksBackfillProb(f) {
+  try {
+    const d = await ksCandles(f.ticker, f.wts);
+    if (KS.cur !== f) return;
+    const first = KS.prob[0]?.t ?? Infinity, now = Date.now();
+    KS.prob.unshift(...ksCandlePoints(d).filter(p => p.t < first && p.t < now));
+  } catch {}
+}
+
+// a past round: the live mids recorded while it ran, else 1-minute candles. (Its trades would be finer, but a
+// round has tens of thousands of them and Kalshi allows only ~5–10 requests a second, shared with the live book.)
+async function ksReviewProb(ts) {
+  const arch = KS.archive.get(ts);
+  if (arch?.length && arch[0].t <= ts * 1000 + 30_000) return Object.assign(arch.slice(), { src: 'live' });
+  let m = KS.meta.get(ts);
+  if (!m) { m = await ksMarket(ts); if (!m) return []; KS.meta.set(ts, m); }
+  return Object.assign(ksCandlePoints(await ksCandles(m.ticker, ts)), { src: 'candles' });
+}
+
+// ── Market switch: venue(s) and round length; exchange feeds keep running ───
+function updateTitle(msg) {
+  const len = ROUND_S / 60, f = mainVenue().cur;
+  $('brand-len').textContent = `· ${len}-minute rounds`;
+  document.title = `BTC ${len}m · ${both() ? 'Polymarket vs Kalshi' : mainVenue().name}`;
+  $('market-title').textContent = msg ?? (
+    both() ? `Polymarket + Kalshi · ${roundSpan(currentRound().start / 1000)}` :
+    !f ? 'Loading market…' :
+    venueMode === 'kalshi' ? `${f.question} · ${roundSpan(f.wts)}` : f.question);
+}
+
+// buttons, legends, toggles and cards that depend on the mode
+function syncModeUI() {
+  document.body.classList.toggle('both', both());
+  document.querySelectorAll('[data-venue]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.venue === venueMode)));
+  document.querySelectorAll('[data-len]').forEach(b => {
+    b.setAttribute('aria-pressed', String(+b.dataset.len === ROUND_S / 60));
+    b.disabled = venueMode !== 'poly' && b.dataset.len === '5';
+  });
+  $('venue-note').hidden = venueMode === 'poly';
+  $('up-venue').textContent = both() ? '· market' : '· ' + mainVenue().name;
+  for (const id of ['up-prob', 'up-bar']) $(id).hidden = both();
+  $('up-pair').hidden = !both();
+  for (const id of ['leg-pm', 'leg-ks', 'gap-toggle']) $(id).hidden = !both();
+  $('leg-gap').hidden = !both() || !showGap;
+  $('card-arb').hidden = !both();
+  $('book-venue').hidden = !both();
+  document.querySelectorAll('[data-bv]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.bv === bookVenue)));
+  document.querySelectorAll('#src [data-v]').forEach(el => el.hidden = !(el.dataset.v === 'poly' ? PM.on : KS.on));
+  updateTitle();
+}
+
+function setMode(venue, lenMin) {
+  const prevLen = ROUND_MS;
+  venueMode = venue;
+  if (lenMin) polyLenMin = lenMin;
+  saveOpts();
+  modeGen++;
+  if (review) selectRound(null);
+  applyRoundLen();
+  for (const V of VENUES) {
+    closeFeed(V.cur); closeFeed(V.nxt);
+    V.cur = V.nxt = V.upcoming = null;
+    V.up = V.lastProb = null; V.prob.length = 0;
+    V.loading = V.preloading = false; V.retryT = V.preloadRetryT = 0;
+  }
+  clearTimeout(ksTimer);
+  if (ROUND_MS !== prevLen) { PM.results.clear(); PM.meta.clear(); PM.archive.clear(); }   // other markets, same start times
+  PM.on = venueMode !== 'kalshi';
+  KS.on = venueMode !== 'poly';
+  strikeRound = null;
+  delete yRange.btc; delete yRange.prob;
+  lroundKey = ''; lad.feed = undefined;
+  syncModeUI();
+  renderRounds();
+  // a longer round needs more history for the chart and the strike window
+  const need = currentRound().start - TWAP_MS - 10_000;
+  if (!medianHistory.length || medianHistory[0].t > need) backfill(need);
+  if (PM.on) loadPolymarket();
+  if (KS.on) ksLoad();
 }
 
 // ── Order book ladder: one row per price, the mid line moves through them ────
@@ -1849,6 +2443,13 @@ function setBookView(v) {
   document.querySelectorAll('[data-book]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.book === v)));
 }
 
+// which venue's book the card shows: the one venue, or the one picked in the card with both on
+const bookV = () => both() ? (bookVenue === 'kalshi' ? KS : PM) : mainVenue();
+function setBookVenue(v) {
+  bookVenue = v;
+  document.querySelectorAll('[data-bv]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.bv === v)));
+}
+
 function setBookSide(s) {
   bookSide = s;
   document.querySelectorAll('[data-side]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.side === s)));
@@ -1861,10 +2462,11 @@ const mirrorBook = book => { const m = {}; for (const k in book) m[1000 - k] = b
 // rows indexed by price / tick (1¢, or 0.1¢ once the market uses 0.1¢ ticks); totals add up from the touch outwards
 function ladderModel(f, down) {
   const unit = f.fine ? 1 : 10;
+  // levels finer than the row (Kalshi's 0.1¢ steps far from the touch, on a 1¢ grid) add up into their row
   const side = (book, desc) => {
     const ks = Object.keys(book).map(Number).sort((a, b) => desc ? b - a : a - b), m = new Map();
     let cum = 0;
-    for (const k of ks) { cum += book[k]; m.set(Math.round(k / unit), { sz: book[k], cum }); }
+    for (const k of ks) { cum += book[k]; const i = Math.round(k / unit); m.set(i, { sz: (m.get(i)?.sz ?? 0) + book[k], cum }); }
     return { m, best: ks.length ? Math.round(ks[0] / unit) : null };
   };
   const b = side(down ? mirrorBook(f.asks) : f.bids, true), a = side(down ? mirrorBook(f.bids) : f.asks, false);
@@ -1886,23 +2488,25 @@ function ladderMeta(f, M) {
 
 // the line above the ladder: which round this book is, and a note while the charts show another round
 let lroundKey = '';
-function ladderRound(f) {
-  const ts = f ? f.wts : currentRound().start / 1000 + (bookView === 'next' ? 300 : 0);
-  const key = `${bookView}|${ts}|${f?.closed}|${review?.ts}`;
+function ladderRound(V, f) {
+  const ts = f ? f.wts : currentRound().start / 1000 + (bookView === 'next' ? ROUND_S : 0);
+  const key = `${V.key}|${bookView}|${ts}|${f?.closed}|${review?.ts}|${ROUND_S}`;
   if (key === lroundKey) return;
   lroundKey = key;
   const el = $('lround'), span = roundSpan(ts), note = !!review && bookView === 'now' && !f?.closed;
+  const pre = both() ? V.name + ' · ' : '';
   el.classList.toggle('note', note);
-  if (note) el.innerHTML = `<b>Live round ${span}</b> — not the ${roundSpan(review.ts)} round in the charts. ` +
-                           `Polymarket keeps no order book history, so past rounds have none.`;
-  else el.textContent = f?.closed ? `Round ${span} ended`
-                      : bookView === 'next' ? `Next round · ${span} · already trading` : `Live round · ${span}`;
+  if (note) el.innerHTML = `<b>${pre}Live round ${span}</b> — not the ${roundSpan(review.ts)} round in the charts. ` +
+                           `${V.name} keeps no order book history, so past rounds have none.`;
+  else el.textContent = pre + (f?.closed ? `Round ${span} ended`
+                      : bookView !== 'next' ? `Live round · ${span}`
+                      : V === KS ? `Next round · ${span} · not trading yet` : `Next round · ${span} · already trading`);
 }
 
 // runs every frame; touches the DOM only when the book changed or the window / mid line is moving
 function renderLadder(dt) {
-  const f = bookView === 'next' ? nxt : cur;
-  ladderRound(f);
+  const V = bookV(), f = bookView === 'next' ? V.nxt : V.cur;
+  ladderRound(V, f);
   if (f !== lad.feed || bookSide !== lad.side) {   // other book: jump to it instead of scrolling there
     lad.feed = f; lad.side = bookSide; lad.ver = -1; lad.M = null; lad.T = null; lad.target = null; ladderMeta(f, null);
   }
@@ -1910,7 +2514,8 @@ function renderLadder(dt) {
 
   const M = lad.M, emptyEl = $('lempty');
   if (!M || M.mid === null) {
-    const msg = !f ? (bookView === 'next' ? 'Next round not listed yet…' : 'Waiting for market…')
+    const msg = V === KS && !KALSHI_PROXY ? 'Kalshi needs its proxy (see README)'
+              : !f ? (bookView !== 'next' ? 'Waiting for market…' : V === KS ? 'Kalshi opens the next market when this round ends' : 'Next round not listed yet…')
               : f.closed ? 'Round over · loading the next market…' : 'Waiting for book…';
     if (lad.drawn !== msg) {
       lad.drawn = msg; emptyEl.textContent = msg; emptyEl.hidden = false; $('lmid').hidden = true;
@@ -1977,19 +2582,19 @@ async function reviewBtc(start, end) {
   return { pts: d.map(k => ({ t: k[0], p: +k[4] * usdtUsd })), src: 'Binance 1s (USDT→USD)' };
 }
 
-async function reviewProb(ts) {
-  const arch = probArchive.get(ts);
+async function pmReviewProb(ts) {
+  const arch = PM.archive.get(ts);
   if (arch?.length && arch[0].t <= ts * 1000 + 15_000) return arch;
-  let m = roundMeta.get(ts);
+  let m = PM.meta.get(ts);
   if (!m) {
     const ev = await fetchEvent(ts);
     if (!ev) return [];
-    m = parseMarket(ev, ts); roundMeta.set(ts, m);
+    m = parseMarket(ev, ts); PM.meta.set(ts, m);
   }
-  const a = ts - 60, b = ts + 300, bySec = new Map();
+  const a = ts - 60, b = ts + ROUND_S, bySec = new Map();
   try {
     let cursor = '';
-    for (let page = 0; page < 10; page++) {
+    for (let page = 0; page < ROUND_S / 30; page++) {   // ~1000 trades cover a few minutes
       const d = await getJSON(`https://data-api.polymarket.com/v2/trades?conditionId=${m.cid}&limit=1000${cursor}`);
       const rows = d.data || [];
       let oldest = Infinity;
@@ -2020,22 +2625,24 @@ async function selectRound(ts) {
   ts = +ts || null;
   if (ts && ts >= currentRound().start / 1000) ts = null;     // the running round is the live view
   if ((review?.ts ?? null) === ts) return;
-  const r = review = ts ? { ts, start: ts * 1000, end: ts * 1000 + ROUND_MS, btc: [], prob: [], loading: true, src: '' } : null;
+  const r = review = ts ? { ts, start: ts * 1000, end: ts * 1000 + ROUND_MS, btc: [], probs: {}, loading: true, src: '' } : null;
   delete yRange.btc; delete yRange.prob;
   hoverFrac = null;
   syncReview();
   if (!r) return;
-  const res = roundResults.get(ts);
-  if (res !== 'up' && res !== 'down') fetchRoundResult(ts).then(() => { if (review === r) syncReview(); });
-  const [btc, prob] = await Promise.allSettled([reviewBtc(r.start, r.end), reviewProb(ts)]);
+  const done = res => res === 'up' || res === 'down';
+  if (PM.on && !done(PM.results.get(ts))) pmFetchResult(ts).then(() => { if (review === r) syncReview(); });
+  if (KS.on && !done(KS.results.get(ts))) ksFetchResult(ts).then(() => { if (review === r) syncReview(); });
+  const vs = activeVenues();
+  const [btc, ...probs] = await Promise.allSettled([reviewBtc(r.start, r.end), ...vs.map(V => V === PM ? pmReviewProb(ts) : ksReviewProb(ts))]);
   if (review !== r) return;
   if (btc.status === 'fulfilled') {
     r.btc = btc.value.pts; r.src = btc.value.src;
     r.strike = twap(r.btc, r.start - TWAP_MS, r.start);
     r.settle = twap(r.btc, r.end - TWAP_MS, r.end);
   } else console.warn('round btc:', btc.reason?.message);
-  if (prob.status === 'fulfilled') r.prob = prob.value; else console.warn('round prob:', prob.reason?.message);
-  r.failed = btc.status === 'rejected' && prob.status === 'rejected';
+  probs.forEach((p, i) => { if (p.status === 'fulfilled') r.probs[vs[i].key] = p.value; else console.warn('round prob', vs[i].key, p.reason?.message); });
+  r.failed = btc.status === 'rejected' && probs.every(p => p.status === 'rejected');
   r.loading = false;
   delete yRange.btc; delete yRange.prob;
   syncReview();
@@ -2059,14 +2666,18 @@ function syncReview() {
   syncBandLegend();
   if (!r) return;
   $('rv-title').textContent = roundSpan(r.ts);
-  const res = roundResults.get(r.ts), el = $('rv-res');
+  const res = roundResult(r.ts), el = $('rv-res');
   el.className = 'rv-res ' + (res === 'up' || res === 'down' ? res : '');
-  el.textContent = res === 'up' ? '▲ Up' : res === 'down' ? '▼ Down' : 'result pending';
-  el.title = 'Official result (Polymarket)';
+  el.textContent = res === 'up' || res === 'down' || res === 'split' ? resultName(r.ts, res) : 'result pending';
+  el.title = `Official result (${activeVenues().map(V => V.name).join(', ')})`;
+  // Kalshi publishes both averages of a round: its target (start) and the settlement value (end)
+  const km = KS.on ? KS.meta.get(r.ts) : null;
+  const kTxt = (km?.strike != null && km?.settle != null ? `Kalshi ${fmtP(km.strike)} → ${fmtP(km.settle)} (${signedUsd(km.settle - km.strike)}) · ` : '') +
+               (r.probs.kalshi?.src === 'candles' ? 'Kalshi probability: 1-minute candles · ' : '');
   $('rv-sub').textContent = r.loading ? 'Loading round…' : r.failed ? 'Could not load this round' :
     (r.strike != null && r.settle != null
       ? `Strike ${fmtP(r.strike)} → settlement avg ${fmtP(r.settle)} (${signedUsd(r.settle - r.strike)}) · ` : '') +
-    `BTC: ${r.src || 'no data'}`;
+    kTxt + `BTC: ${r.src || 'no data'}`;
 }
 
 // ── Chainlink (Polygon) — shared provider + on-chain strike cross-check ──────
@@ -2161,10 +2772,14 @@ EXCH.forEach((ex, i) => {
 srcEl.insertAdjacentHTML('beforeend',
   `<span class="src-name"><i class="lk ghost"></i>Chainlink · Polygon</span>` +
   `<span class="src-v" id="sp-cl">—</span><span class="src-d" id="sd-cl">—</span><span class="src-s"><i class="dot" id="sdot-cl"></i></span>` +
-  `<span class="src-name"><i class="lk ghost"></i>Chainlink strike <span class="muted">· vs 60s avg</span></span>` +
-  `<span class="src-v" id="sp-cls">—</span><span class="src-d" id="sd-cls">—</span><span class="src-s"><i class="dot" id="sdot-cls"></i></span>` +
-  `<span class="src-name"><i class="lk ghost"></i>Polymarket book</span>` +
-  `<span class="src-v" id="sp-pm" style="grid-column:span 2">—</span><span class="src-s"><i class="dot" id="sdot-pm"></i></span>`);
+  `<span class="src-name" data-v="poly"><i class="lk ghost"></i>Chainlink strike <span class="muted">· vs 60s avg</span></span>` +
+  `<span class="src-v" id="sp-cls" data-v="poly">—</span><span class="src-d" id="sd-cls" data-v="poly">—</span><span class="src-s" data-v="poly"><i class="dot" id="sdot-cls"></i></span>` +
+  `<span class="src-name" data-v="poly"><i class="lk pm"></i>Polymarket book</span>` +
+  `<span class="src-v" id="sp-pm" data-v="poly" style="grid-column:span 2">—</span><span class="src-s" data-v="poly"><i class="dot" id="sdot-pm"></i></span>` +
+  `<span class="src-name" data-v="kalshi"><i class="lk ghost"></i>Kalshi target <span class="muted">· vs 60s avg</span></span>` +
+  `<span class="src-v" id="sp-kst" data-v="kalshi">—</span><span class="src-d" id="sd-kst" data-v="kalshi">—</span><span class="src-s" data-v="kalshi"><i class="dot" id="sdot-kst"></i></span>` +
+  `<span class="src-name" data-v="kalshi"><i class="lk ks"></i>Kalshi book <span class="muted">· via proxy</span></span>` +
+  `<span class="src-v" id="sp-ks" data-v="kalshi" style="grid-column:span 2">—</span><span class="src-s" data-v="kalshi"><i class="dot" id="sdot-ks"></i></span>`);
 srcEl.addEventListener('change', e => {
   const ex = EX[e.target.dataset.key];
   if (!ex) return;
@@ -2188,6 +2803,21 @@ $('show-bands').addEventListener('change', e => {
   syncBandLegend();
   saveOpts();
 });
+$('show-gap').checked = showGap;
+$('show-gap').addEventListener('change', e => {
+  showGap = e.target.checked;
+  $('leg-gap').hidden = !both() || !showGap;
+  saveOpts();
+});
+
+// market switch: Polymarket / Kalshi / both, and the round length (Polymarket alone only)
+document.querySelectorAll('[data-venue]').forEach(b => b.addEventListener('click', () => {
+  if (b.dataset.venue !== venueMode) setMode(b.dataset.venue);
+}));
+document.querySelectorAll('[data-len]').forEach(b => b.addEventListener('click', () => {
+  if (!b.disabled && +b.dataset.len !== ROUND_S / 60) setMode(venueMode, +b.dataset.len);
+}));
+document.querySelectorAll('[data-bv]').forEach(b => b.addEventListener('click', () => { setBookVenue(b.dataset.bv); saveOpts(); }));
 
 // time window buttons (they belong to the live view: picking one while a past round is open goes back to live)
 const winBtns = document.querySelectorAll('#win-seg button');
@@ -2228,13 +2858,21 @@ const btcTip = makeTip('btc-tip', [
   { id:'vs',  label:'vs strike', key:'ghost' },
   ...EXCH.map((ex, i) => ({ id: ex.key, label: ex.name, key: ' ', color: `var(--ex-${i + 1})` })),
 ]);
-const probTip = makeTip('prob-tip', [{ id:'up', label:'UP probability', key:' ' }]);
+const probTip = makeTip('prob-tip', [
+  { id:'up',  label:'UP probability', key:' ' },
+  { id:'pm',  label:'Polymarket', key:'pm' },
+  { id:'ks',  label:'Kalshi',     key:'ks' },
+  { id:'gap', label:'Gap',        key:'ghost' },
+]);
 
 readTheme();
 const btcC  = setupCanvas('btc-canvas');
 const probC = setupCanvas('prob-canvas');
 attachHover(btcC.el, 'btc');
 attachHover(probC.el, 'prob');
+PM.on = venueMode !== 'kalshi';
+KS.on = venueMode !== 'poly';
+syncModeUI();
 renderRounds();
 syncBandLegend();
 
@@ -2242,18 +2880,19 @@ seedUsdt().finally(connectExchanges);   // rate first, so no Binance trade is st
 // history for the chart, the strike window before the round and the model — then live feeds take over
 backfill(Math.min(Date.now() - 300_000, currentRound().start - TWAP_MS - 10_000));
 pollChainlink();
-loadPolymarket();
+if (PM.on) loadPolymarket();
+if (KS.on) ksLoad();
 requestAnimationFrame(render);
 
-// Safety sampler: ensure probHistory always has a recent point even during quiet markets
-setInterval(() => { if (lastProbValue !== null) pushProbPoint(lastProbValue); }, 1000);
+// Safety sampler: ensure each probability history always has a recent point even during quiet markets
+setInterval(() => { for (const V of activeVenues()) if (V.lastProb !== null) pushProbPoint(V, V.lastProb); }, 1000);
 setInterval(refreshRounds, 30_000);
 
 // watchdog: mobile browsers can leave sockets open but silent — close them so they reconnect
 setInterval(() => {
   const now = Date.now();
   for (const ex of EXCH) if (ex.ws && ex.ws.readyState === 1 && now - ex.lastMsgT > 90_000) ex.ws.close();
-  for (const f of [cur, nxt]) if (f?.ws && f.ws.readyState === 1 && now - f.lastMsgT > 90_000) f.ws.close();
+  for (const f of [PM.cur, PM.nxt]) if (f?.ws && f.ws.readyState === 1 && now - f.lastMsgT > 90_000) f.ws.close();
 }, 10_000);
 
 // back from the background (phone locked, tab switched): reconnect stale feeds and refill the gap
@@ -2265,7 +2904,8 @@ document.addEventListener('visibilitychange', () => {
   if (away < 15_000) return;
   const now = Date.now();
   for (const ex of EXCH) if (ex.ws && now - ex.lastMsgT > 10_000) ex.ws.close();
-  for (const f of [cur, nxt]) if (f?.ws && now - f.lastMsgT > 10_000) f.ws.close();
+  for (const f of [PM.cur, PM.nxt]) if (f?.ws && now - f.lastMsgT > 10_000) f.ws.close();
+  if (KS.on && KS.cur && !KS.cur.closed) ksSchedule(0);   // the poll slowed down in the background
   // a round that ended meanwhile is switched by checkRoundSwitch (reloads if the preloaded one is stale too)
   backfill(now - Math.min(away + 30_000, 6 * 60_000));
   refreshRounds();
