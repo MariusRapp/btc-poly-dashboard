@@ -9,7 +9,7 @@ Läuft komplett im Browser – kein Backend, kein Build-Schritt, keine API-Keys.
 
 | Datei | Inhalt |
 |---|---|
-| `index.html` | Haupt-Dashboard: BTC-Median gegen den Strike, Countdown, implizite UP-Wahrscheinlichkeit, Polymarket-Orderbuch, Signale, letzte Runden mit offiziellen Ergebnissen und eigener Trefferquote. Für Desktop, Tablet und Handy, mit Light- und Dark-Mode. |
+| `index.html` | Haupt-Dashboard: BTC-Median gegen den Strike, Countdown, implizite UP-Wahrscheinlichkeit, Polymarket-Orderbuch (feste Preisleiter, das Mid wandert; umschaltbar auf die nächste Runde), Signale, die letzten 2 Stunden mit offiziellen Ergebnissen – jede Runde im Chart abrufbar – und eigene Trefferquote. Für Desktop, Tablet und Handy, mit Light- und Dark-Mode. |
 | `btc-stream.html` | Schlanker BTC/USD-Tick-Stream (Binance aggTrade) mit Volumen und Buy Pressure. |
 | `poly.ipynb` | Jupyter-Notebook: Polymarket-Orderbuch als ipywidgets-Dashboard und Strike-Suche über den Chainlink-Feed. |
 
@@ -30,16 +30,27 @@ Das Dashboard rechnet deshalb so:
 ## Datenquellen
 
 - **BTC-Preis:** Trade-WebSockets von Coinbase, Kraken, Bitstamp, Gemini, Bitfinex und Binance; Median
-  aus mindestens drei frischen Quellen. Binance (BTC/USDT) wird mit dem USDT/USD-Kurs von Coinbase umgerechnet.
+  aus mindestens drei frischen Quellen. Binance und Bitfinex laufen über BTC/USDT und werden mit dem USDT/USD-Kurs
+  von Coinbase umgerechnet. Bitfinex' eigenes BTC/USD-Paar liegt dauerhaft 100 $+ über dem Rest, weil Dollar auf
+  Bitfinex schwer abzuheben sind und dort rund 0,15 % weniger wert sind als Bankdollar.
   Beim Laden und nach der Rückkehr aus dem Hintergrund werden die letzten Minuten per REST nachgeladen
   (Coinbase, Kraken, Binance – die anderen Börsen erlauben keine Browser-Anfragen).
 - **Polymarket:** Gamma API für Marktsuche und offizielle Rundenergebnisse, CLOB-WebSocket für das Orderbuch.
+  Der Markt der nächsten Runde wird schon während der laufenden Runde verbunden, der Wechsel an der
+  Rundengrenze passiert ohne Nachladen.
+- **Vergangene Runden:** BTC aus dem eigenen Median, solange er noch im Speicher ist, sonst Binance-1s-Kerzen
+  (USDT→USD); Wahrscheinlichkeit aus den live mitgeschriebenen Mids, sonst aus allen Trades der Runde
+  (Polymarket Data API v2, ein Punkt pro Sekunde).
 
 ## Benutzung
 
 Die HTML-Dateien einfach im Browser öffnen. Die Glocke oben rechts schaltet Alarme ein
 (Strike-Kreuzung in der letzten Minute, große Abweichung Markt vs. Modell). Die Trefferquote wird im
 Browser gespeichert, solange das Dashboard offen ist.
+
+Über das Menü links in der Chart-Leiste (oder einen Tipp auf eine Runde unter „Recent rounds“) lässt
+sich jede der letzten 24 Runden im Chart ansehen. „Exchange lines“ und „Averaging windows“ (die beiden
+60-s-Fenster, aus denen Strike und Abrechnung berechnet werden) sind Schalter und werden im Browser gemerkt.
 
 Für das Notebook:
 
