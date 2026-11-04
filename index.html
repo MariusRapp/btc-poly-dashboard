@@ -93,7 +93,8 @@
 
     /* ── Market switch: Polymarket / Kalshi / both, round length ── */
     .venuebar { display:flex; align-items:center; flex-wrap:wrap; gap:8px 10px; }
-    .venuebar .seg button { display:inline-flex; align-items:center; gap:6px; }
+    .venuebar .seg { padding:3px; border-radius:10px; }
+    .venuebar .seg button { display:inline-flex; align-items:center; gap:7px; font-size:14px; padding:8px 16px; border-radius:7px; }
     .seg button:disabled { opacity:.4; cursor:default; }
     .seg button:disabled:hover { color:var(--ink-2); }
     .venue-note { font-size:12px; color:var(--muted-text); }
@@ -140,22 +141,23 @@
     .toolbar { display:flex; align-items:center; justify-content:space-between; gap:10px 16px; flex-wrap:wrap; margin-bottom:6px; }
     .seg { display:inline-flex; gap:2px; padding:2px; border-radius:8px; background:var(--surface-2); }
     .seg button {
-      font:inherit; font-size:12px; font-weight:500; min-width:44px; padding:5px 11px;
+      font:inherit; font-size:13px; font-weight:500; min-width:46px; padding:6px 13px;
       color:var(--ink-2); background:transparent; border:0; border-radius:6px; cursor:pointer;
     }
     .seg button:hover { color:var(--ink-1); }
     .seg button[aria-pressed="true"] { background:var(--surface); color:var(--ink-1); box-shadow:0 0 0 1px var(--border); }
     .seg.dim { opacity:.45; }
     .tools { display:flex; align-items:center; gap:8px 12px; flex-wrap:wrap; }
-    .toggle { display:inline-flex; align-items:center; gap:7px; font-size:12px; color:var(--ink-2); cursor:pointer; user-select:none; }
+    .toggle { display:inline-flex; align-items:center; gap:8px; font-size:13px; color:var(--ink-2); cursor:pointer; user-select:none; }
     .toggle:has(input:disabled) { opacity:.45; cursor:default; }
     .toggle input, .src-name input { accent-color:var(--ink-1); width:14px; height:14px; cursor:pointer; }
+    .toggle input { width:16px; height:16px; }
 
     /* round picker: native select (phones get their own picker), chevron drawn in CSS */
     .pick { position:relative; display:inline-flex; }
     .pick select {
-      font:inherit; font-size:12px; font-weight:500; color:var(--ink-1); background:var(--surface-2);
-      border:0; border-radius:8px; padding:6px 30px 6px 11px; appearance:none; -webkit-appearance:none; cursor:pointer; max-width:100%;
+      font:inherit; font-size:13px; font-weight:500; color:var(--ink-1); background:var(--surface-2);
+      border:0; border-radius:8px; padding:8px 32px 8px 12px; appearance:none; -webkit-appearance:none; cursor:pointer; max-width:100%;
     }
     .pick::after {
       content:''; position:absolute; right:12px; top:calc(50% - 5px); width:6px; height:6px; pointer-events:none;
@@ -203,8 +205,8 @@
 
     /* ── Order book ladder: fixed price rows, the mid line moves ── */
     .card-head.center { align-items:center; flex-wrap:wrap; }
-    .seg.sm button { min-width:0; padding:3px 10px; font-size:11px; }
-    .book-ctl { display:flex; gap:6px; }
+    .seg.sm button { min-width:0; padding:5px 12px; font-size:12px; }
+    .book-ctl { display:flex; flex-wrap:wrap; gap:6px; }
     .seg button[data-side="up"][aria-pressed="true"]   { color:var(--up-text); }
     .seg button[data-side="down"][aria-pressed="true"] { color:var(--down-text); }
     /* which round the book belongs to; becomes a note while the charts show a past round */
@@ -314,7 +316,9 @@
       .kpi-pair { gap:4px 8px; }
       .plot { height:280px; }
       .plot-prob { height:150px; }
-      .seg button { min-width:0; padding:5px 9px; }
+      .seg button { min-width:0; padding:6px 10px; }
+      .venuebar .seg button { font-size:13px; padding:7px 11px; gap:6px; }
+      .seg.sm button { padding:5px 10px; }
       .hide-sm, .src-name .muted { display:none; }
       .src { column-gap:10px; }
     }
