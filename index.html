@@ -131,8 +131,31 @@
     }
     .seg button:hover { color:var(--ink-1); }
     .seg button[aria-pressed="true"] { background:var(--surface); color:var(--ink-1); box-shadow:0 0 0 1px var(--border); }
+    .seg.dim { opacity:.45; }
+    .tools { display:flex; align-items:center; gap:8px 12px; flex-wrap:wrap; }
     .toggle { display:inline-flex; align-items:center; gap:7px; font-size:12px; color:var(--ink-2); cursor:pointer; user-select:none; }
+    .toggle:has(input:disabled) { opacity:.45; cursor:default; }
     .toggle input, .src-name input { accent-color:var(--ink-1); width:14px; height:14px; cursor:pointer; }
+
+    /* round picker: native select (phones get their own picker), chevron drawn in CSS */
+    .pick { position:relative; display:inline-flex; }
+    .pick select {
+      font:inherit; font-size:12px; font-weight:500; color:var(--ink-1); background:var(--surface-2);
+      border:0; border-radius:8px; padding:6px 30px 6px 11px; appearance:none; -webkit-appearance:none; cursor:pointer; max-width:100%;
+    }
+    .pick::after {
+      content:''; position:absolute; right:12px; top:calc(50% - 5px); width:6px; height:6px; pointer-events:none;
+      border:solid var(--ink-2); border-width:0 1.5px 1.5px 0; transform:rotate(45deg);
+    }
+    .review {
+      display:flex; align-items:center; flex-wrap:wrap; gap:4px 10px; margin:8px 0 2px; padding:8px 10px;
+      border-radius:8px; background:var(--surface-2); font-size:12px; color:var(--ink-2);
+    }
+    .review b { color:var(--ink-1); font-weight:600; }
+    .review .rv-sub { flex:1 1 220px; min-width:0; font-variant-numeric:tabular-nums; }
+    .rv-res { font-weight:700; }
+    .rv-res.up { color:var(--up-text); }
+    .rv-res.down { color:var(--down-text); }
 
     .chart-head { display:flex; align-items:baseline; justify-content:space-between; gap:4px 12px; flex-wrap:wrap; margin:10px 0 6px; }
     .legend { display:flex; flex-wrap:wrap; gap:4px 12px; font-size:11px; color:var(--ink-2); }
@@ -160,27 +183,36 @@
     .tip-name { display:inline-flex; align-items:center; gap:6px; color:var(--ink-2); }
     .tip-row b { font-weight:600; font-variant-numeric:tabular-nums; }
 
-    /* ── Order book ladder ── */
+    /* ── Order book ladder: fixed price rows, the mid line moves ── */
+    .card-head.center { align-items:center; }
+    .seg.sm button { min-width:0; padding:3px 10px; font-size:11px; }
     .ladder { font-size:13px; }
     .lrow {
       position:relative; display:grid; grid-template-columns:repeat(3, minmax(0,1fr));
       align-items:center; height:25px; padding:0 8px;
     }
     .lrow > span { position:relative; text-align:right; font-variant-numeric:tabular-nums; }
-    .lrow > span:first-child { text-align:left; }
+    .lrow > span:first-of-type { text-align:left; }
     .lhead { height:22px; font-size:11px; color:var(--muted-text); }
-    .lbar { position:absolute; top:2px; bottom:2px; right:0; border-radius:4px 0 0 4px; }
+    .lview { position:relative; height:400px; overflow:hidden; border-top:1px solid var(--grid); border-bottom:1px solid var(--grid); }
+    .lview .lrow { position:absolute; left:0; right:0; top:0; will-change:transform; }
+    .lbar { position:absolute; top:2px; bottom:2px; right:0; width:0; border-radius:4px 0 0 4px; }
     .ask .lbar { background:var(--down-wash); }
     .bid .lbar { background:var(--up-wash); }
+    .lp { color:var(--muted-text); }
     .ask .lp { color:var(--down-text); }
     .bid .lp { color:var(--up-text); }
+    .lrow.gap { background:var(--band); }
     .lt   { color:var(--muted-text); }
     .wall { font-weight:700; }
-    .lmid {
-      display:flex; justify-content:space-between; align-items:center; height:32px; padding:0 8px; margin:3px 0;
-      font-size:12px; color:var(--ink-2); font-variant-numeric:tabular-nums;
-      border-top:1px solid var(--grid); border-bottom:1px solid var(--grid);
+    .lmid { position:absolute; left:0; right:0; top:0; height:0; border-top:1px solid var(--ink-2); z-index:1; pointer-events:none; will-change:transform; }
+    .lmid-tag {
+      position:absolute; left:33.333%; top:-10px; transform:translateX(-50%); height:19px; padding:0 7px;
+      border-radius:4px; background:var(--ink-1); color:var(--surface); white-space:nowrap;
+      font-size:11px; font-weight:600; line-height:19px; font-variant-numeric:tabular-nums;
     }
+    .lempty { position:absolute; inset:0; display:grid; place-items:center; font-size:12px; color:var(--muted-text); }
+    .lfoot { display:flex; justify-content:space-between; gap:8px; margin-top:8px; font-size:12px; color:var(--muted-text); font-variant-numeric:tabular-nums; }
 
     /* ── Signals ── */
     .sig { padding:11px 0; border-top:1px solid var(--grid); }
@@ -193,9 +225,11 @@
     /* ── Rounds + track record ── */
     .rounds { display:grid; grid-template-columns:repeat(12, minmax(0,1fr)); gap:4px; }
     .rchip {
-      height:26px; border-radius:6px; display:grid; place-items:center;
-      font-size:11px; font-weight:700; background:var(--surface-2); color:var(--muted-text);
+      height:26px; border-radius:6px; display:grid; place-items:center; border:0; padding:0; cursor:pointer;
+      font:inherit; font-size:11px; font-weight:700; background:var(--surface-2); color:var(--muted-text);
     }
+    .rchip:hover { filter:brightness(.96); }
+    .rchip[aria-pressed="true"] { box-shadow:0 0 0 1.5px var(--ink-1); }
     .rchip.up   { background:var(--up-wash);   color:var(--up-text); }
     .rchip.down { background:var(--down-wash); color:var(--down-text); }
     .rounds-axis { display:flex; justify-content:space-between; font-size:11px; color:var(--muted-text); margin-top:4px; font-variant-numeric:tabular-nums; }
@@ -299,24 +333,36 @@
 
       <section class="card" id="card-charts" aria-label="Charts">
         <div class="toolbar">
-          <div class="seg" role="group" aria-label="Time window">
-            <button type="button" data-mode="round" aria-pressed="true">Round</button>
-            <button type="button" data-s="10"  aria-pressed="false">10s</button>
-            <button type="button" data-s="30"  aria-pressed="false">30s</button>
-            <button type="button" data-s="60"  aria-pressed="false">1m</button>
-            <button type="button" data-s="300" aria-pressed="false">5m</button>
+          <div class="tools">
+            <span class="pick"><select id="round-pick" aria-label="Round to show in the charts"><option value="">Live round</option></select></span>
+            <div class="seg" id="win-seg" role="group" aria-label="Time window">
+              <button type="button" data-mode="round" aria-pressed="true">Round</button>
+              <button type="button" data-s="10"  aria-pressed="false">10s</button>
+              <button type="button" data-s="30"  aria-pressed="false">30s</button>
+              <button type="button" data-s="60"  aria-pressed="false">1m</button>
+              <button type="button" data-s="300" aria-pressed="false">5m</button>
+            </div>
           </div>
-          <label class="toggle"><input type="checkbox" id="show-ex"> Exchange lines</label>
+          <div class="tools">
+            <label class="toggle"><input type="checkbox" id="show-ex"> Exchange lines</label>
+            <label class="toggle" title="The two 60s windows the result is computed from: average before the round start (strike) and over its last minute (settlement)"><input type="checkbox" id="show-bands"> Averaging windows</label>
+          </div>
+        </div>
+
+        <div class="review" id="review" hidden>
+          <b id="rv-title">—</b><span class="rv-res" id="rv-res"></span>
+          <span class="rv-sub" id="rv-sub">Loading round…</span>
+          <button class="link-btn" type="button" id="rv-back">Back to live</button>
         </div>
 
         <div class="chart-head">
           <h2>BTC price vs strike</h2>
           <div class="legend">
-            <span><i class="lk"></i>Median</span>
+            <span><i class="lk"></i><span id="leg-med">Median</span></span>
             <span><i class="lk dash"></i>Strike</span>
             <span><i class="wk up"></i>Above</span>
             <span><i class="wk down"></i>Below</span>
-            <span id="leg-band"><i class="wk band"></i>60s averaging windows</span>
+            <span id="leg-band" hidden><i class="wk band"></i>60s averaging windows</span>
             <span id="legend-ex" hidden></span>
           </div>
         </div>
@@ -349,13 +395,22 @@
     <div class="col">
 
       <section class="card" id="card-book" aria-label="Order book">
-        <div class="card-head"><h2>Order book <span class="muted">· UP shares</span></h2><span class="card-meta num" id="last-trade">Last —</span></div>
+        <div class="card-head center">
+          <h2>Order book <span class="muted">· UP shares</span></h2>
+          <div class="seg sm" role="group" aria-label="Which round's order book">
+            <button type="button" data-book="now" aria-pressed="true">Now</button>
+            <button type="button" data-book="next" aria-pressed="false" title="The next round's market, already trading">Next</button>
+          </div>
+        </div>
         <div class="ladder" role="table" aria-label="Order book for UP shares">
           <div class="lrow lhead" role="row"><span role="columnheader">Price</span><span role="columnheader">Size</span><span role="columnheader">Total</span></div>
-          <div id="asks" role="rowgroup"></div>
-          <div class="lmid" id="lmid" role="row"><span role="cell">Waiting for book…</span><span role="cell"></span></div>
-          <div id="bids" role="rowgroup"></div>
+          <div class="lview" id="lview" role="rowgroup">
+            <div id="lrows"></div>
+            <div class="lmid" id="lmid" hidden><span class="lmid-tag" id="lmid-tag"></span></div>
+            <div class="lempty" id="lempty">Waiting for book…</div>
+          </div>
         </div>
+        <div class="lfoot"><span id="lspread">Spread —</span><span id="last-trade">Last —</span></div>
       </section>
 
       <section class="card" id="card-signals" aria-label="Signals">
@@ -406,31 +461,44 @@ const EXCH = [
   { key:'kraken',   name:'Kraken' },
   { key:'bitstamp', name:'Bitstamp' },
   { key:'gemini',   name:'Gemini' },
-  { key:'bitfinex', name:'Bitfinex' },
+  { key:'bitfinex', name:'Bitfinex', note:'USDT→USD' },
   { key:'binance',  name:'Binance', note:'USDT→USD' },
 ].map(e => ({ ...e, color:'', trades:[], lastP:null, lastTT:0, enabled:true, ws:null, lastMsgT:0 }));
 const EX = Object.fromEntries(EXCH.map(e => [e.key, e]));
 
-let showExchanges = false;
+let showExchanges = (() => { try { return !!JSON.parse(localStorage.getItem('btc5m-opts')).ex; } catch { return false; } })();
 let usdtUsd = 1;            // converts Binance BTCUSDT to USD (live from Coinbase USDT-USD)
 
 let lastMedianP = null;
 let tpsCount = 0, tps = 0, tpsTick = Date.now();
 const medianHistory = [];   // {t, p} — t is trade time, kept monotonic
 
-let polyBids = {}, polyAsks = {}, polyLastTrade = null, bookDirty = true;
+// Polymarket feeds (own socket + book each): `cur` = running round, `nxt` = next round, preloaded
+let cur = null, nxt = null;
 let upProb = null;          // implied UP probability = book mid, in %
 let strike = null, strikeSrc = null, strikeRound = null, clStrike = null;
 let windowTs = null;
-let polyWs = null, polyLastMsgT = 0, countdownTimer = null, loadingMarket = false;
-let polyState = 'wait', polyStamp = 'Connecting…';
+let loadingMarket = false, marketRetryT = 0, preloading = false, preloadRetryT = 0;
+let bookView = 'now';       // order book card: 'now' or 'next'
+
+// chart options, remembered per browser
+const OPTS_KEY = 'btc5m-opts';
+const opts = (() => { try { return JSON.parse(localStorage.getItem(OPTS_KEY)) || {}; } catch { return {}; } })();
+let showBands = !!opts.bands;   // the two 60s averaging windows (off by default)
+const saveOpts = () => { try { localStorage.setItem(OPTS_KEY, JSON.stringify({ ex: showExchanges, bands: showBands })); } catch {} };
+
+// past round shown in the charts (null = live)
+const ROUNDS_SHOWN = 24;
+let review = null;
+const probArchive = new Map();   // round start (s) → live probability history recorded while it ran
+const roundMeta   = new Map();   // round start (s) → parsed market (token ids, condition id)
 
 let clPrice = null, clProvider = null, clState = 'wait';
 let volPerSqrtS = null;     // σ of log returns per √second, from 1-minute candles
 
 // probability history — trimmed by age, never by count
 const probHistory = [];
-const PROB_MAX_AGE_MS = 300_000;
+const PROB_MAX_AGE_MS = 400_000;   // whole round incl. the minute before it
 let lastProbPushT = 0;
 let lastProbValue = null;
 
@@ -782,6 +850,19 @@ function domain(now) {
   return { t0: now - WINDOW_MS, t1: now };
 }
 
+// what both charts show: the live round / rolling window, or a past round picked in the menu
+function chartView(now) {
+  if (review) {
+    const r = review;
+    return { live: false, t0: r.start - TWAP_MS, t1: r.end, tNow: r.end, start: r.start, end: r.end, round: true,
+             med: r.btc, prob: r.prob, strike: r.strike ?? null, strikeSrc: 'twap',
+             empty: r.loading ? 'Loading round…' : 'No data for this round' };
+  }
+  const { start, end } = currentRound(now);
+  return { live: true, ...domain(now), tNow: now, start, end, round: viewMode === 'round',
+           med: medianHistory, prob: probHistory, strike, strikeSrc, empty: null };
+}
+
 // visible slice (+ the point just before the window) reduced to one point per pixel-wide time bucket.
 // Buckets are aligned to absolute time, not to the moving window edge: a point never changes bucket
 // while the chart scrolls, so the line only translates instead of re-shaping every frame.
@@ -845,9 +926,10 @@ function washVerts(ctx, verts, baseY, PW, H) {
   ctx.save(); ctx.beginPath(); ctx.rect(0, baseY, PW, H - baseY); ctx.clip(); ctx.fillStyle = T.downWash; ctx.fill(path); ctx.restore();
 }
 
-// round view: the two 60s averaging windows (strike before the round, settlement at its end)
-function roundBands(ctx, xOf, Y1, labels) {
-  const { start, end } = currentRound();
+// round view: the two 60s averaging windows (strike before the round, settlement at its end) when
+// switched on, otherwise just a hairline where the round starts
+function roundBands(ctx, xOf, Y1, labels, start, end) {
+  if (!showBands) { vline(ctx, xOf(start), 0, Y1); return; }
   ctx.font = '10px ' + FONT; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
   for (const [a, b, lbl] of [[start - TWAP_MS, start, 'strike avg'], [end - TWAP_MS, end, 'settlement avg']]) {
     const xa = xOf(a), xb = xOf(b);
@@ -880,12 +962,11 @@ function yGrid(ctx, lo, hi, yOf, PW, Y0, Y1, target, fmt, tagY) {
   }
 }
 
-function xAxis(ctx, t0, t1, PW, Y1) {
+function xAxis(ctx, t0, t1, PW, Y1, fmt) {
   ctx.strokeStyle = T.axis; ctx.lineWidth = 1;
   ctx.beginPath(); ctx.moveTo(0, Y1 + .5); ctx.lineTo(PW, Y1 + .5); ctx.stroke();
   ctx.font = '11px ' + FONT; ctx.fillStyle = T.muted; ctx.textBaseline = 'top';
   const n = Math.max(2, Math.min(6, Math.floor(PW / 110)));
-  const fmt = viewMode === 'round' ? fmtHM : fmtClock;
   for (let i = 0; i <= n; i++) {
     ctx.textAlign = i === 0 ? 'left' : i === n ? 'right' : 'center';
     ctx.fillText(fmt(t0 + (t1 - t0) * i / n), PW * i / n, Y1 + 7);
@@ -941,10 +1022,11 @@ function makeTip(id, rows) {
     const row = document.createElement('div'); row.className = 'tip-row';
     const name = document.createElement('span'); name.className = 'tip-name';
     if (r.key) { const k = document.createElement('i'); k.className = 'lk ' + r.key; if (r.color) k.style.background = r.color; name.appendChild(k); }
-    name.appendChild(document.createTextNode(r.label));
+    const label = document.createTextNode(r.label);
+    name.appendChild(label);
     const val = document.createElement('b');
     row.append(name, val); el.appendChild(row);
-    refs[r.id] = { row, val };
+    refs[r.id] = { row, val, label };
   }
   return { el, time, refs };
 }
@@ -961,9 +1043,10 @@ function placeTip(tip, x, PW) {
 function hoverTime(t0, D, now) { return Math.min(now, t0 + hoverFrac * D); }
 
 // ── BTC chart ────────────────────────────────────────────────────────────────
-function drawBtc(now) {
+function drawBtc(v) {
   const c = btcC, ctx = c.ctx, W = c.w, H = c.h;
   if (!W || !H) return;
+  const now = v.tNow, strike = v.strike, strikeSrc = v.strikeSrc, hist = v.med;
   ctx.setTransform(c.dpr, 0, 0, c.dpr, 0, 0);
   ctx.clearRect(0, 0, W, H);
 
@@ -973,16 +1056,16 @@ function drawBtc(now) {
   plotGutter = Math.max(64, Math.ceil(ctx.measureText((lastMedianP !== null ? fmtNum(lastMedianP) : '00,000.00').replace(/\d/g, '0')).width) + 26);
   const PW = W - plotGutter, Y0 = 16, Y1 = H - 6;
   if (PW < 40) return;
-  const { t0, t1 } = domain(now), D = t1 - t0, msPerPx = D / PW;
+  const { t0, t1 } = v, D = t1 - t0, msPerPx = D / PW;
   const xOf = t => (t - t0) / D * PW, xNow = Math.min(PW, xOf(now));
-  if (viewMode === 'round') roundBands(ctx, xOf, H, true);
+  if (v.round) roundBands(ctx, xOf, H, true, v.start, v.end);
 
-  const med = series(medianHistory, t0, xOf, msPerPx);
-  if (!med.pts.length) { btcTip.el.hidden = true; emptyState(ctx, PW, Y0, Y1, 'Waiting for trades…'); return; }
+  const med = series(hist, t0, xOf, msPerPx);
+  if (!med.pts.length) { btcTip.el.hidden = true; emptyState(ctx, PW, Y0, Y1, v.empty ?? 'Waiting for trades…'); return; }
 
   let lo = med.lo, hi = med.hi;
   const exLines = [];
-  if (showExchanges) for (const ex of EXCH) {
+  if (showExchanges && v.live) for (const ex of EXCH) {
     if (!ex.enabled) continue;
     const s = series(ex.trades, t0, xOf, msPerPx);
     if (!s.pts.length) continue;
@@ -1022,20 +1105,20 @@ function drawBtc(now) {
 
   if (hoverFrac === null) { btcTip.el.hidden = true; return; }
   const ht = hoverTime(t0, D, now), x = xOf(ht);
-  const i  = firstIdx(medianHistory, ht);
-  const a = medianHistory[i - 1], b = medianHistory[i];
-  const v = !a ? b : !b ? a : (ht - a.t <= b.t - ht ? a : b);
-  if (!v) { btcTip.el.hidden = true; return; }
+  const i  = firstIdx(hist, ht);
+  const a = hist[i - 1], b = hist[i];
+  const pt = !a ? b : !b ? a : (ht - a.t <= b.t - ht ? a : b);
+  if (!pt) { btcTip.el.hidden = true; return; }
   vline(ctx, x, Y0, Y1);
-  dot(ctx, x, yOf(v.p), T.ink1);
+  dot(ctx, x, yOf(pt.p), T.ink1);
   if (hoverSrc !== 'btc') { btcTip.el.hidden = true; return; }
 
-  btcTip.time.textContent = fmtClock(v.t);
-  btcTip.refs.med.val.textContent = fmtP(v.p);
-  btcTip.refs.vs.val.textContent  = strike !== null ? signedUsd(v.p - strike) : '—';
+  btcTip.time.textContent = fmtClock(pt.t);
+  btcTip.refs.med.val.textContent = fmtP(pt.p);
+  btcTip.refs.vs.val.textContent  = strike !== null ? signedUsd(pt.p - strike) : '—';
   for (const ex of EXCH) {
     const r = btcTip.refs[ex.key];
-    r.row.hidden = !showExchanges || !ex.enabled;
+    r.row.hidden = !showExchanges || !ex.enabled || !v.live;
     if (r.row.hidden) continue;
     const j = firstIdx(ex.trades, ht + 1) - 1;
     r.val.textContent = j >= 0 ? fmtP(ex.trades[j].p) : '—';
@@ -1044,21 +1127,22 @@ function drawBtc(now) {
 }
 
 // ── Probability chart ────────────────────────────────────────────────────────
-function drawProb(now) {
+function drawProb(v) {
   const c = probC, ctx = c.ctx, W = c.w, H = c.h;
   if (!W || !H) return;
   ctx.setTransform(c.dpr, 0, 0, c.dpr, 0, 0);
   ctx.clearRect(0, 0, W, H);
+  const now = v.tNow, hist = v.prob;
 
   const PW = W - plotGutter, Y0 = 10, Y1 = H - 24;
   if (PW < 40) return;
-  const { t0, t1 } = domain(now), D = t1 - t0, msPerPx = D / PW;
+  const { t0, t1 } = v, D = t1 - t0, msPerPx = D / PW;
   const xOf = t => (t - t0) / D * PW, xNow = Math.min(PW, xOf(now));
-  if (viewMode === 'round') roundBands(ctx, xOf, Y1, false);
-  xAxis(ctx, t0, t1, PW, Y1);
+  if (v.round) roundBands(ctx, xOf, Y1, false, v.start, v.end);
+  xAxis(ctx, t0, t1, PW, Y1, v.round ? fmtHM : fmtClock);
 
-  const s = series(probHistory, t0, xOf, msPerPx);
-  if (!s.pts.length) { probTip.el.hidden = true; emptyState(ctx, PW, Y0, Y1, 'Waiting for market…'); return; }
+  const s = series(hist, t0, xOf, msPerPx);
+  if (!s.pts.length) { probTip.el.hidden = true; emptyState(ctx, PW, Y0, Y1, v.empty ?? 'Waiting for market…'); return; }
 
   const pad = Math.max(5, (s.hi - s.lo) * 0.4);
   const { lo, hi } = easeRange('prob', Math.max(0, s.lo - pad), Math.min(100, s.hi + pad));
@@ -1078,10 +1162,10 @@ function drawProb(now) {
 
   if (hoverFrac === null) { probTip.el.hidden = true; return; }
   const ht = hoverTime(t0, D, now), x = xOf(ht);
-  const j  = firstIdx(probHistory, ht + 1) - 1;
+  const j  = firstIdx(hist, ht + 1) - 1;
   vline(ctx, x, Y0, Y1);
   if (j < 0) { probTip.el.hidden = true; return; }
-  const p = probHistory[j].p;
+  const p = hist[j].p;
   dot(ctx, x, yOf(Math.max(lo, Math.min(hi, p))), T.ink1);
   if (hoverSrc !== 'prob') { probTip.el.hidden = true; return; }
   probTip.time.textContent = fmtClock(ht);
@@ -1103,7 +1187,7 @@ function updateTime() {
 }
 
 function updateUI(now) {
-  if (bookDirty) renderBook();
+  checkRoundSwitch(now);
   updateStrike(now);
   updateTime();
 
@@ -1243,8 +1327,8 @@ function updateSources() {
   $('sp-cls').textContent = clStrike !== null ? fmtP(clStrike) : '—';
   $('sd-cls').textContent = clStrike !== null && strike !== null && strikeSrc === 'twap' ? signedUsd(clStrike - strike) : '—';
   $('sdot-cls').className = 'dot ' + (clStrike !== null ? 'live' : 'wait');
-  $('sp-pm').textContent = polyStamp;
-  $('sdot-pm').className = 'dot ' + polyState;
+  $('sp-pm').textContent = cur ? cur.stamp : 'Connecting…';
+  $('sdot-pm').className = 'dot ' + (cur ? cur.state : 'wait');
 
   // data quality 0–100 from exchange consensus and trade activity
   const live = EXCH.filter(e => e.enabled && e.lastP !== null && now - e.lastTT <= STALE_MS).map(e => e.lastP);
@@ -1258,8 +1342,9 @@ function updateLive() {
   const now = Date.now();
   const live = EXCH.filter(e => e.enabled && e.lastP !== null && now - e.lastTT <= STALE_MS).length;
   let cls = 'wait', txt = 'Connecting';
-  if (polyState === 'live' && live >= 3) { cls = 'live'; txt = 'Live'; }
-  else if (polyState === 'err') { cls = 'err'; txt = 'Reconnecting'; }
+  const pm = cur ? cur.state : 'wait';
+  if (pm === 'live' && live >= 3) { cls = 'live'; txt = 'Live'; }
+  else if (pm === 'err') { cls = 'err'; txt = 'Reconnecting'; }
   $('live-dot').className = 'dot ' + cls;
   $('live-text').textContent = txt;
 }
@@ -1281,9 +1366,10 @@ function saveTrack() {
 
 async function fetchRoundResult(ts) {
   try {
-    const d = await getJSON(`${GAMMA}/events?slug=btc-updown-5m-${ts}`);
-    const m = d[0]?.markets?.[0];
+    const ev = await fetchEvent(ts);
+    const m = ev?.markets[0];
     if (!m) return;
+    roundMeta.set(ts, parseMarket(ev, ts));
     const outcomes = JSON.parse(m.outcomes || '[]'), prices = JSON.parse(m.outcomePrices || '[]').map(Number);
     const win = m.closed ? outcomes[prices.indexOf(1)] : null;
     const res = win === 'Up' ? 'up' : win === 'Down' ? 'down' : 'pending';
@@ -1294,7 +1380,7 @@ async function fetchRoundResult(ts) {
 
 async function refreshRounds() {
   const cur = currentRound().start / 1000, jobs = [];
-  for (let k = 1; k <= 12; k++) {
+  for (let k = 1; k <= ROUNDS_SHOWN; k++) {
     const ts = cur - 300 * k, r = roundResults.get(ts);
     if (r !== 'up' && r !== 'down') jobs.push(fetchRoundResult(ts));
   }
@@ -1304,19 +1390,27 @@ async function refreshRounds() {
   renderRounds();
 }
 
+const roundSpan = ts => `${fmtHM(ts * 1000)}–${fmtHM(ts * 1000 + ROUND_MS)}`;
+
+// chips (oldest → newest, tap to open in the charts) and the same rounds in the chart menu (newest first)
 function renderRounds() {
-  const cur = currentRound().start / 1000, chips = [];
+  const cur = currentRound().start / 1000, chips = [], options = [];
   let ups = 0, downs = 0;
-  for (let k = 12; k >= 1; k--) {
+  for (let k = ROUNDS_SHOWN; k >= 1; k--) {
     const ts = cur - 300 * k, res = roundResults.get(ts), time = fmtHM(ts * 1000);
     if (res === 'up') ups++; else if (res === 'down') downs++;
     const name = res === 'up' ? 'Up' : res === 'down' ? 'Down' : 'pending';
-    chips.push(`<span class="rchip ${res === 'up' || res === 'down' ? res : ''}" title="${time} · ${name}" aria-label="${time} ${name}">${res === 'up' ? '▲' : res === 'down' ? '▼' : '·'}</span>`);
+    chips.push(`<button type="button" class="rchip ${res === 'up' || res === 'down' ? res : ''}" data-ts="${ts}" aria-pressed="${review?.ts === ts}" title="${time} · ${name} — show in the charts" aria-label="${time} ${name}">${res === 'up' ? '▲' : res === 'down' ? '▼' : '·'}</button>`);
+    options.unshift(`<option value="${ts}">${roundSpan(ts)} · ${res === 'up' ? '▲ Up' : res === 'down' ? '▼ Down' : 'pending'}</option>`);
   }
+  if (review && review.ts < cur - 300 * ROUNDS_SHOWN) options.push(`<option value="${review.ts}">${roundSpan(review.ts)}</option>`);
   $('rounds').innerHTML = chips.join('');
-  $('rounds-from').textContent = fmtHM((cur - 3600) * 1000);
+  $('round-pick').innerHTML = `<option value="">Live · ${roundSpan(cur)}</option>` + options.join('');
+  $('round-pick').value = review ? String(review.ts) : '';
+  $('rounds-from').textContent = fmtHM((cur - 300 * ROUNDS_SHOWN) * 1000);
   $('rounds-to').textContent = fmtHM((cur - 300) * 1000);
   $('rounds-meta').textContent = `▲ ${ups} · ▼ ${downs} · official`;
+  if (review) syncReview();
   renderTrack();
 }
 
@@ -1479,15 +1573,17 @@ function connectExchanges() {
       }
     });
 
+  // BTC/USDt, not BTC/USD: dollars on Bitfinex are hard to withdraw and trade ~0.15% below bank dollars,
+  // so its USD pair sits $100+ above everyone else. Via USDt and Coinbase's USDT-USD rate it is in line.
   openFeed('bitfinex', 'wss://api-pub.bitfinex.com/ws/2',
-    { event:'subscribe', channel:'trades', symbol:'tBTCUSD' },
+    { event:'subscribe', channel:'trades', symbol:'tBTCUST' },
     () => {
       let chanId = null;
       return d => {
         if (d.event === 'subscribed' && d.channel === 'trades') { chanId = d.chanId; return; }
         if (!Array.isArray(d) || d[0] !== chanId || d[1] !== 'te') return;
         const t = d[2]; // [ID, timestamp_ms, amount, price]
-        onTrade('bitfinex', { id: t[0], t: t[1], p: t[3], q: Math.abs(t[2]), sell: t[2] < 0 });
+        onTrade('bitfinex', { id: t[0], t: t[1], p: t[3] * usdtUsd, q: Math.abs(t[2]), sell: t[2] < 0 });
       };
     });
 
@@ -1502,122 +1598,160 @@ function connectExchanges() {
 const GAMMA = 'https://gamma-api.polymarket.com';
 const PM_WS = 'wss://ws-subscriptions-clob.polymarket.com/ws/market';
 
+async function fetchEvent(wts) {
+  const d = await getJSON(`${GAMMA}/events?slug=btc-updown-5m-${wts}`);
+  return d[0]?.markets?.length ? d[0] : null;
+}
+
+// market of the running round (Gamma lists the rounds about an hour ahead)
 async function findMarket() {
-  const base = Math.floor(Date.now() / 1000 / 300) * 300;
-  for (const off of [0, 300, -300]) {
-    const wts  = base + off;
-    const slug = `btc-updown-5m-${wts}`;
-    try {
-      const r = await fetch(`${GAMMA}/events?slug=${slug}`);
-      const d = await r.json();
-      if (d.length > 0 && d[0].markets?.length > 0) return { slug, wts, event: d[0] };
-    } catch {}
+  const base = currentRound().start / 1000;
+  for (const wts of [base, base + 300]) {
+    try { const event = await fetchEvent(wts); if (event) return { wts, event }; } catch {}
   }
   return null;
 }
 
-function parseMarket(event) {
+function parseMarket(event, wts) {
   const m   = event.markets[0];
   const ids = JSON.parse(m.clobTokenIds || '[]');
-  return { question: m.question || event.title, yesId: ids[0] || null };
+  return { wts, question: m.question || event.title, yesId: ids[0] || null, cid: m.conditionId, tick: +m.orderPriceMinTickSize || 0.01 };
 }
 
-// called on every book message: keep the probability history at full resolution, render the ladder later
-function onBookChange() {
-  let bb = -Infinity, ba = Infinity;
-  for (const k in polyBids) if (polyBids[k].price > bb) bb = polyBids[k].price;
-  for (const k in polyAsks) if (polyAsks[k].price < ba) ba = polyAsks[k].price;
-  if (isFinite(bb) && isFinite(ba)) {
-    upProb = (bb + ba) / 2 * 100;
-    pushProbPoint(upProb);
-  }
-  bookDirty = true;
+// ── Market feeds: one socket and one book per round ──────────────────────────
+function makeFeed(m) {
+  return { ...m, bids: {}, asks: {}, last: null, fine: m.tick < 0.01, mid: null, ver: 0, hist: [],
+           ws: null, state: 'wait', stamp: 'Connecting…', lastMsgT: 0, closed: false };
 }
 
-// ── Order book ladder: asks on top (best ask nearest the middle), bids below ──
-const LEVELS = 7;
-function renderBook() {
-  bookDirty = false;
-  const bids = Object.values(polyBids).sort((a,b) => b.price - a.price).slice(0, LEVELS);
-  const asks = Object.values(polyAsks).sort((a,b) => a.price - b.price).slice(0, LEVELS);
-  const maxSz = Math.max(1e-9, ...bids.map(l => l.size), ...asks.map(l => l.size));
-  const wallB = Math.max(0, ...bids.map(l => l.size));
-  const wallA = Math.max(0, ...asks.map(l => l.size));
-
-  const row = (l, cum, side, wall) => !l
-    ? '<div class="lrow" role="row"><span role="cell"></span><span role="cell"></span><span role="cell"></span></div>'
-    : `<div class="lrow ${side}" role="row"><i class="lbar" style="width:${(l.size / maxSz * 100).toFixed(1)}%"></i>` +
-      `<span class="lp" role="cell">${(l.price * 100).toFixed(1)}¢</span>` +
-      `<span role="cell"${l.size === wall && (side === 'ask' ? asks : bids).length > 1 ? ' class="wall" title="Largest level"' : ''}>${fmtSz(l.size)}</span>` +
-      `<span class="lt" role="cell">${fmtSz(cum)}</span></div>`;
-
-  // fixed row count on both sides so the card never jumps
-  let cum = 0;
-  const askRows = [];
-  for (let i = 0; i < LEVELS; i++) { if (asks[i]) cum += asks[i].size; askRows.push(row(asks[i], cum, 'ask', wallA)); }
-  cum = 0;
-  const bidRows = [];
-  for (let i = 0; i < LEVELS; i++) { if (bids[i]) cum += bids[i].size; bidRows.push(row(bids[i], cum, 'bid', wallB)); }
-  $('asks').innerHTML = askRows.reverse().join('');
-  $('bids').innerHTML = bidRows.join('');
-
-  const bb = bids[0]?.price, ba = asks[0]?.price;
-  $('lmid').innerHTML = bb !== undefined && ba !== undefined
-    ? `<span role="cell">Spread ${((ba - bb) * 100).toFixed(1)}¢</span><span role="cell">Mid ${((bb + ba) / 2 * 100).toFixed(1)}¢</span>`
-    : `<span role="cell">${bids.length || asks.length ? 'One-sided book' : 'Waiting for book…'}</span><span role="cell"></span>`;
-  $('last-trade').textContent = polyLastTrade !== null ? `Last ${(polyLastTrade * 100).toFixed(1)}¢` : 'Last —';
+function closeFeed(f) {
+  if (!f) return;
+  f.closed = true;
+  try { f.ws?.close(); } catch {}
 }
 
-// ── Countdown (round expiry → load next market) ──────────────────────────────
-function startCountdown(onExpire) {
-  if (countdownTimer) clearInterval(countdownTimer);
-  countdownTimer = setInterval(() => {
-    updateTime();
-    if (secsLeft() <= 1) { clearInterval(countdownTimer); setTimeout(onExpire, 3000); }
-  }, 500);
+// levels keyed by price in 0.1¢ units (an integer), so "0.5" and "0.50" are the same level
+function setLevel(f, side, price, size) {
+  const k = Math.round(parseFloat(price) * 1000), sz = parseFloat(size);
+  if (!(k > 0 && k < 1000)) return;
+  if (k % 10) f.fine = true;             // the market quotes in 0.1¢ ticks (it does near 0¢ and 100¢)
+  if (sz > 0) side[k] = sz; else delete side[k];
 }
 
-// ── Polymarket WebSocket ─────────────────────────────────────────────────────
-function connectPoly(yesId, onExpire) {
-  if (polyWs) try { polyWs.close(); } catch {}
-  polyBids = {}; polyAsks = {}; polyLastTrade = null; upProb = null; bookDirty = true;
-  polyState = 'wait'; polyStamp = 'Connecting…';
-
-  const ws = polyWs = new WebSocket(PM_WS);
+function connectFeed(f) {
+  if (f.closed) return;
+  f.bids = {}; f.asks = {}; f.state = 'wait'; f.stamp = 'Connecting…';
+  const ws = f.ws = new WebSocket(PM_WS);
   ws.onopen = () => {
-    ws.send(JSON.stringify({ assets_ids: [yesId], type: 'market' }));
-    polyState = 'live'; polyStamp = 'Live'; polyLastMsgT = Date.now();
+    ws.send(JSON.stringify({ assets_ids: [f.yesId], type: 'market' }));
+    f.state = 'live'; f.stamp = 'Live'; f.lastMsgT = Date.now();
   };
   ws.onmessage = e => {
-    polyLastMsgT = Date.now();
+    f.lastMsgT = Date.now();
     let msgs;
     try { msgs = JSON.parse(e.data); } catch { return; }
+    let changed = false;
     for (const msg of (Array.isArray(msgs) ? msgs : [msgs])) {
-      const et = msg.event_type;
-      if (et === 'book') {
-        polyBids = {}; polyAsks = {};
-        for (const b of (msg.bids||[])) polyBids[b.price] = { price: parseFloat(b.price), size: parseFloat(b.size) };
-        for (const a of (msg.asks||[])) polyAsks[a.price] = { price: parseFloat(a.price), size: parseFloat(a.size) };
+      const et = msg.event_type, mine = msg.asset_id === f.yesId;
+      if (et === 'book' && mine) {
+        f.bids = {}; f.asks = {};
+        for (const b of (msg.bids || [])) setLevel(f, f.bids, b.price, b.size);
+        for (const a of (msg.asks || [])) setLevel(f, f.asks, a.price, a.size);
+        if (+msg.tick_size < 0.01) f.fine = true;
+        changed = true;
       } else if (et === 'price_change') {
-        for (const c of (msg.changes||[])) {
-          const book = c.side.toUpperCase()==='BUY' ? polyBids : polyAsks;
-          const sz   = parseFloat(c.size);
-          if (sz === 0) delete book[c.price];
-          else book[c.price] = { price: parseFloat(c.price), size: sz };
+        // price_changes[] has an asset_id per entry and also carries the DOWN token; `changes` is the older format
+        for (const c of (msg.price_changes || msg.changes || [])) {
+          if ((c.asset_id ?? msg.asset_id) !== f.yesId) continue;
+          setLevel(f, String(c.side).toUpperCase() === 'BUY' ? f.bids : f.asks, c.price, c.size);
+          changed = true;
         }
-      } else if (et === 'last_trade_price') {
-        polyLastTrade = parseFloat(msg.price);
-      } else continue;
-      onBookChange();
-      polyStamp = 'Live · ' + fmtClock(Date.now());
+      } else if (et === 'last_trade_price' && mine) {
+        f.last = parseFloat(msg.price); changed = true;
+      } else if (et === 'tick_size_change' && mine && +msg.new_tick_size < 0.01) {
+        f.fine = true; changed = true;
+      }
     }
+    if (!changed) return;
+    onBookChange(f);
+    f.stamp = 'Live · ' + fmtClock(f.lastMsgT);
   };
   ws.onclose = () => {
-    if (polyWs !== ws) return;
-    polyState = 'err'; polyStamp = 'Reconnecting…';
-    setTimeout(() => connectPoly(yesId, onExpire), 2500);
+    if (f.ws !== ws || f.closed) return;
+    f.state = 'err'; f.stamp = 'Reconnecting…';
+    setTimeout(() => connectFeed(f), 2500);
   };
   ws.onerror = () => ws.close();
+}
+
+// mid = implied probability: the running round drives the KPI and chart, the next one records its own history
+function onBookChange(f) {
+  let bb = 0, ba = 1000;
+  for (const k in f.bids) if (+k > bb) bb = +k;
+  for (const k in f.asks) if (+k < ba) ba = +k;
+  f.mid = bb > 0 && ba < 1000 ? (bb + ba) / 2000 : null;
+  f.ver++;
+  if (f.mid === null) return;
+  if (f === cur) { upProb = f.mid * 100; pushProbPoint(upProb); return; }
+  const now = Date.now(), p = f.mid * 100, last = f.hist[f.hist.length - 1];
+  if (last && Math.abs(last.p - p) < 0.05 && now - last.t < 1000) return;
+  f.hist.push({ t: now, p });
+  while (f.hist[0].t < now - 600_000) f.hist.shift();
+}
+
+// ── Round switch: the preloaded next market takes over at the boundary, no reload ──
+function checkRoundSwitch(now) {
+  const rs = currentRound(now).start / 1000;
+  if (cur && cur.wts >= rs) {
+    if (!preloading && now >= preloadRetryT && (!nxt || nxt.wts !== cur.wts + 300)) preloadNext();
+    return;
+  }
+  if (loadingMarket) return;
+  if (nxt && nxt.wts === rs) promoteNext();
+  else if (now >= marketRetryT) loadPolymarket();
+}
+
+async function preloadNext() {
+  const wts = cur.wts + 300;
+  preloading = true;
+  try {
+    const event = await fetchEvent(wts);
+    const m = event && parseMarket(event, wts);
+    if (!m?.yesId) throw new Error('next round not listed yet');
+    if (!cur || cur.wts + 300 !== wts) return;
+    closeFeed(nxt);
+    nxt = makeFeed(m);
+    roundMeta.set(wts, m);
+    connectFeed(nxt);
+  } catch (e) {
+    preloadRetryT = Date.now() + 10_000;
+  } finally {
+    preloading = false;
+  }
+}
+
+// keep a finished round's live probability path for the round menu
+function archiveRound(f) {
+  if (!f || !probHistory.length) return;
+  probArchive.set(f.wts, probHistory.slice());
+  if (probArchive.size > 8) probArchive.delete(probArchive.keys().next().value);
+}
+
+function promoteNext() {
+  archiveRound(cur);
+  closeFeed(cur);
+  cur = nxt; nxt = null;
+  windowTs = cur.wts;
+  const from = cur.wts * 1000 - TWAP_MS;
+  probHistory.length = 0;
+  for (const p of cur.hist) if (p.t >= from) probHistory.push(p);
+  cur.hist = [];
+  upProb = lastProbValue = cur.mid !== null ? cur.mid * 100 : null;
+  $('market-title').textContent = cur.question;
+  if (bookView === 'next') setBookView('now');
+  preloadRetryT = 0;
+  fetchVol();
+  refreshRounds();
 }
 
 async function backfillProbHistory(yesId) {
@@ -1635,40 +1769,249 @@ async function backfillProbHistory(yesId) {
   } catch {}
 }
 
-// ── Master loader ────────────────────────────────────────────────────────────
+// full (re)load: first start, or when no preloaded market fits (e.g. back after a long time in the background)
 async function loadPolymarket() {
   if (loadingMarket) return;
   loadingMarket = true;
   try {
     $('market-title').textContent = 'Loading market…';
-    upProb = null;
     fetchVol();
     refreshRounds();
-
     const result = await findMarket();
-    if (!result) {
+    const m = result && parseMarket(result.event, result.wts);
+    if (!m?.yesId) {
       $('market-title').textContent = 'No active market – retrying…';
-      setTimeout(loadPolymarket, 8000);
+      marketRetryT = Date.now() + 8000;
       return;
     }
-
-    const { slug, wts, event } = result;
-    windowTs = wts;
+    if (cur && cur.wts !== m.wts) archiveRound(cur);
+    closeFeed(cur);
+    if (nxt && nxt.wts <= m.wts) { closeFeed(nxt); nxt = null; }
+    cur = makeFeed(m);
+    roundMeta.set(m.wts, m);
+    windowTs = m.wts;
     probHistory.length = 0;
-    const market = parseMarket(event);
-    $('market-title').textContent = market.question || event.title || slug;
-
-    if (!market.yesId) {
-      $('market-title').textContent += ' (no token ID)';
-      return;
-    }
-
-    await backfillProbHistory(market.yesId);
-    connectPoly(market.yesId, loadPolymarket);
-    startCountdown(loadPolymarket);
+    upProb = lastProbValue = null;
+    $('market-title').textContent = m.question;
+    await backfillProbHistory(m.yesId);
+    connectFeed(cur);
   } finally {
     loadingMarket = false;
   }
+}
+
+// ── Order book ladder: one row per price, the mid line moves through them ────
+// The window only re-centres when the mid comes within LEDGE rows of an edge, and then scrolls there
+// smoothly — a move shows as the line travelling, instead of every label changing under a fixed mid.
+const LROWS = 16, LROW_H = 25, LEDGE = 3;
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
+const lad = { feed: undefined, ver: -1, gen: 0, M: null, step: 0, T: null, target: null, mid: null, drawn: '', pool: [] };
+const fmtC = (v, d = 1) => String(Math.round(v * 100 * 10 ** d) / 10 ** d) + '¢';
+
+for (let k = 0; k <= LROWS; k++) {
+  const el = document.createElement('div');
+  el.className = 'lrow'; el.setAttribute('role', 'row'); el.hidden = true;
+  el.innerHTML = '<i class="lbar"></i><span class="lp" role="cell"></span><span role="cell"></span><span class="lt" role="cell"></span>';
+  $('lrows').appendChild(el);
+  lad.pool.push({ el, bar: el.children[0], p: el.children[1], s: el.children[2], t: el.children[3], i: null, gen: -1 });
+}
+
+function setBookView(v) {
+  bookView = v;
+  document.querySelectorAll('[data-book]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.book === v)));
+}
+
+// rows indexed by price / tick (1¢, or 0.1¢ once the market uses 0.1¢ ticks); totals add up from the touch outwards
+function ladderModel(f) {
+  const unit = f.fine ? 1 : 10;
+  const side = (book, desc) => {
+    const ks = Object.keys(book).map(Number).sort((a, b) => desc ? b - a : a - b), m = new Map();
+    let cum = 0;
+    for (const k of ks) { cum += book[k]; m.set(Math.round(k / unit), { sz: book[k], cum }); }
+    return { m, best: ks.length ? Math.round(ks[0] / unit) : null };
+  };
+  const b = side(f.bids, true), a = side(f.asks, false);
+  const mid = b.best !== null && a.best !== null ? (b.best + a.best) / 2 : b.best ?? a.best;
+  // bar scale and largest level from the levels around the mid, so they hold still while the window scrolls
+  let maxSz = 1e-9, wallB = 0, wallA = 0;
+  for (const [i, l] of b.m) if (Math.abs(i - mid) <= LROWS) { maxSz = Math.max(maxSz, l.sz); wallB = Math.max(wallB, l.sz); }
+  for (const [i, l] of a.m) if (Math.abs(i - mid) <= LROWS) { maxSz = Math.max(maxSz, l.sz); wallA = Math.max(wallA, l.sz); }
+  return { step: unit / 1000, maxI: 1000 / unit - 1, bids: b.m, asks: a.m, bb: b.best, ba: a.best, mid, maxSz, wallB, wallA };
+}
+
+function ladderMeta(f, M) {
+  const both = M && M.bb !== null && M.ba !== null;
+  $('lspread').textContent = (f && bookView === 'next' ? roundSpan(f.wts) + ' · ' : '') +
+    (both ? 'Spread ' + fmtC((M.ba - M.bb) * M.step) : 'Spread —');
+  $('last-trade').textContent = f && f.last !== null ? 'Last ' + fmtC(f.last) : 'Last —';
+  $('lmid-tag').textContent = !M || M.mid === null ? '' :
+    (both ? 'Mid ' : M.bb === null ? 'Ask ' : 'Bid ') + fmtC(M.mid * M.step, M.step < 0.01 ? 2 : 1);
+}
+
+// runs every frame; touches the DOM only when the book changed or the window / mid line is moving
+function renderLadder(dt) {
+  const f = bookView === 'next' ? nxt : cur;
+  if (f !== lad.feed) { lad.feed = f; lad.ver = -1; lad.M = null; lad.T = null; lad.target = null; ladderMeta(f, null); }
+  if (f && f.ver !== lad.ver) { lad.ver = f.ver; lad.M = ladderModel(f); lad.gen++; ladderMeta(f, lad.M); }
+
+  const M = lad.M, emptyEl = $('lempty');
+  if (!M || M.mid === null) {
+    const msg = !f ? (bookView === 'next' ? 'Next round not listed yet…' : 'Waiting for market…') : 'Waiting for book…';
+    if (lad.drawn !== msg) {
+      lad.drawn = msg; emptyEl.textContent = msg; emptyEl.hidden = false; $('lmid').hidden = true;
+      for (const r of lad.pool) r.el.hidden = true;
+    }
+    lad.T = null;
+    return;
+  }
+
+  if (lad.step !== M.step) { lad.step = M.step; lad.T = null; lad.target = null; }   // tick size changed: new grid
+  const off = lad.target === null ? null : lad.target - M.mid;   // rows from the top edge down to the mid
+  if (off === null || off < LEDGE || off > LROWS - LEDGE)
+    lad.target = Math.max(LROWS + 0.5, Math.min(M.maxI + 0.5, Math.floor(M.mid + LROWS / 2) + 0.5));
+  if (lad.T === null || reduceMotion.matches) { lad.T = lad.target; lad.mid = M.mid; }
+  else {
+    lad.T   += (lad.target - lad.T) * (1 - Math.exp(-dt / 140));
+    lad.mid += (M.mid - lad.mid)    * (1 - Math.exp(-dt / 90));
+    if (Math.abs(lad.target - lad.T) < 0.005) lad.T = lad.target;
+    if (Math.abs(M.mid - lad.mid) < 0.005) lad.mid = M.mid;
+  }
+
+  const key = `${lad.gen}|${lad.T}|${lad.mid}`;
+  if (key === lad.drawn) return;
+  lad.drawn = key;
+  if (!emptyEl.hidden) emptyEl.hidden = true;
+
+  // T = price index at the top edge; row i spans [i − ½, i + ½]
+  const iTop = Math.ceil(lad.T + 0.5) - 1;
+  for (let k = 0; k < lad.pool.length; k++) {
+    const r = lad.pool[k], i = iTop - k, show = i >= 1 && i <= M.maxI;
+    if (r.el.hidden === show) r.el.hidden = !show;
+    if (!show) continue;
+    r.el.style.transform = `translateY(${((lad.T - i - 0.5) * LROW_H).toFixed(1)}px)`;
+    if (r.i === i && r.gen === lad.gen) continue;
+    r.i = i; r.gen = lad.gen;
+    const a = M.asks.get(i), b = a ? null : M.bids.get(i), l = a || b;
+    const gap = !l && M.bb !== null && M.ba !== null && i > M.bb && i < M.ba;
+    r.el.className = 'lrow' + (a ? ' ask' : b ? ' bid' : gap ? ' gap' : '');
+    r.p.textContent = fmtC(i * M.step);
+    if (l) {
+      const wall = l.sz === (a ? M.wallA : M.wallB) && (a ? M.asks : M.bids).size > 1;
+      r.bar.style.width = (l.sz / M.maxSz * 100).toFixed(1) + '%';
+      r.s.textContent = fmtSz(l.sz); r.s.className = wall ? 'wall' : ''; r.s.title = wall ? 'Largest level' : '';
+      r.t.textContent = fmtSz(l.cum);
+    } else {
+      r.bar.style.width = '0'; r.s.textContent = ''; r.s.className = ''; r.s.title = ''; r.t.textContent = '';
+    }
+  }
+  const mk = $('lmid');
+  if (mk.hidden) mk.hidden = false;
+  mk.style.transform = `translateY(${((lad.T - lad.mid) * LROW_H).toFixed(1)}px)`;
+}
+
+// ── Past rounds in the charts ────────────────────────────────────────────────
+// BTC: our own median while it is still in memory, else Binance 1s candles (USDT→USD).
+// Probability: the live mids recorded while the round ran, else its trades (UP price; DOWN as 1 − price).
+async function reviewBtc(start, end) {
+  const a = start - TWAP_MS, h = medianHistory;
+  if (h.length && h[0].t <= a + 5000 && h[h.length - 1].t >= end - 2000)
+    return { pts: h.slice(Math.max(0, firstIdx(h, a) - 1), firstIdx(h, end + 1)), src: 'median of exchanges' };
+  const q = `symbol=BTCUSDT&interval=1s&startTime=${a}&endTime=${end - 1}&limit=1000`;
+  const d = await getJSON(`https://api.binance.com/api/v3/klines?${q}`)
+    .catch(() => getJSON(`https://data-api.binance.vision/api/v3/klines?${q}`));
+  return { pts: d.map(k => ({ t: k[0], p: +k[4] * usdtUsd })), src: 'Binance 1s (USDT→USD)' };
+}
+
+async function reviewProb(ts) {
+  const arch = probArchive.get(ts);
+  if (arch?.length && arch[0].t <= ts * 1000 + 15_000) return arch;
+  let m = roundMeta.get(ts);
+  if (!m) {
+    const ev = await fetchEvent(ts);
+    if (!ev) return [];
+    m = parseMarket(ev, ts); roundMeta.set(ts, m);
+  }
+  const a = ts - 60, b = ts + 300, bySec = new Map();
+  try {
+    let cursor = '';
+    for (let page = 0; page < 10; page++) {
+      const d = await getJSON(`https://data-api.polymarket.com/v2/trades?conditionId=${m.cid}&limit=1000${cursor}`);
+      const rows = d.data || [];
+      let oldest = Infinity;
+      for (const r of rows) {
+        oldest = Math.min(oldest, r.timestamp);
+        if (r.timestamp < a || r.timestamp > b) continue;
+        const up = r.token_id ? r.token_id === m.yesId : r.outcome === 'Up';
+        if (!bySec.has(r.timestamp)) bySec.set(r.timestamp, []);
+        bySec.get(r.timestamp).push(up ? +r.price : 1 - r.price);
+      }
+      if (!d.pagination?.has_more || !rows.length || oldest < a) break;
+      cursor = '&cursor=' + encodeURIComponent(d.pagination.next_cursor);
+    }
+  } catch (e) {
+    // fallback: Polymarket's price history, about one point a minute
+    console.warn('round trades:', e.message);
+    const d = await getJSON(`https://clob.polymarket.com/prices-history?market=${m.yesId}&startTs=${a}&endTs=${b}&fidelity=1`);
+    return (d.history || []).map(h => ({ t: h.t * 1000, p: h.p * 100 })).sort((x, y) => x.t - y.t);
+  }
+  // one point per second: the median trade price
+  return [...bySec.keys()].sort((x, y) => x - y).map(s => {
+    const v = bySec.get(s).sort((x, y) => x - y), n = v.length;
+    return { t: s * 1000, p: (n % 2 ? v[n >> 1] : (v[n / 2 - 1] + v[n / 2]) / 2) * 100 };
+  });
+}
+
+async function selectRound(ts) {
+  ts = +ts || null;
+  if (ts && ts >= currentRound().start / 1000) ts = null;     // the running round is the live view
+  if ((review?.ts ?? null) === ts) return;
+  const r = review = ts ? { ts, start: ts * 1000, end: ts * 1000 + ROUND_MS, btc: [], prob: [], loading: true, src: '' } : null;
+  delete yRange.btc; delete yRange.prob;
+  hoverFrac = null;
+  syncReview();
+  if (!r) return;
+  const res = roundResults.get(ts);
+  if (res !== 'up' && res !== 'down') fetchRoundResult(ts).then(() => { if (review === r) syncReview(); });
+  const [btc, prob] = await Promise.allSettled([reviewBtc(r.start, r.end), reviewProb(ts)]);
+  if (review !== r) return;
+  if (btc.status === 'fulfilled') {
+    r.btc = btc.value.pts; r.src = btc.value.src;
+    r.strike = twap(r.btc, r.start - TWAP_MS, r.start);
+    r.settle = twap(r.btc, r.end - TWAP_MS, r.end);
+  } else console.warn('round btc:', btc.reason?.message);
+  if (prob.status === 'fulfilled') r.prob = prob.value; else console.warn('round prob:', prob.reason?.message);
+  r.failed = btc.status === 'rejected' && prob.status === 'rejected';
+  r.loading = false;
+  delete yRange.btc; delete yRange.prob;
+  syncReview();
+}
+
+function syncBandLegend() {
+  $('leg-band').hidden = !showBands || (!review && viewMode !== 'round');
+}
+
+function syncReview() {
+  const r = review;
+  $('review').hidden = !r;
+  $('win-seg').classList.toggle('dim', !!r);
+  $('show-ex').disabled = !!r;
+  $('legend-ex').hidden = !showExchanges || !!r;
+  $('round-pick').value = r ? String(r.ts) : '';
+  for (const c of $('rounds').children) c.setAttribute('aria-pressed', String(!!r && +c.dataset.ts === r.ts));
+  const basis = !r || r.loading || r.src.startsWith('median') ? 'Median' : 'Binance';
+  $('leg-med').textContent = basis;
+  btcTip.refs.med.label.nodeValue = basis;
+  syncBandLegend();
+  if (!r) return;
+  $('rv-title').textContent = roundSpan(r.ts);
+  const res = roundResults.get(r.ts), el = $('rv-res');
+  el.className = 'rv-res ' + (res === 'up' || res === 'down' ? res : '');
+  el.textContent = res === 'up' ? '▲ Up' : res === 'down' ? '▼ Down' : 'result pending';
+  el.title = 'Official result (Polymarket)';
+  $('rv-sub').textContent = r.loading ? 'Loading round…' : r.failed ? 'Could not load this round' :
+    (r.strike != null && r.settle != null
+      ? `Strike ${fmtP(r.strike)} → settlement avg ${fmtP(r.settle)} (${signedUsd(r.settle - r.strike)}) · ` : '') +
+    `BTC: ${r.src || 'no data'}`;
 }
 
 // ── Chainlink (Polygon) — shared provider + on-chain strike cross-check ──────
@@ -1744,8 +2087,10 @@ function render() {
   frameDt = Math.min(100, now - (lastFrameT || now)); lastFrameT = now;
   if (now - tpsTick >= 1000) { tps = tpsCount; tpsCount = 0; tpsTick = now; }
   if (now - lastUiT >= 200) { lastUiT = now; updateUI(now); }
-  drawBtc(now);
-  drawProb(now);
+  const view = chartView(now);
+  drawBtc(view);
+  drawProb(view);
+  renderLadder(frameDt);
   requestAnimationFrame(render);
 }
 
@@ -1775,19 +2120,44 @@ srcEl.addEventListener('change', e => {
 
 // chart legend entries for the optional exchange lines
 $('legend-ex').innerHTML = EXCH.map((ex, i) => `<span><i class="lk" style="background:var(--ex-${i + 1})"></i>${ex.name}</span>`).join('');
+$('show-ex').checked = showExchanges;
+$('legend-ex').hidden = !showExchanges;
 $('show-ex').addEventListener('change', e => {
   showExchanges = e.target.checked;
   $('legend-ex').hidden = !showExchanges;
+  saveOpts();
+});
+$('show-bands').checked = showBands;
+$('show-bands').addEventListener('change', e => {
+  showBands = e.target.checked;
+  syncBandLegend();
+  saveOpts();
 });
 
-document.querySelectorAll('.seg button').forEach(btn => btn.addEventListener('click', () => {
-  document.querySelectorAll('.seg button').forEach(b => b.setAttribute('aria-pressed', String(b === btn)));
+// time window buttons (they belong to the live view: picking one while a past round is open goes back to live)
+const winBtns = document.querySelectorAll('#win-seg button');
+winBtns.forEach(btn => btn.addEventListener('click', () => {
+  winBtns.forEach(b => b.setAttribute('aria-pressed', String(b === btn)));
   if (btn.dataset.s) { viewMode = 'rolling'; WINDOW_MS = parseInt(btn.dataset.s) * 1000; }
   else viewMode = 'round';
-  $('leg-band').hidden = viewMode !== 'round';
+  if (review) selectRound(null);
+  syncBandLegend();
   lastSlowT = 0;
   delete yRange.btc; delete yRange.prob;   // new window: snap the y-axis instead of easing
 }));
+
+// round menu, round chips (tap again to go back to live), order book Now / Next
+$('round-pick').addEventListener('change', e => selectRound(e.target.value));
+$('rv-back').addEventListener('click', () => selectRound(null));
+$('rounds').addEventListener('click', e => {
+  const chip = e.target.closest('.rchip');
+  if (!chip) return;
+  const ts = +chip.dataset.ts;
+  selectRound(review?.ts === ts ? null : ts);
+  const card = $('card-charts'), top = card.getBoundingClientRect().top;
+  if (top < 0 || top > innerHeight * 0.6) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+document.querySelectorAll('[data-book]').forEach(b => b.addEventListener('click', () => setBookView(b.dataset.book)));
 
 $('alert-btn').addEventListener('click', () => setAlerts(!alertsOn, true));
 try { if (localStorage.getItem('alerts') === '1') setAlerts(true, false); } catch {}
@@ -1809,6 +2179,7 @@ const probC = setupCanvas('prob-canvas');
 attachHover(btcC.el, 'btc');
 attachHover(probC.el, 'prob');
 renderRounds();
+syncBandLegend();
 
 seedUsdt().finally(connectExchanges);   // rate first, so no Binance trade is stored unconverted
 // history for the chart, the strike window before the round and the model — then live feeds take over
@@ -1825,7 +2196,7 @@ setInterval(refreshRounds, 30_000);
 setInterval(() => {
   const now = Date.now();
   for (const ex of EXCH) if (ex.ws && ex.ws.readyState === 1 && now - ex.lastMsgT > 90_000) ex.ws.close();
-  if (polyWs && polyWs.readyState === 1 && now - polyLastMsgT > 90_000) polyWs.close();
+  for (const f of [cur, nxt]) if (f?.ws && f.ws.readyState === 1 && now - f.lastMsgT > 90_000) f.ws.close();
 }, 10_000);
 
 // back from the background (phone locked, tab switched): reconnect stale feeds and refill the gap
@@ -1837,8 +2208,8 @@ document.addEventListener('visibilitychange', () => {
   if (away < 15_000) return;
   const now = Date.now();
   for (const ex of EXCH) if (ex.ws && now - ex.lastMsgT > 10_000) ex.ws.close();
-  if (polyWs && now - polyLastMsgT > 10_000) polyWs.close();
-  if (windowTs !== null && windowTs * 1000 + ROUND_MS <= now) loadPolymarket();
+  for (const f of [cur, nxt]) if (f?.ws && now - f.lastMsgT > 10_000) f.ws.close();
+  // a round that ended meanwhile is switched by checkRoundSwitch (reloads if the preloaded one is stale too)
   backfill(now - Math.min(away + 30_000, 6 * 60_000));
   refreshRounds();
 });
