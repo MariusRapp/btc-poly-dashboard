@@ -25,6 +25,7 @@ Kalshi hat keine 5-Minuten-Runden; „Kalshi“ und „Both“ laufen deshalb im
 | Datei | Inhalt |
 |---|---|
 | `index.html` | Das Dashboard: BTC-Median gegen den Strike, Countdown, implizite UP-Wahrscheinlichkeit, Orderbuch (feste Preisleiter, das Mid wandert), Signale, Polymarket-vs-Kalshi-Vergleich mit Arbitrage-Rechnung, die letzten 24 Runden mit offiziellen Ergebnissen – jede Runde im Chart abrufbar – und eigene Trefferquote. Für Desktop, Tablet und Handy, mit Light- und Dark-Mode. |
+| `manifest.webmanifest`, `icons/` | App-Manifest und Icons: Das Dashboard lässt sich auf dem Handy zum Home-Bildschirm hinzufügen und öffnet dann im Vollbild. |
 | `kalshi-proxy/` | Cloudflare Worker, der Kalshis öffentliche Marktdaten mit CORS-Headern an das Dashboard weiterreicht (`worker.js`), plus `dev.mjs` zum lokalen Testen mit Node. |
 | `btc-stream.html` | Schlanker BTC/USD-Tick-Stream (Binance aggTrade) mit Volumen und Buy Pressure. |
 | `poly.ipynb` | Jupyter-Notebook: Polymarket-Orderbuch als ipywidgets-Dashboard und Strike-Suche über den Chainlink-Feed. |
@@ -48,6 +49,9 @@ Das Dashboard rechnet deshalb so:
   plus aktueller Preis für den Rest.
 - **Modell-Wahrscheinlichkeit** = Normalverteilung des Abrechnungs-Durchschnitts; Volatilität aus
   1-Minuten-Renditen der letzten Stunde (Coinbase).
+- **Model edge** (Karte „Signals“) = erwarteter Gewinn pro 1-$-Anteil, wenn man eine Seite zum besten Ask kauft
+  und das Modell recht hat: Modell-Wahrscheinlichkeit − Ask − Taker-Gebühr (0,07 × p × (1 − p)). UP kostet den
+  UP-Ask, DOWN 1 − den besten UP-Bid. Angezeigt wird die bessere Seite (in „Both“ über beide Börsen), darunter alle Seiten.
 
 ## Poly vs Kalshi
 
@@ -114,8 +118,13 @@ python -m http.server 8000           # Dashboard unter http://localhost:8000/?ka
 ## Benutzung
 
 Die HTML-Dateien einfach im Browser öffnen. Die Glocke oben rechts schaltet Alarme ein
-(Strike-Kreuzung in der letzten Minute, große Abweichung Markt vs. Modell, in „Both“ Arbitrage). Die Trefferquote
-wird je Börse und Rundenlänge im Browser gespeichert, solange das Dashboard offen ist.
+(Strike-Kreuzung in der letzten Minute, Model edge ab 5 ¢ pro Anteil nach Gebühren, in „Both“ Arbitrage). Auf dem
+Desktop laufen Alarme und Trefferquote auch in einem Hintergrund-Tab weiter; ein gesperrtes Handy pausiert die Seite.
+Der Bildschirm-Knopf daneben hält deshalb den Bildschirm an, solange das Dashboard offen ist (nur in Browsern mit
+Screen Wake Lock, sonst ausgeblendet). Die Trefferquote wird je Börse und Rundenlänge im Browser gespeichert,
+solange das Dashboard offen ist.
+
+Auf dem Handy: im Browser-Menü „Zum Home-Bildschirm“ – dann startet das Dashboard wie eine App im Vollbild.
 
 Über das Menü links in der Chart-Leiste (oder einen Tipp auf eine Runde unter „Recent rounds“) lässt
 sich jede der letzten 24 Runden im Chart ansehen. „Exchange lines“, „Averaging windows“ (die beiden
@@ -129,5 +138,5 @@ pip install requests websockets ipywidgets web3
 
 ## Hinweis
 
-Modell, Mispricing, Arbitrage, Projected Settlement und Buy Pressure sind Heuristiken, keine Handelsempfehlung.
+Modell, Model edge, Arbitrage, Projected Settlement und Buy Pressure sind Heuristiken, keine Handelsempfehlung.
 Beide Börsen erheben bei diesen Märkten Taker-Gebühren. Kalshi steht nicht in jedem Land für den Handel offen.
