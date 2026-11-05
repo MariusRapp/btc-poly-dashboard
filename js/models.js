@@ -23,7 +23,7 @@ export const MOMENTUM_CAP = 2;      // $/s: a trend the model takes on at most
 // Add an object to MODELS; the Model card lists it, scores it on recorded rounds and builds its settings:
 //
 //   {
-//     id: 'mine', name: 'My model',                         // id: short, unique, kept in the browser\'s settings
+//     id: 'mine', name: 'My model',                         // id: short, unique, kept in the browser's settings
 //     tagline: 'One sentence: what it assumes, in plain words.',
 //     assumes: ['no trend', 'bell curve', '…'],             // short tags on its card
 //     params: [                                             // its settings (may be empty)
