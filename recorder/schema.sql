@@ -1,5 +1,5 @@
 -- D1 schema of the recorder (apply: npx wrangler d1 execute btc-rounds --remote --file schema.sql)
--- One row per market and round. Prices of the market are 0..1; BTC values are Binance BTC/USDT.
+-- One row per market and round. Prices of the market are 0..1; BTC values come from Kraken BTC/USD trades.
 CREATE TABLE IF NOT EXISTS rounds (
   series   TEXT    NOT NULL,   -- poly5 | poly15 | kalshi15
   start    INTEGER NOT NULL,   -- round start, unix seconds
