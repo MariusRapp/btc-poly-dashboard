@@ -1,6 +1,6 @@
 // Pure helpers of the recorder Worker: which round to snapshot, parsing books and results, BTC averages,
 // the model at the snapshot, upsert SQL. No I/O; covered by recorder/lib.test.js.
-import { probAbove, settlementDist } from '../js/math.js';
+import { probAbove, settlementDist, twap } from '../js/math.js';
 
 // the three markets the dashboard shows; ids match the dashboard's track stores
 export const SERIES = [
@@ -58,14 +58,15 @@ export function kalshiRound(m) {
   };
 }
 
-// Binance klines [openTime ms, open, high, low, close, …]: average close of the seconds in [a, b) ms.
-// Needs `min` points (a 60s window has 60); null otherwise.
-export function klineAvg(klines, a, b, min = 30) {
-  let sum = 0, n = 0;
-  for (const k of klines) if (k[0] >= a && k[0] < b) { sum += +k[4]; n++; }
-  return n >= min ? sum / n : null;
+// Kraken /0/public/Trades → [{ t: ms, p }], oldest first ([price, volume, time s, side, type, misc, id] per trade)
+export function krakenTrades(d) {
+  const pair = Object.keys(d?.result || {}).find(k => k !== 'last');
+  return (pair ? d.result[pair] : []).map(x => ({ t: Math.round(x[2] * 1000), p: +x[0] }));
 }
-export const lastClose = klines => klines.length ? +klines[klines.length - 1][4] : null;
+// BTC 60s average over [a, b) ms: time-weighted average of the trade prices, as the dashboard computes it;
+// null when the trades start more than 10s into the window
+export const windowAvg = (trades, a, b) => twap(trades, a, b);
+export const lastPrice = trades => trades.length ? trades[trades.length - 1].p : null;
 
 // model P(up) at the snapshot: the dashboard's model, on Binance BTC/USDT (strike and price share the basis)
 export function modelAt({ price, strike, sigma, nowMs, endMs, observed = null }) {

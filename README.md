@@ -125,7 +125,8 @@ Der Browser sammelt nur, solange ein Tab offen ist. Der Worker in `recorder/` l�
 (Cron Trigger) und speichert pro Markt (`poly5`, `poly15`, `kalshi15`) und Runde in der D1-Datenbank `btc-rounds`:
 
 - besten Bid und Ask und die Modell-Wahrscheinlichkeit 60 s vor dem Ende (dasselbe Modell wie im Dashboard, `js/math.js`),
-- BTC-60-s-Durchschnitt vor dem Start und vor dem Ende (Binance BTC/USDT, 1-s-Kerzen),
+- BTC-60-s-Durchschnitt vor dem Start und vor dem Ende (zeitgewichtet aus Kraken-BTC/USD-Trades; Binance blockt
+  Anfragen aus dem Cloudflare-Netz),
 - das offizielle Ergebnis, bei Kalshi zusätzlich die veröffentlichten BRTI-Werte (Start und Abrechnung).
 
 Die offiziellen Ergebnisse der 15-Minuten-Runden beider Börsen holt er zwei Wochen rückwirkend nach. Das Dashboard

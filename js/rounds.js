@@ -152,7 +152,7 @@ function renderServerTrack(el, server) {
       const b = backtest(x.recs, BT_EDGE, x.fee);
       return b.trades ? `<span class="${b.pnl >= 0 ? 'up-t' : 'down-t'}">${signedC(b.perTrade)}</span>&nbsp;a&nbsp;trade · ${b.trades}&nbsp;trades` : 'no trades yet';
     })],
-    ['BTC (Binance) settled like the market', per(x => `${x.s.ownMatch} / ${x.s.ownN}`)],
+    ['BTC (Kraken) settled like the market', per(x => `${x.s.ownMatch} / ${x.s.ownN}`)],
   ];
   el.innerHTML = rows.map(([k, v]) => `<div class="trow"><span>${k}</span><b>${v}</b></div>`).join('') +
     (!two && st[0].s.n >= 20 ? calibrationChart(st[0].recs, st[0].V) : '') +

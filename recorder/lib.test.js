@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  snapshotRound, endedRounds, polyTouch, kalshiTouch, polyResult, slugStart, kalshiRound, klineAvg, lastClose, modelAt, upsert,
+  snapshotRound, endedRounds, polyTouch, kalshiTouch, polyResult, slugStart, kalshiRound, krakenTrades, windowAvg, lastPrice, modelAt, upsert,
 } from './lib.js';
 import { settlementDist, probAbove } from '../js/math.js';
 
@@ -42,13 +42,14 @@ test('polyResult / slugStart / kalshiRound', () => {
   assert.equal(kalshiRound({ close_time: '2026-11-05T20:15:00Z', result: '' }).result, null);
 });
 
-test('klineAvg: average close of the seconds in the window', () => {
-  const k = Array.from({ length: 120 }, (_, i) => [i * 1000, '0', '0', '0', String(100 + i)]);
-  assert.equal(klineAvg(k, 0, 60_000), 129.5);       // closes 100..159
-  assert.equal(klineAvg(k, 100_000, 160_000), null, 'only 20 points');
-  assert.equal(klineAvg(k, 100_000, 160_000, 1), 209.5);
-  assert.equal(lastClose(k), 219);
-  assert.equal(lastClose([]), null);
+test('krakenTrades / windowAvg / lastPrice: trade-weighted 60s average', () => {
+  const d = { error: [], result: { XXBTZUSD: [['100.0', '0.1', 1000.25, 'b', 'l', '', 1], ['110.0', '0.2', 1030.25, 's', 'm', '', 2]], last: 'x' } };
+  const t = krakenTrades(d);
+  assert.deepEqual(t, [{ t: 1000250, p: 100 }, { t: 1030250, p: 110 }]);
+  assert.equal(windowAvg(t, 1000250, 1060250), 105, '30s at 100, 30s at 110');
+  assert.equal(windowAvg(t, 980_000, 1_040_000), null, 'trades start 20s into the window');
+  assert.equal(lastPrice(t), 110);
+  assert.deepEqual(krakenTrades({ error: ['EGeneral'] }), []);
 });
 
 test('modelAt: the dashboard model', () => {

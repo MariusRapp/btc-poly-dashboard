@@ -7,14 +7,18 @@
 //
 // Free-plan budget per run: 10 ms CPU, 50 subrequests (D1 included). So: small responses, one D1 batch for all
 // writes, and the history backfill in small steps on minutes without a snapshot.
-import { volFromCloses } from '../js/math.js';
+//
+// BTC comes from Kraken (BTC/USD trades; Binance answers Cloudflare's network with 403), volatility from
+// Coinbase 1-minute candles, as in the dashboard.
+import { twap, volFromCloses } from '../js/math.js';
 import {
   SERIES, seriesById, snapshotRound, endedRounds, polyTouch, kalshiTouch, polyResult, slugStart, kalshiRound,
-  klineAvg, lastClose, modelAt, upsert,
+  krakenTrades, lastPrice, modelAt, upsert,
 } from './lib.js';
 
 const HEADERS = { 'Accept': 'application/json', 'User-Agent': 'btc-recorder/1.0 (+https://github.com/MariusRapp/btc-poly-dashboard)' };
-const BINANCE = ['https://data-api.binance.vision', 'https://api.binance.com'];   // the first is not geo-restricted
+const KRAKEN = 'https://api.kraken.com/0/public/Trades?pair=XBTUSD&count=1000&since=';   // up to 1,000 trades from a time on
+const CANDLES = 'https://api.exchange.coinbase.com/products/BTC-USD/candles?granularity=60';
 const GAMMA = 'https://gamma-api.polymarket.com', CLOB = 'https://clob.polymarket.com';
 const KALSHI = 'https://api.elections.kalshi.com/trade-api/v2', KS_SERIES = 'KXBTC15M';
 const RECENT_S = 2 * 3600;      // results and settlements are looked for over the last two hours
@@ -30,11 +34,8 @@ async function getJSON(url) {
   if (!r.ok) throw new Error(`${r.status} ${url}`);
   return r.json();
 }
-async function binance(path) {
-  let err;
-  for (const host of BINANCE) { try { return await getJSON(host + path); } catch (e) { err = e; } }
-  throw err;
-}
+// BTC trades from `sinceS` on (oldest first); starting 30s early gives the price in force when a window opens
+const trades = async sinceS => krakenTrades(await getJSON(KRAKEN + sinceS));
 const gammaEvents = slugs => getJSON(`${GAMMA}/events?${slugs.map(s => 'slug=' + s).join('&')}`);
 
 // best bid/ask of one round's market
@@ -60,31 +61,38 @@ export async function record(env, nowMs) {
   // 1. Snapshot: market and model about 60s before a round ends
   const due = SERIES.map(s => ({ s, start: snapshotRound(s.len, nowS) })).filter(x => x.start !== null);
   if (due.length) {
-    const from = Math.min(...due.map(x => x.start)) - 60;
-    const [k1s, k1m] = await Promise.all([
-      binance(`/api/v3/klines?symbol=BTCUSDT&interval=1s&startTime=${from * 1000}&limit=1000`),
-      binance('/api/v3/klines?symbol=BTCUSDT&interval=1m&limit=62'),
-    ]);
-    const price = lastClose(k1s), vol = volFromCloses(k1m.slice(0, -1).map(k => +k[4]));   // skip the open minute
-    const sigma = price !== null && vol !== null ? vol * price : null;
-    await Promise.all(due.map(async ({ s, start }) => {
-      try {
-        const end = (start + s.len) * 1000;
-        const touch = s.venue === 'poly' ? await polyBook(s, start) : await kalshiBook(start);
-        const strike = klineAvg(k1s, (start - 60) * 1000, start * 1000);
-        const model = strike !== null && sigma !== null
-          ? modelAt({ price, strike, sigma, nowMs, endMs: end, observed: klineAvg(k1s, end - 60_000, nowMs, 1) }) : null;
-        put(s.id, start, { snap_t: nowS, bid: touch.bid, ask: touch.ask, model, price, sigma, strike });
-        stats.snapshots++;
-      } catch (e) {
-        log('error', 'snapshot failed', { series: s.id, start, error: e.message });
-      }
-    }));
+    try {
+      // the cron fires some seconds into the minute: wait for exactly 60s before the end, the dashboard's moment
+      // (all rounds due in one run end together: a 15-minute boundary is also a 5-minute one)
+      const endMs = (due[0].start + due[0].s.len) * 1000, wait = endMs - 60_000 - Date.now();
+      if (wait > 0 && wait < 30_000) await new Promise(r => setTimeout(r, wait));
+      const snapMs = Date.now(), starts = [...new Set(due.map(x => x.start))];
+      const [candles, recent, ...atStart] = await Promise.all([
+        getJSON(CANDLES), trades(Math.floor(snapMs / 1000) - 90), ...starts.map(st => trades(st - 90)),
+      ]);
+      const price = lastPrice(recent), vol = volFromCloses(candles.slice(1, 62).map(c => c[4]).reverse());   // newest first; skip the open minute
+      const sigma = price !== null && vol !== null ? vol * price : null;
+      await Promise.all(due.map(async ({ s, start }) => {
+        try {
+          const touch = s.venue === 'poly' ? await polyBook(s, start) : await kalshiBook(start);
+          const strike = twap(atStart[starts.indexOf(start)], (start - 60) * 1000, start * 1000);
+          const observed = snapMs > endMs - 60_000 ? twap(recent, endMs - 60_000, snapMs) : null;
+          const model = strike !== null && sigma !== null ? modelAt({ price, strike, sigma, nowMs: snapMs, endMs, observed }) : null;
+          put(s.id, start, { snap_t: Math.floor(snapMs / 1000), bid: touch.bid, ask: touch.ask, model, price, sigma, strike });
+          stats.snapshots++;
+        } catch (e) {
+          log('error', 'snapshot failed', { series: s.id, start, error: e.message });
+        }
+      }));
+    } catch (e) {
+      log('error', 'snapshot data failed', { error: e.message });   // the rest of the run still goes ahead
+    }
   }
 
   // what the last two hours already have
+  // (from one round further back: a round that started before the span but ended inside it belongs to it)
   const { results: recent } = await env.DB.prepare('SELECT series, start, strike, settle, result FROM rounds WHERE start >= ?')
-    .bind(nowS - RECENT_S).all();
+    .bind(nowS - RECENT_S - 900).all();
   const have = new Map(recent.map(r => [`${r.series}|${r.start}`, r]));
 
   // 2. Settlement average for snapshotted rounds that have ended (poly15 and kalshi15 share their end times)
@@ -95,8 +103,7 @@ export async function record(env, nowMs) {
   }
   for (const [end, rows] of [...ends].slice(-3)) {
     try {
-      const k = await binance(`/api/v3/klines?symbol=BTCUSDT&interval=1s&startTime=${(end - 60) * 1000}&endTime=${end * 1000 - 1}&limit=60`);
-      const settle = klineAvg(k, (end - 60) * 1000, end * 1000);
+      const settle = twap(await trades(end - 90), (end - 60) * 1000, end * 1000);
       if (settle !== null) for (const r of rows) { put(r.series, r.start, { settle }); stats.settled++; }
     } catch (e) {
       log('error', 'settle failed', { end, error: e.message });
@@ -132,10 +139,10 @@ export async function record(env, nowMs) {
   if (!due.length) {
     const meta = Object.fromEntries((await env.DB.prepare('SELECT key, value FROM meta').all()).results.map(r => [r.key, r.value]));
     const setMeta = (key, value) => writes.push({ sql: 'INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value', params: [key, String(value)] });
-    // Kalshi: settled markets, newest first, 100 a page
+    // Kalshi: settled markets, newest first, 50 a page
     if (meta.kalshi_done !== '1') {
       try {
-        const d = await getJSON(`${KALSHI}/markets?series_ticker=${KS_SERIES}&status=settled&limit=100${meta.kalshi_cursor ? '&cursor=' + encodeURIComponent(meta.kalshi_cursor) : ''}`);
+        const d = await getJSON(`${KALSHI}/markets?series_ticker=${KS_SERIES}&status=settled&limit=50${meta.kalshi_cursor ? '&cursor=' + encodeURIComponent(meta.kalshi_cursor) : ''}`);
         let oldest = Infinity;
         for (const m of d.markets || []) { const k = kalshiRound(m); oldest = Math.min(oldest, k.start); if (k.result) { put('kalshi15', k.start, k); stats.backfilled++; } }
         if (!d.cursor || oldest < nowS - BACKFILL_S) setMeta('kalshi_done', 1);
@@ -144,10 +151,10 @@ export async function record(env, nowMs) {
         log('error', 'kalshi backfill failed', { error: e.message });
       }
     }
-    // Polymarket 15m: 20 rounds a step, walking back from where the last step stopped
+    // Polymarket 15m: 10 rounds a step (their events are large), walking back from where the last step stopped
     const before = +meta.poly15_before || Math.floor(nowS / 900) * 900 - 900 * 8;
     if (before > nowS - BACKFILL_S) {
-      const starts = Array.from({ length: 20 }, (_, i) => before - 900 * (i + 1));
+      const starts = Array.from({ length: 10 }, (_, i) => before - 900 * (i + 1));
       try {
         for (const ev of await gammaEvents(starts.map(t => 'btc-updown-15m-' + t))) {
           const res = polyResult(ev);
@@ -173,7 +180,8 @@ function json(body, origin, cache = 'no-store') {
 
 export default {
   async scheduled(event, env, ctx) {
-    ctx.waitUntil(record(env, event.scheduledTime).catch(e => log('error', 'run failed', { error: e.message })));
+    // the actual time, not event.scheduledTime: the run starts some seconds after it
+    ctx.waitUntil(record(env, Date.now()).catch(e => log('error', 'run failed', { error: e.message })));
   },
 
   async fetch(request, env) {
