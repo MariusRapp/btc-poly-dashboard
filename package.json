@@ -1,0 +1,10 @@
+{
+  "name": "btc-poly-dashboard",
+  "private": true,
+  "type": "module",
+  "description": "Static dashboard (no build step, no dependencies). These scripts are for local work only.",
+  "scripts": {
+    "start": "node serve.mjs",
+    "test": "node --test"
+  }
+}

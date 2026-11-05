@@ -24,7 +24,10 @@ Kalshi hat keine 5-Minuten-Runden; „Kalshi“ und „Both“ laufen deshalb im
 
 | Datei | Inhalt |
 |---|---|
-| `index.html` | Das Dashboard: BTC-Median gegen den Strike, Countdown, implizite UP-Wahrscheinlichkeit, Orderbuch (feste Preisleiter, das Mid wandert), Signale, Polymarket-vs-Kalshi-Vergleich mit Arbitrage-Rechnung, die letzten 24 Runden mit offiziellen Ergebnissen – jede Runde im Chart abrufbar – und eigene Trefferquote. Für Desktop, Tablet und Handy, mit Light- und Dark-Mode. |
+| `index.html` | Das Dashboard: BTC-Median gegen den Strike, Countdown, implizite UP-Wahrscheinlichkeit, Orderbuch (feste Preisleiter, das Mid wandert), Signale, Polymarket-vs-Kalshi-Vergleich mit Arbitrage-Rechnung, die letzten 24 Runden mit offiziellen Ergebnissen – jede Runde im Chart abrufbar – und eigene Trefferquote. Für Desktop, Tablet und Handy, mit Light- und Dark-Mode. Nur Markup; Stil in `css/app.css`, Code in `js/`. |
+| `js/` | Der Code als ES-Module, ohne Build-Schritt (siehe „Code-Aufbau“). |
+| `test/` | Tests für die Rechenkerne (`math.js`, Chainlink-Dekodierung) und den Modul-Aufbau: `npm test`. |
+| `serve.mjs` | Kleiner lokaler Server: `npm start` → http://localhost:8000/ |
 | `manifest.webmanifest`, `icons/` | App-Manifest und Icons: Das Dashboard lässt sich auf dem Handy zum Home-Bildschirm hinzufügen und öffnet dann im Vollbild. |
 | `kalshi-proxy/` | Cloudflare Worker, der Kalshis öffentliche Marktdaten mit CORS-Headern an das Dashboard weiterreicht (`worker.js`), plus `dev.mjs` zum lokalen Testen mit Node. |
 | `btc-stream.html` | Schlanker BTC/USD-Tick-Stream (Binance aggTrade) mit Volumen und Buy Pressure. |
@@ -112,12 +115,33 @@ Lokal ohne Cloudflare:
 
 ```bash
 node kalshi-proxy/dev.mjs            # http://localhost:8787
-python -m http.server 8000           # Dashboard unter http://localhost:8000/?kalshi=http://localhost:8787
+node serve.mjs                       # Dashboard unter http://localhost:8000/?kalshi=http://localhost:8787
 ```
+
+## Code-Aufbau
+
+Das Dashboard ist eine statische Seite: GitHub Pages liefert `index.html`, `css/app.css` und die Module in `js/` so aus,
+wie sie im Repository liegen – kein Build, keine Abhängigkeiten. `index.html` lädt alle Module per `modulepreload`
+parallel vor (ein Test prüft, dass die Liste vollständig ist).
+
+| Modul | Inhalt |
+|---|---|
+| `main.js` | Einstieg: Bedienelemente, Start der Feeds und Timer |
+| `state.js` | Gemeinsamer Zustand `S` (Werte, die mehrere Module setzen), Konstanten, gespeicherte Optionen, Börsenliste |
+| `math.js` | Reine Funktionen ohne DOM und Zustand: TWAP, Median, Modell-Verteilung, Gebühren, Edge, Arbitrage-Walk. Getestet |
+| `prices.js` | Trade-Feeds der sechs Börsen, Median, REST-Nachladen |
+| `model.js` | Strike, erwartete Abrechnung, Modell-Wahrscheinlichkeit |
+| `chainlink.js` | Chainlink-Feed auf Polygon per JSON-RPC |
+| `venues.js`, `polymarket.js`, `kalshi.js`, `mode.js` | Die beiden Börsen, ihre Orderbücher und Rundenwechsel; Markt-Umschalter |
+| `charts.js`, `theme.js` | Die beiden Canvas-Charts, Tooltips, Render-Schleife; Farben |
+| `panels.js`, `ladder.js`, `arb.js`, `rounds.js`, `review.js`, `alerts.js` | Die Karten: Kennzahlen und Signale, Orderbuch, Poly vs Kalshi, Runden und Trefferquote, vergangene Runden, Alarme |
+| `util.js` | DOM-Zugriff, Formatierung, Rundenzeiten |
+
+ES-Module laden nicht von `file://`; lokal deshalb `npm start` (oder `node serve.mjs`) und http://localhost:8000/ öffnen.
 
 ## Benutzung
 
-Die HTML-Dateien einfach im Browser öffnen. Die Glocke oben rechts schaltet Alarme ein
+Online: https://mariusrapp.github.io/btc-poly-dashboard/ – lokal siehe oben. Die Glocke oben rechts schaltet Alarme ein
 (Strike-Kreuzung in der letzten Minute, Model edge ab 5 ¢ pro Anteil nach Gebühren, in „Both“ Arbitrage). Auf dem
 Desktop laufen Alarme und Trefferquote auch in einem Hintergrund-Tab weiter; ein gesperrtes Handy pausiert die Seite.
 Der Bildschirm-Knopf daneben hält deshalb den Bildschirm an, solange das Dashboard offen ist (nur in Browsern mit
