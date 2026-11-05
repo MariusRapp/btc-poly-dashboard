@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   snapshotRound, endedRounds, polyTouch, kalshiTouch, polyResult, slugStart, kalshiRound, krakenTrades, windowAvg, lastPrice, modelAt, upsert,
+  tradeVelocity, COLUMNS, MODEL_INPUTS,
 } from './lib.js';
 import { settlementDist, probAbove } from '../js/math.js';
 
@@ -69,4 +70,19 @@ test('upsert: only the given columns, nulls left out', () => {
     'ON CONFLICT (series, start) DO UPDATE SET bid = excluded.bid, result = excluded.result, updated = excluded.updated');
   assert.deepEqual(u.params, ['poly5', 1793909400, 0.4, 'up', 1793910000]);
   assert.equal(upsert('poly5', 1, { bid: null }, 2), null);
+});
+
+test('tradeVelocity: $/s over the last minute', () => {
+  const t = [{ t: 0, p: 100 }, { t: 30_000, p: 103 }, { t: 70_000, p: 106 }];
+  assert.equal(tradeVelocity(t, 70_000), (106 - 100) / 60, 'against the price in force 60s earlier (the trade at 0s)');
+  assert.equal(tradeVelocity(t, 50_000), null, 'nothing that old');
+  assert.equal(tradeVelocity([], 1), null);
+});
+
+test('upsert: model inputs can be left out (before migrations/0002)', () => {
+  const f = { bid: 0.4, vol15: 1e-5, vel: 0.3 };
+  assert.match(upsert('poly5', 1, f, 2).sql, /vol15, vel/);
+  const old = upsert('poly5', 1, f, 2, COLUMNS.filter(c => !MODEL_INPUTS.includes(c)));
+  assert.doesNotMatch(old.sql, /vol15|vel/);
+  assert.deepEqual(old.params, ['poly5', 1, 0.4, 2]);
 });

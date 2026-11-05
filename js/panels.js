@@ -5,7 +5,8 @@ import { arbState, bestEdge, modelEdges, updateArb, updateLive, updateSources } 
 import { btcC, probC } from './charts.js';
 import { KALSHI_PROXY, ksCheckSwitch } from './kalshi.js';
 import { firstIdx, twap } from './math.js';
-import { computeModelProb, expectedSettlement, ksTarget, strikeNote, updateStrike, velocity } from './model.js';
+import { activeModel, computeModelProb, expectedSettlement, ksTarget, strikeNote, updateStrike, velocity } from './model.js';
+import { updateModelCard } from './modelcard.js';
 import { checkRoundSwitch } from './polymarket.js';
 import { recordTrack } from './rounds.js';
 import { EXCH, ROUND_S, S, TWAP_MS, buyPressureSnaps, medianHistory } from './state.js';
@@ -54,7 +55,8 @@ export function updateUI(now) {
     (KS.on ? ` · Kalshi target ${kt !== null ? fmtP(kt) : '—'}` : '') +
     (PM.on ? ` · Chainlink ${S.clPrice !== null ? fmtP(S.clPrice) : '—'}` : '');
 
-  const modelTxt = `Model ${modelP !== null ? modelP.toFixed(1) + '%' : '—'}`;
+  const mName = activeModel().id === 'rw' ? 'Model' : activeModel().name;   // name the model when it is not the Standard one
+  const modelTxt = `${mName} ${modelP !== null ? modelP.toFixed(1) + '%' : '—'}`;
   if (both()) {
     $('up-pm').textContent = PM.up !== null ? PM.up.toFixed(1) + '%' : '—';
     $('up-ks').textContent = KS.up !== null ? KS.up.toFixed(1) + '%' : '—';
@@ -79,6 +81,7 @@ export function updateUI(now) {
     S.lastSlowT = now;
     const arb = both() ? arbState() : null;
     updateSignals(now, modelP);
+    updateModelCard();
     if (arb) updateArb(arb);
     updateSources();
     updateLive();

@@ -6,6 +6,7 @@
     "dev": "wrangler dev --local --test-scheduled",
     "schema:local": "wrangler d1 execute btc-rounds --local --file schema.sql",
     "schema": "wrangler d1 execute btc-rounds --remote --file schema.sql",
+    "migrate": "wrangler d1 execute btc-rounds --remote --file migrations/0002_model_inputs.sql",
     "deploy": "wrangler deploy"
   },
   "devDependencies": {

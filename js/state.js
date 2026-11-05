@@ -61,7 +61,7 @@ S.showGap = opts.gap !== false;   // both venues: shade the gap between the two 
 S.bookSide = opts.side === 'down' ? 'down' : 'up';   // order book card: UP shares, or DOWN (the UP book mirrored)
 S.bookVenue = opts.bv === 'kalshi' ? 'kalshi' : 'poly';   // order book card with both venues on
 export const saveOpts = () => { try { localStorage.setItem(OPTS_KEY, JSON.stringify({
-  ex: S.showExchanges, bands: S.showBands, fc: S.showFc, gap: S.showGap, side: S.bookSide, bv: S.bookVenue, venue: S.venueMode, len: S.polyLenMin })); } catch {} };
+  ex: S.showExchanges, bands: S.showBands, fc: S.showFc, model: S.modelId, mp: S.modelParams, gap: S.showGap, side: S.bookSide, bv: S.bookVenue, venue: S.venueMode, len: S.polyLenMin })); } catch {} };
 
 // past round shown in the charts (null = live)
 export const ROUNDS_SHOWN = 24;
@@ -69,7 +69,10 @@ S.review = null;
 
 S.clPrice = null;
 S.clState = 'wait';
-S.volPerSqrtS = null;     // σ of log returns per √second, from 1-minute candles
+S.closes1m = [];         // 1-minute closes of the last hours, oldest first (model.js)
+S.vols = null;           // volatilities from them (models.js volsFromCloses)
+S.modelId = typeof opts.model === 'string' ? opts.model : 'rw';   // the model in use (models.js)
+S.modelParams = opts.mp && typeof opts.mp === 'object' ? opts.mp : {};   // its settings, per model
 
 export const buyPressureSnaps = [];  // {t, pct}
 

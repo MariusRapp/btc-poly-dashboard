@@ -148,6 +148,44 @@ Danach zeigt https://btc-recorder.mariusrapp-kit.workers.dev/status, was schon g
 ein Lauf pro Minute, wenige Anfragen pro Lauf, rund 2.000 Schreibzugriffe am Tag. Lokal: `npm run schema:local`,
 `npm run dev -- --port 8790` (`/__scheduled` löst einen Lauf aus), Dashboard mit `?recorder=http://localhost:8790`.
 
+## Modelle
+
+Ganz unten erklärt die Karte **Model**, wie die UP-Wahrscheinlichkeit zustande kommt – live für die laufende Runde:
+
+- **Wo der 60-s-Schnitt am Ende landet:** die Verteilung, grün rechts vom Strike (UP gewinnt), rot links. Mit dem Zeiger
+  zeigt sie für jeden Preis, wie wahrscheinlich die Abrechnung darüber liegt.
+- **Die Rechnung in vier Schritten:** Abstand zum Strike → typische Bewegung bis zum Ende → wie viele typische Bewegungen
+  der Abstand ist → Wahrscheinlichkeit.
+- **Markt vs. Modell:** beide auf einer Skala, dazu die Volatilität, die der Marktpreis einpreist („der Markt rechnet
+  mit 1,4× so viel Bewegung wie das Modell“) – die häufigste Erklärung für eine Abweichung.
+- **Edge Schritt für Schritt:** Modell-Chance − Ask − Gebühr, für UP und DOWN.
+
+Rechts die Sammlung der Modelle. Das gewählte steuert Modell-%, Edge, Prognose-Kegel und Alarme; seine Einstellungen
+liegen darunter (Schieberegler, „Reset“), alles wird im Browser gemerkt.
+
+| Modell | Annahme |
+|---|---|
+| Standard | Kein Trend, Glockenkurve, Volatilität der letzten 15 min / 1 h / 4 h |
+| Fast volatility | Wie Standard, die letzten Minuten zählen am meisten (Halbwertszeit 10 min) |
+| Momentum | Ein Teil des Tempos der letzten Minute läuft weiter und klingt in etwa einer Minute ab |
+| Fat tails | Gleiche typische Bewegung, aber große Sprünge häufiger (Student-t) |
+
+Jede Karte zeigt, wie das Modell mit seinen aktuellen Einstellungen auf den Recorder-Runden abgeschnitten hätte (Brier-Score
+gegen den Markt, Backtest „Edge ≥ 3 ¢ zum Ask“). Aussagekräftig wird das erst nach einigen hundert Runden.
+
+**Eigenes Modell ergänzen:** in `js/models.js` einen Eintrag zu `MODELS` hinzufügen – die kommentierte Vorlage steht
+direkt darüber. Ein Modell bekommt die Live-Eingaben (Preis, Strike, Restzeit, Volatilitäten, Tempo) und liefert
+Schwankung, Trend und optional dicke Ränder; Karte, Einstellungen und Bewertung entstehen daraus von selbst. Auch ein
+später trainiertes Modell (z. B. Machine Learning auf den Recorder-Runden) passt in diese Form.
+
+Damit alle Modelle bewertet werden können, speichert der Recorder seit seiner zweiten Version ihre Eingaben mit. Einmalig:
+
+```bash
+cd recorder
+npm run migrate     # vier neue Spalten in D1
+npm run deploy
+```
+
 ## Code-Aufbau
 
 Das Dashboard ist eine statische Seite: GitHub Pages liefert `index.html`, `css/app.css` und die Module in `js/` so aus,
@@ -160,7 +198,8 @@ parallel vor (ein Test prüft, dass die Liste vollständig ist).
 | `state.js` | Gemeinsamer Zustand `S` (Werte, die mehrere Module setzen), Konstanten, gespeicherte Optionen, Börsenliste |
 | `math.js` | Reine Funktionen ohne DOM und Zustand: TWAP, Median, Modell-Verteilung, Gebühren, Edge, Arbitrage-Walk. Getestet |
 | `prices.js` | Trade-Feeds der sechs Börsen, Median, REST-Nachladen |
-| `model.js` | Strike, erwartete Abrechnung, Modell-Wahrscheinlichkeit |
+| `model.js` | Strike, erwartete Abrechnung, Eingaben und Wahrscheinlichkeit des gewählten Modells |
+| `models.js`, `modelcard.js` | Die Modell-Sammlung (rein, getestet); die Karte „Model“ mit Erklärung, Auswahl und Einstellungen |
 | `chainlink.js` | Chainlink-Feed auf Polygon per JSON-RPC |
 | `venues.js`, `polymarket.js`, `kalshi.js`, `mode.js` | Die beiden Börsen, ihre Orderbücher und Rundenwechsel; Markt-Umschalter |
 | `charts.js`, `theme.js` | Die beiden Canvas-Charts, Tooltips, Render-Schleife; Farben |
