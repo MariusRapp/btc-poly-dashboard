@@ -1,0 +1,14 @@
+{
+  "name": "btc-recorder",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --local --test-scheduled",
+    "schema:local": "wrangler d1 execute btc-rounds --local --file schema.sql",
+    "schema": "wrangler d1 execute btc-rounds --remote --file schema.sql",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "4.158.0"
+  }
+}

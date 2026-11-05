@@ -24,8 +24,12 @@ Kalshi hat keine 5-Minuten-Runden; „Kalshi“ und „Both“ laufen deshalb im
 
 | Datei | Inhalt |
 |---|---|
-| `index.html` | Das Dashboard: BTC-Median gegen den Strike, Countdown, implizite UP-Wahrscheinlichkeit, Orderbuch (feste Preisleiter, das Mid wandert), Signale, Polymarket-vs-Kalshi-Vergleich mit Arbitrage-Rechnung, die letzten 24 Runden mit offiziellen Ergebnissen – jede Runde im Chart abrufbar – und eigene Trefferquote. Für Desktop, Tablet und Handy, mit Light- und Dark-Mode. |
+| `index.html` | Das Dashboard: BTC-Median gegen den Strike, Countdown, implizite UP-Wahrscheinlichkeit, Orderbuch (feste Preisleiter, das Mid wandert), Signale, Polymarket-vs-Kalshi-Vergleich mit Arbitrage-Rechnung, die letzten 24 Runden mit offiziellen Ergebnissen – jede Runde im Chart abrufbar – und eigene Trefferquote. Für Desktop, Tablet und Handy, mit Light- und Dark-Mode. Nur Markup; Stil in `css/app.css`, Code in `js/`. |
+| `js/` | Der Code als ES-Module, ohne Build-Schritt (siehe „Code-Aufbau“). |
+| `test/` | Tests für die Rechenkerne (`math.js`, Chainlink-Dekodierung) und den Modul-Aufbau: `npm test`. |
+| `serve.mjs` | Kleiner lokaler Server: `npm start` → http://localhost:8000/ |
 | `manifest.webmanifest`, `icons/` | App-Manifest und Icons: Das Dashboard lässt sich auf dem Handy zum Home-Bildschirm hinzufügen und öffnet dann im Vollbild. |
+| `recorder/` | Cloudflare Worker mit Cron Trigger und D1-Datenbank: zeichnet jede Runde auf, auch ohne offenen Tab (siehe „Recorder“). |
 | `kalshi-proxy/` | Cloudflare Worker, der Kalshis öffentliche Marktdaten mit CORS-Headern an das Dashboard weiterreicht (`worker.js`), plus `dev.mjs` zum lokalen Testen mit Node. |
 | `btc-stream.html` | Schlanker BTC/USD-Tick-Stream (Binance aggTrade) mit Volumen und Buy Pressure. |
 | `poly.ipynb` | Jupyter-Notebook: Polymarket-Orderbuch als ipywidgets-Dashboard und Strike-Suche über den Chainlink-Feed. |
@@ -112,12 +116,62 @@ Lokal ohne Cloudflare:
 
 ```bash
 node kalshi-proxy/dev.mjs            # http://localhost:8787
-python -m http.server 8000           # Dashboard unter http://localhost:8000/?kalshi=http://localhost:8787
+node serve.mjs                       # Dashboard unter http://localhost:8000/?kalshi=http://localhost:8787
 ```
+
+## Recorder
+
+Der Browser sammelt nur, solange ein Tab offen ist. Der Worker in `recorder/` läuft deshalb jede Minute auf Cloudflare
+(Cron Trigger) und speichert pro Markt (`poly5`, `poly15`, `kalshi15`) und Runde in der D1-Datenbank `btc-rounds`:
+
+- besten Bid und Ask und die Modell-Wahrscheinlichkeit 60 s vor dem Ende (dasselbe Modell wie im Dashboard, `js/math.js`),
+- BTC-60-s-Durchschnitt vor dem Start und vor dem Ende (Binance BTC/USDT, 1-s-Kerzen),
+- das offizielle Ergebnis, bei Kalshi zusätzlich die veröffentlichten BRTI-Werte (Start und Abrechnung).
+
+Die offiziellen Ergebnisse der 15-Minuten-Runden beider Börsen holt er zwei Wochen rückwirkend nach. Das Dashboard
+liest die Runden über `GET /rounds` und zeigt unter „Recent rounds“ Trefferquote und Brier-Score von Markt und Modell,
+einen Backtest (Model edge ≥ 3 ¢ zum Ask gekauft, nach Gebühren) und ein Kalibrierungsdiagramm. In „Both“ ersetzt es
+die geschätzten ±5 $ beim Settle-apart-Risiko durch den gemessenen Wert, sobald drei Runden auseinanderliefen.
+Ist der Recorder nicht erreichbar, bleibt es bei der Trefferquote im Browser.
+
+Einrichten (einmalig; die Datenbank `btc-rounds` ist angelegt und in `recorder/wrangler.jsonc` eingetragen):
+
+```bash
+cd recorder
+npm install
+npm run schema      # Tabellen in D1 anlegen
+npm run deploy      # Worker und Cron Trigger
+```
+
+Danach zeigt https://btc-recorder.mariusrapp-kit.workers.dev/status, was schon gespeichert ist. Der Free-Plan reicht:
+ein Lauf pro Minute, wenige Anfragen pro Lauf, rund 2.000 Schreibzugriffe am Tag. Lokal: `npm run schema:local`,
+`npm run dev -- --port 8790` (`/__scheduled` löst einen Lauf aus), Dashboard mit `?recorder=http://localhost:8790`.
+
+## Code-Aufbau
+
+Das Dashboard ist eine statische Seite: GitHub Pages liefert `index.html`, `css/app.css` und die Module in `js/` so aus,
+wie sie im Repository liegen – kein Build, keine Abhängigkeiten. `index.html` lädt alle Module per `modulepreload`
+parallel vor (ein Test prüft, dass die Liste vollständig ist).
+
+| Modul | Inhalt |
+|---|---|
+| `main.js` | Einstieg: Bedienelemente, Start der Feeds und Timer |
+| `state.js` | Gemeinsamer Zustand `S` (Werte, die mehrere Module setzen), Konstanten, gespeicherte Optionen, Börsenliste |
+| `math.js` | Reine Funktionen ohne DOM und Zustand: TWAP, Median, Modell-Verteilung, Gebühren, Edge, Arbitrage-Walk. Getestet |
+| `prices.js` | Trade-Feeds der sechs Börsen, Median, REST-Nachladen |
+| `model.js` | Strike, erwartete Abrechnung, Modell-Wahrscheinlichkeit |
+| `chainlink.js` | Chainlink-Feed auf Polygon per JSON-RPC |
+| `venues.js`, `polymarket.js`, `kalshi.js`, `mode.js` | Die beiden Börsen, ihre Orderbücher und Rundenwechsel; Markt-Umschalter |
+| `charts.js`, `theme.js` | Die beiden Canvas-Charts, Tooltips, Render-Schleife; Farben |
+| `panels.js`, `ladder.js`, `arb.js`, `rounds.js`, `review.js`, `alerts.js` | Die Karten: Kennzahlen und Signale, Orderbuch, Poly vs Kalshi, Runden und Trefferquote, vergangene Runden, Alarme |
+| `stats.js`, `recorder.js` | Auswertung der Recorder-Runden (Brier, Kalibrierung, Backtest, Settle-apart); Abruf vom Recorder |
+| `util.js` | DOM-Zugriff, Formatierung, Rundenzeiten |
+
+ES-Module laden nicht von `file://`; lokal deshalb `npm start` (oder `node serve.mjs`) und http://localhost:8000/ öffnen.
 
 ## Benutzung
 
-Die HTML-Dateien einfach im Browser öffnen. Die Glocke oben rechts schaltet Alarme ein
+Online: https://mariusrapp.github.io/btc-poly-dashboard/ – lokal siehe oben. Die Glocke oben rechts schaltet Alarme ein
 (Strike-Kreuzung in der letzten Minute, Model edge ab 5 ¢ pro Anteil nach Gebühren, in „Both“ Arbitrage). Auf dem
 Desktop laufen Alarme und Trefferquote auch in einem Hintergrund-Tab weiter; ein gesperrtes Handy pausiert die Seite.
 Der Bildschirm-Knopf daneben hält deshalb den Bildschirm an, solange das Dashboard offen ist (nur in Browsern mit
@@ -129,6 +183,12 @@ Auf dem Handy: im Browser-Menü „Zum Home-Bildschirm“ – dann startet das D
 Über das Menü links in der Chart-Leiste (oder einen Tipp auf eine Runde unter „Recent rounds“) lässt
 sich jede der letzten 24 Runden im Chart ansehen. „Exchange lines“, „Averaging windows“ (die beiden
 60-s-Fenster, aus denen Strike und Abrechnung berechnet werden) und „Price gap“ sind Schalter und werden im Browser gemerkt.
+
+„Model forecast“ zeigt im Rundenmodus, was das Modell bis zum Rundenende erwartet: ein Band für 68 % und 95 % der
+Ausgänge – bis das Abrechnungsfenster öffnet für den Preis, danach für den laufenden 60-s-Durchschnitt, der am Ende
+die Abrechnung ist. Am rechten Rand liegt die Verteilung dieses Durchschnitts, oberhalb des Strikes grün, unterhalb rot;
+ihr grüner Anteil ist die Modell-Wahrscheinlichkeit. Mit dem Zeiger in der Zukunft zeigt der Tooltip den erwarteten
+Wert und den 68-%-Bereich für diesen Zeitpunkt. Standardmäßig aus, die Wahl wird gemerkt.
 
 Für das Notebook:
 
