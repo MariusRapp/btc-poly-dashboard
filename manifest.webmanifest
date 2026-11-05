@@ -1,0 +1,16 @@
+{
+  "name": "BTC Up/Down · Polymarket & Kalshi",
+  "short_name": "BTC Up/Down",
+  "description": "Live dashboard for the Bitcoin Up or Down rounds on Polymarket and Kalshi",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#1a1a19",
+  "theme_color": "#1a1a19",
+  "icons": [
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

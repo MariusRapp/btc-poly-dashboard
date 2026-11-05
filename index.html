@@ -5,7 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="color-scheme" content="light dark" />
   <title>BTC Up/Down · Polymarket &amp; Kalshi</title>
-  <script src="https://unpkg.com/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+  <meta name="theme-color" content="#f9f9f7" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#0d0d0d" media="(prefers-color-scheme: dark)" />
+  <meta name="apple-mobile-web-app-title" content="BTC Up/Down" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
   <script>
     // apply a saved theme choice before first paint (no flash)
     try { const t = localStorage.getItem('theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch {}
@@ -232,7 +237,10 @@
     .lrow.gap { background:var(--band); }
     .lt   { color:var(--muted-text); }
     .wall { font-weight:700; }
-    .lmid { position:absolute; left:0; right:0; top:0; height:0; border-top:1px solid var(--ink-2); z-index:1; pointer-events:none; will-change:transform; }
+    .lmid { position:absolute; left:0; right:0; top:0; height:0; border-top:1px solid var(--ink-2); z-index:1; pointer-events:none; will-change:transform;
+            transition:transform .22s cubic-bezier(.25,.8,.35,1); }
+    .lmid.instant { transition:none; }
+    @media (prefers-reduced-motion: reduce) { .lmid { transition:none; } }
     .lmid-tag {
       position:absolute; left:33.333%; top:-10px; transform:translateX(-50%); height:19px; padding:0 7px;
       border-radius:4px; background:var(--ink-1); color:var(--surface); white-space:nowrap;
@@ -305,6 +313,7 @@
     /* ── Phone ── */
     @media (max-width: 640px) {
       .wrap { padding:10px 10px 20px; gap:10px; }
+      .topbar { gap:6px; }
       .card { padding:12px; border-radius:10px; }
       .layout { grid-template-columns:minmax(0,1fr); gap:10px; }
       #card-book { grid-row:auto; }
@@ -333,8 +342,12 @@
       <div class="brand-sub" id="market-title">Loading market…</div>
     </div>
     <span class="status"><i class="dot wait" id="live-dot"></i><span id="live-text">Connecting</span></span>
+    <button class="icon-btn" id="wake-btn" type="button" aria-pressed="false" aria-label="Keep the screen on"
+            title="Keep the screen on while the dashboard is open" hidden>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+    </button>
     <button class="icon-btn" id="alert-btn" type="button" aria-pressed="false" aria-label="Alerts"
-            title="Alerts: strike crossings in the last minute and big market/model gaps">
+            title="Alerts: strike crossings in the last minute and model edges of 5¢+ after fees">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
     </button>
     <button class="icon-btn" id="theme-btn" type="button" aria-label="Switch light/dark theme"></button>
@@ -506,7 +519,7 @@
       <section class="card" id="card-signals" aria-label="Signals">
         <div class="card-head"><h2>Signals</h2><span class="card-meta">heuristics, not advice</span></div>
         <div class="sig">
-          <div class="sig-top"><span class="sig-label" title="Model: normal approximation of the settlement average (60s TWAP), volatility from the last hour of 1-minute returns">Market vs model</span><span class="sig-value" id="edge-val">—</span></div>
+          <div class="sig-top"><span class="sig-label" title="Expected gain per $1 share when buying a side at its best ask, after the taker fee (0.07 × p × (1 − p)), if the model is right. Model: normal approximation of the settlement average (60s TWAP), volatility from the last hour of 1-minute returns">Model edge</span><span class="sig-value" id="edge-val">—</span></div>
           <div class="sig-sub" id="edge-sub">Needs order book, strike and price</div>
         </div>
         <div class="sig">
@@ -611,7 +624,7 @@ const saveOpts = () => { try { localStorage.setItem(OPTS_KEY, JSON.stringify({
 const ROUNDS_SHOWN = 24;
 let review = null;
 
-let clPrice = null, clProvider = null, clState = 'wait';
+let clPrice = null, clState = 'wait';
 let volPerSqrtS = null;     // σ of log returns per √second, from 1-minute candles
 
 const buyPressureSnaps = [];  // {t, pct}
@@ -940,6 +953,8 @@ function readTheme() {
   });
   EXCH.forEach((ex, i) => ex.color = v('ex-' + (i + 1)));
   $('theme-btn').innerHTML = isDark() ? ICON_SUN : ICON_MOON;
+  // browser bar / home-screen app status bar: follow a theme picked with the button, not just the OS setting
+  document.querySelectorAll('meta[name="theme-color"]').forEach(m => m.content = v('page'));
 }
 
 darkMq.addEventListener('change', readTheme);
@@ -960,6 +975,7 @@ function setupCanvas(id) {
     c.dpr = window.devicePixelRatio || 1;
     c.w = el.clientWidth; c.h = el.clientHeight;
     el.width = Math.round(c.w * c.dpr); el.height = Math.round(c.h * c.dpr);
+    redrawCharts();   // resizing clears the canvas
   };
   new ResizeObserver(fit).observe(el);
   fit();
@@ -972,8 +988,9 @@ function attachHover(el, name) {
     const r = el.getBoundingClientRect();
     hoverFrac = Math.max(0, Math.min(1, (e.clientX - r.left) / (r.width - plotGutter)));
     hoverSrc = name;
+    wakeFrame();
   };
-  const clear = () => { hoverFrac = null; hoverSrc = null; };
+  const clear = () => { hoverFrac = null; hoverSrc = null; redrawCharts(); };
   el.addEventListener('pointerdown', e => { clearTimeout(touchClearTimer); update(e); });
   el.addEventListener('pointermove', e => { if (e.pointerType === 'mouse' || e.buttons) update(e); });
   el.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') clear(); });
@@ -1021,13 +1038,16 @@ function series(arr, cutoff, xOf, msPerPx) {
 // y-axis range eased toward its target (grow fast, shrink slowly) — a hard rescale every frame
 // makes the whole line jump whenever an extreme scrolls out of the window
 const yRange = {};
-let frameDt = 16, lastFrameT = 0;
+let frameDt = 16, lastFrameT = 0;   // per animation frame (order book)
+let chartDt = 16, lastChartT = 0, chartEasing = false;   // per chart redraw, see render()
 function easeRange(key, lo, hi) {
   const r = yRange[key];
   if (!r) return (yRange[key] = { lo, hi });
-  const kGrow = 1 - Math.exp(-frameDt / 150), kShrink = 1 - Math.exp(-frameDt / 800);
+  const kGrow = 1 - Math.exp(-chartDt / 150), kShrink = 1 - Math.exp(-chartDt / 800);
   r.lo += (lo - r.lo) * (lo < r.lo ? kGrow : kShrink);
   r.hi += (hi - r.hi) * (hi > r.hi ? kGrow : kShrink);
+  // still visibly moving (more than ~0.2% of the height): redraw every frame until it settles
+  if (Math.abs(lo - r.lo) + Math.abs(hi - r.hi) > (r.hi - r.lo) * 0.002) chartEasing = true;
   return r;
 }
 
@@ -1352,7 +1372,7 @@ function drawProb(v) {
 const fmtPts = d => (d >= 0 ? '+' : '−') + Math.abs(d).toFixed(1) + ' pts';
 
 // ── Panels (text updates are throttled; charts redraw every frame) ───────────
-let lastUiT = 0, lastSlowT = 0;
+let lastSlowT = 0;
 
 function updateTime() {
   const s = secsLeft(), m = Math.floor(s / 60), r = s % 60;
@@ -1430,29 +1450,42 @@ function updateUI(now) {
   }
 }
 
+// Model edge: buy one side of the running round at its best ask. If the model is right, the expected gain per
+// $1 share after the taker fee is P(side) − ask − fee (UP at the UP ask; DOWN at 1 − the UP bid). In dollars.
+function modelEdges(V, modelP) {
+  const f = V.cur;
+  if (!f || f.closed || f.wts * 1000 !== currentRound().start || V.up === null) return null;
+  let bb = 0, ba = 1000;
+  for (const k in f.bids) if (+k > bb) bb = +k;
+  for (const k in f.asks) if (+k < ba) ba = +k;
+  const fee = V === KS ? KS_FEE : PM_FEE, p = modelP / 100;
+  const buy = (side, price, win) => ({ V, side, price, edge: win - price - fee * price * (1 - price) });
+  return [ba < 1000 ? buy('up', ba / 1000, p) : null, bb > 0 ? buy('down', 1 - bb / 1000, 1 - p) : null];
+}
+const bestEdge = list => list.filter(Boolean).reduce((a, x) => !a || x.edge > a.edge ? x : a, null);
+const signedC = x => { const r = Math.round(x * 1000) / 1000; return (r < 0 ? '−' : '+') + fmtC(Math.abs(r)); };
+const EDGE_ALERT = 0.05;   // alert from 5¢ per share
+
 function updateSignals(now, modelP) {
-  // Market vs model (mispricing): per venue
-  const vs = activeVenues().filter(V => V.up !== null);
-  if (vs.length && modelP !== null) {
-    if (vs.length === 1) {
-      const up = vs[0].up, prem = up - modelP;
-      const txt = `${both() ? vs[0].short + ' ' : 'market '}${up.toFixed(1)}% vs model ${modelP.toFixed(1)}%`;
-      if (Math.abs(prem) < 3) {
-        $('edge-val').textContent = 'Fair';
-        $('edge-sub').textContent = 'Within 3 pts · ' + txt;
-      } else {
-        $('edge-val').textContent = fmtPts(prem);
-        $('edge-sub').textContent = `UP looks ${prem > 0 ? 'overpriced' : 'underpriced'} · ` + txt;
-      }
+  // Model edge: the best side across the active venues; the line below lists every side
+  const per = modelP === null ? [] : activeVenues().map(V => ({ V, e: modelEdges(V, modelP) })).filter(o => o.e);
+  const ev = $('edge-val');
+  if (per.length) {
+    const best = bestEdge(per.flatMap(o => o.e));
+    if (best && best.edge > 0) {
+      ev.textContent = (both() ? best.V.short + ' ' : '') + (best.side === 'up' ? '▲ UP ' : '▼ DOWN ') + signedC(best.edge);
+      ev.className = 'sig-value ' + (best.side === 'up' ? 'up-t' : 'down-t');
     } else {
-      $('edge-val').textContent = vs.map(V => `${V.short} ${Math.abs(V.up - modelP) < 3 ? 'fair' : fmtPts(V.up - modelP).replace(' pts', '')}`).join(' · ');
-      const worst = vs.reduce((a, V) => Math.abs(V.up - modelP) > Math.abs(a.up - modelP) ? V : a);
-      const prem = worst.up - modelP;
-      $('edge-sub').textContent = (Math.abs(prem) < 3 ? 'Both within 3 pts' : `UP looks ${prem > 0 ? 'overpriced' : 'underpriced'} on ${worst.name}`) +
-        ` · market minus model ${modelP.toFixed(1)}%, in pts`;
+      ev.textContent = 'None';
+      ev.className = 'sig-value';
     }
+    const side = (name, x) => !x ? `${name} —` : `${name} ${both() ? '' : fmtC(x.price) + ' → '}${signedC(x.edge)}`;
+    $('edge-sub').textContent = per.map(({ V, e: [u, d] }) =>
+      both() ? `${V.short} ${side('UP', u)} / ${side('DOWN', d)}` : `${side('UP', u)} · ${side('DOWN', d)}`
+    ).join(' · ') + ' · per share after fees';
   } else {
-    $('edge-val').textContent = '—';
+    ev.textContent = '—';
+    ev.className = 'sig-value';
     $('edge-sub').textContent = 'Needs order book, strike and price';
   }
 
@@ -1828,7 +1861,7 @@ async function setAlerts(on, fromClick) {
   if (!on || !fromClick) return;
   try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); await audioCtx.resume(); } catch {}
   if ('Notification' in window && Notification.permission === 'default') { try { await Notification.requestPermission(); } catch {} }
-  toast('Alerts on', 'Strike crossings in the last minute, market/model gaps of 8+ pts' + (both() ? ', Poly/Kalshi arbitrage' : ''));
+  toast('Alerts on', 'Strike crossings in the last minute, model edges of 5¢+ after fees' + (both() ? ', Poly/Kalshi arbitrage' : ''));
 }
 
 function alertOnce(kind, start, title, body) {
@@ -1853,9 +1886,10 @@ function checkAlerts(now, modelP, exp, arb) {
   }
   if (!alertsOn) return;
   if (modelP !== null && T > 60 && T < ROUND_S - 30) for (const V of activeVenues()) {
-    if (V.up === null || Math.abs(V.up - modelP) < 8) continue;
-    alertOnce('edge-' + V.key, start, `UP looks ${V.up > modelP ? 'overpriced' : 'underpriced'}${both() ? ' on ' + V.name : ''}`,
-      `market ${V.up.toFixed(0)}% vs model ${modelP.toFixed(0)}%`);
+    const best = bestEdge(modelEdges(V, modelP) || []);
+    if (!best || best.edge < EDGE_ALERT) continue;
+    alertOnce('edge-' + V.key, start, `Model edge: buy ${best.side.toUpperCase()}${both() ? ' on ' + V.name : ''}`,
+      `${fmtC(best.price)} ask + fee vs model ${(best.side === 'up' ? modelP : 100 - modelP).toFixed(0)}% → ${signedC(best.edge)} per share`);
   }
   // both venues: a pair (UP on one, DOWN on the other) below $1 after fees, with some size behind it
   if (arb && T > 5) for (const [k, r, name] of [['arb-up', arb.upPm, 'Poly UP + Kalshi NO'], ['arb-down', arb.downPm, 'Poly DOWN + Kalshi YES']]) {
@@ -2431,7 +2465,7 @@ function setMode(venue, lenMin) {
 // smoothly — a move shows as the line travelling, instead of every label changing under a fixed mid.
 const LROWS = 16, LROW_H = 25, LEDGE = 3;
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
-const lad = { feed: undefined, side: null, ver: -1, gen: 0, M: null, step: 0, T: null, target: null, mid: null, drawn: '', pool: [] };
+const lad = { feed: undefined, side: null, ver: -1, gen: 0, M: null, step: 0, T: null, target: null, drawn: '', pool: [] };
 const fmtC = (v, d = 1) => String(Math.round(v * 100 * 10 ** d) / 10 ** d) + '¢';
 
 for (let k = 0; k <= LROWS; k++) {
@@ -2507,7 +2541,8 @@ function ladderRound(V, f) {
                       : V === KS ? `Next round · ${span} · not trading yet` : `Next round · ${span} · already trading`);
 }
 
-// runs every frame; touches the DOM only when the book changed or the window / mid line is moving
+// runs every frame; touches the DOM only when the book changed or the window / mid line is moving.
+// Returns whether it is still animating (the render loop keeps frames coming until it settles).
 function renderLadder(dt) {
   const V = bookV(), f = bookView === 'next' ? V.nxt : V.cur;
   ladderRound(V, f);
@@ -2526,23 +2561,25 @@ function renderLadder(dt) {
       for (const r of lad.pool) r.el.hidden = true;
     }
     lad.T = null;
-    return;
+    return false;
   }
 
   if (lad.step !== M.step) { lad.step = M.step; lad.T = null; lad.target = null; }   // tick size changed: new grid
   const off = lad.target === null ? null : lad.target - M.mid;   // rows from the top edge down to the mid
   if (off === null || off < LEDGE || off > LROWS - LEDGE)
     lad.target = Math.max(LROWS + 0.5, Math.min(M.maxI + 0.5, Math.floor(M.mid + LROWS / 2) + 0.5));
-  if (lad.T === null || reduceMotion.matches) { lad.T = lad.target; lad.mid = M.mid; }
+  // The window scrolls here (rarely: only when the mid nears an edge). The mid line glides by a CSS transition,
+  // so a busy book, whose mid moves many times a second, needs no animation frames.
+  const jump = lad.T === null || reduceMotion.matches;
+  if (jump) lad.T = lad.target;
   else {
-    lad.T   += (lad.target - lad.T) * (1 - Math.exp(-dt / 140));
-    lad.mid += (M.mid - lad.mid)    * (1 - Math.exp(-dt / 90));
-    if (Math.abs(lad.target - lad.T) < 0.005) lad.T = lad.target;
-    if (Math.abs(M.mid - lad.mid) < 0.005) lad.mid = M.mid;
+    lad.T += (lad.target - lad.T) * (1 - Math.exp(-dt / 140));
+    if (Math.abs(lad.target - lad.T) < 0.02) lad.T = lad.target;   // within half a pixel: done
   }
+  const moving = lad.T !== lad.target;
 
-  const key = `${lad.gen}|${lad.T}|${lad.mid}`;
-  if (key === lad.drawn) return;
+  const key = `${lad.gen}|${lad.T}`;
+  if (key === lad.drawn) return moving;
   lad.drawn = key;
   if (!emptyEl.hidden) emptyEl.hidden = true;
 
@@ -2569,8 +2606,10 @@ function renderLadder(dt) {
     }
   }
   const mk = $('lmid');
+  mk.classList.toggle('instant', jump || mk.hidden);   // another book, or shown again: no glide from the old spot
   if (mk.hidden) mk.hidden = false;
-  mk.style.transform = `translateY(${((lad.T - lad.mid) * LROW_H).toFixed(1)}px)`;
+  mk.style.transform = `translateY(${((lad.T - M.mid) * LROW_H).toFixed(1)}px)`;
+  return moving;
 }
 
 // ── Past rounds in the charts ────────────────────────────────────────────────
@@ -2684,37 +2723,49 @@ function syncReview() {
     kTxt + `BTC: ${r.src || 'no data'}`;
 }
 
-// ── Chainlink (Polygon) — shared provider + on-chain strike cross-check ──────
-const CL_RPCS   = ['https://polygon-bor-rpc.publicnode.com','https://polygon-rpc.com'];
-const CL_ABI    = ['function latestRoundData() external view returns (uint80,int256,uint256,uint256,uint80)',
-                   'function getRoundData(uint80) external view returns (uint80,int256,uint256,uint256,uint80)'];
-const FEED_ADDR = '0xc907E116054Ad103354f2D350FD2514433D57F6f';
+// ── Chainlink (Polygon): price for the sources table + on-chain strike fallback ──
+// Two read-only calls to the aggregator contract as plain JSON-RPC eth_call, no library needed.
+// (polygon-rpc.com now wants an API key; 1rpc.io answers these calls with zeros.)
+const CL_RPCS    = ['https://polygon-bor-rpc.publicnode.com', 'https://polygon.drpc.org'];
+const FEED_ADDR  = '0xc907E116054Ad103354f2D350FD2514433D57F6f';
+const SEL_LATEST = '0xfeaf968c';   // latestRoundData()
+const SEL_ROUND  = '0x9a6fc8f5';   // getRoundData(uint80)
+let clRpc = 0;                     // the RPC that answered last is asked first
 
-async function ensureClProvider() {
-  if (clProvider) {
-    try { await clProvider.getBlockNumber(); return clProvider; } catch {}
-    clProvider = null;
-  }
-  for (const rpc of CL_RPCS) {
-    try {
-      const p = new ethers.providers.JsonRpcProvider(rpc);
-      await p.getBlockNumber();
-      clProvider = p; return p;
-    } catch {}
-  }
-  return null;
+// both calls return (roundId uint80, answer int256, startedAt, updatedAt, answeredInRound): five 32-byte words
+function decodeRound(hex) {
+  const word = i => BigInt('0x' + hex.slice(2 + i * 64, 66 + i * 64));
+  let answer = word(1);
+  if (answer >= 1n << 255n) answer -= 1n << 256n;
+  return { id: word(0), price: Number(answer) / 1e8, ts: Number(word(3)) };
 }
+
+async function clCall(data) {
+  let err;
+  for (let k = 0; k < CL_RPCS.length; k++) {
+    const i = (clRpc + k) % CL_RPCS.length;
+    try {
+      const r = await fetch(CL_RPCS[i], {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(8000),
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_call', params: [{ to: FEED_ADDR, data }, 'latest'] }),
+      });
+      const j = await r.json();
+      if (!r.ok || !/^0x[0-9a-f]{320}$/i.test(j.result || '')) throw new Error(j.error?.message || `HTTP ${r.status}`);
+      clRpc = i;
+      return decodeRound(j.result);
+    } catch (e) { err = e; }
+  }
+  throw err;
+}
+
+const clLatest = () => clCall(SEL_LATEST);
+const clRound  = id => clCall(SEL_ROUND + id.toString(16).padStart(64, '0'));
 
 async function pollChainlink() {
   try {
-    const provider = await ensureClProvider();
-    if (!provider) throw new Error('no rpc');
-    const feed = new ethers.Contract(FEED_ADDR, CL_ABI, provider);
-    const d    = await feed.latestRoundData();
-    const p    = Number(d[1]) / 1e8;
-    if (p > 0) { clPrice = p; clState = 'live'; }
+    const d = await clLatest();
+    if (d.price > 0) { clPrice = d.price; clState = 'live'; }
   } catch (e) {
-    clProvider = null;
     clState = 'wait';
     console.warn('CL poll:', e.message);
   }
@@ -2726,42 +2777,64 @@ async function fetchStrike(wts) {
   const done = v => { if (strikeRound === wts * 1000) clStrike = v; };
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      const provider = await ensureClProvider();
-      if (!provider) break;
-      const feed   = new ethers.Contract(FEED_ADDR, CL_ABI, provider);
-      const latest = await feed.latestRoundData();
-
-      const latestTs = Number(latest[3]);
-      if (latestTs > 0 && latestTs <= wts) return done(Number(latest[1]) / 1e8);
-
-      const phaseId = latest[0].toBigInt() >> 64n;
-      let   roundN  = latest[0].toBigInt() & 0xFFFFFFFFFFFFFFFFn;
-
-      for (let i = 0; i < 80; i++) {
-        const rid  = (phaseId << 64n) | (roundN - BigInt(i));
-        const data = await feed.getRoundData(rid);
-        const ts   = Number(data[3]);
-        if (ts > 0 && ts <= wts) return done(Number(data[1]) / 1e8);
+      const latest = await clLatest();
+      if (latest.ts > 0 && latest.ts <= wts) return done(latest.price);
+      // round ids are (phase << 64) | n: step back through the phase to the round in force at the start
+      const phase = latest.id >> 64n, n = latest.id & 0xFFFFFFFFFFFFFFFFn;
+      for (let i = 1n; i <= 80n && i < n; i++) {
+        const r = await clRound((phase << 64n) | (n - i));
+        if (r.ts > 0 && r.ts <= wts) return done(r.price);
       }
       return;
     } catch (e) {
-      clProvider = null;
       console.warn('fetchStrike attempt', attempt, ':', e.message);
     }
   }
 }
 
 // ── Render loop ──────────────────────────────────────────────────────────────
+// Panels, round switches, the track record and alerts run on a timer: a hidden tab gets no animation frames,
+// and they have to keep going in the background (desktop; a locked phone suspends the page either way).
+function tick() {
+  const now = Date.now();
+  if (now - tpsTick >= 1000) { tps = tpsCount; tpsCount = 0; tpsTick = now; }
+  updateUI(now);
+}
+
+// The charts are redrawn only as often as they visibly change: every frame while the pointer is on them, the
+// y-axis eases or a short rolling window scrolls; otherwise once the time axis has moved a pixel, and at least
+// 10 times a second for new prices. Between redraws the loop sleeps on a timer instead of spinning on frames,
+// unless the order book is animating.
+let frameReq = 0, frameTimer = 0;
+function wakeFrame() {
+  clearTimeout(frameTimer); frameTimer = 0;
+  if (!frameReq) frameReq = requestAnimationFrame(render);
+}
+function redrawCharts() { lastChartT = 0; wakeFrame(); }
+
+function chartGap(view) {
+  if (hoverFrac !== null || chartEasing) return 0;
+  const PW = btcC.w - plotGutter;
+  return PW > 0 ? Math.min(100, (view.t1 - view.t0) / PW) : 100;
+}
+
 function render() {
+  frameReq = 0;
   const now = Date.now();
   frameDt = Math.min(100, now - (lastFrameT || now)); lastFrameT = now;
-  if (now - tpsTick >= 1000) { tps = tpsCount; tpsCount = 0; tpsTick = now; }
-  if (now - lastUiT >= 200) { lastUiT = now; updateUI(now); }
   const view = chartView(now);
-  drawBtc(view);
-  drawProb(view);
-  renderLadder(frameDt);
-  requestAnimationFrame(render);
+  let gap = chartGap(view);
+  if (now - lastChartT >= gap - 8) {   // 8ms slack: frames land on vsync, not on the millisecond
+    chartDt = Math.min(250, now - (lastChartT || now)); lastChartT = now;
+    chartEasing = false;
+    drawBtc(view);
+    drawProb(view);
+    gap = chartGap(view);
+  }
+  const moving = renderLadder(frameDt);
+  const wait = lastChartT + gap - Date.now();
+  if (moving || wait < 24) frameReq = requestAnimationFrame(render);
+  else { lastFrameT = 0; frameTimer = setTimeout(wakeFrame, wait - 8); }
 }
 
 // ── Boot ─────────────────────────────────────────────────────────────────────
@@ -2857,6 +2930,38 @@ document.addEventListener('pointerdown', () => {
   if (alertsOn && !audioCtx) try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch {}
 }, { once: true });
 
+// keep the screen on: a phone that locks suspends the page, its sockets drop and the gap has to be refetched.
+// The browser releases the lock whenever the page is hidden; it is taken again when the page comes back.
+let wakeOn = false, wakeLock = null, wakePending = false;
+async function acquireWake() {
+  if (!wakeOn || wakeLock || wakePending || document.hidden) return;
+  wakePending = true;
+  try {
+    const lock = await navigator.wakeLock.request('screen');
+    if (!wakeOn) { lock.release(); return; }
+    wakeLock = lock;
+    lock.addEventListener('release', () => { if (wakeLock === lock) wakeLock = null; });
+  } catch (e) {
+    console.warn('wake lock:', e.message);
+  } finally {
+    wakePending = false;
+  }
+}
+function setWake(on) {
+  wakeOn = on;
+  $('wake-btn').setAttribute('aria-pressed', String(on));
+  try { localStorage.setItem('wake', on ? '1' : '0'); } catch {}
+  if (on) acquireWake();
+  else { wakeLock?.release(); wakeLock = null; }
+}
+if ('wakeLock' in navigator) {
+  $('wake-btn').hidden = false;
+  $('wake-btn').addEventListener('click', () => setWake(!wakeOn));
+  // some browsers only grant it after a tap: retry on any tap while it is wanted but not held
+  document.addEventListener('pointerdown', () => { if (wakeOn && !wakeLock) acquireWake(); });
+  try { if (localStorage.getItem('wake') === '1') setWake(true); } catch {}
+}
+
 const btcTip = makeTip('btc-tip', [
   { id:'med', label:'Median',    key:' ' },
   { id:'vs',  label:'vs strike', key:'ghost' },
@@ -2886,7 +2991,9 @@ backfill(Math.min(Date.now() - 300_000, currentRound().start - TWAP_MS - 10_000)
 pollChainlink();
 if (PM.on) loadPolymarket();
 if (KS.on) ksLoad();
-requestAnimationFrame(render);
+tick();
+setInterval(tick, 200);
+wakeFrame();
 
 // Safety sampler: ensure each probability history always has a recent point even during quiet markets
 setInterval(() => { for (const V of activeVenues()) if (V.lastProb !== null) pushProbPoint(V, V.lastProb); }, 1000);
@@ -2905,6 +3012,7 @@ document.addEventListener('visibilitychange', () => {
   if (document.hidden) { hiddenAt = Date.now(); return; }
   const away = hiddenAt ? Date.now() - hiddenAt : 0;
   hiddenAt = null;
+  acquireWake();
   if (away < 15_000) return;
   const now = Date.now();
   for (const ex of EXCH) if (ex.ws && now - ex.lastMsgT > 10_000) ex.ws.close();
