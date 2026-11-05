@@ -2,8 +2,9 @@
 
 import { KALSHI_PROXY } from './kalshi.js';
 import { renderLadder } from './ladder.js';
-import { firstIdx, forecastAt, niceStep, normalPdf, twap } from './math.js';
-import { sigmaUsd } from './model.js';
+import { distPdf, distQuantile, firstIdx, niceStep } from './math.js';
+import { activeModel, activeParams, modelInputs } from './model.js';
+import { modelPath } from './models.js';
 import { EXCH, S, TWAP_MS, medianHistory } from './state.js';
 import { T } from './theme.js';
 import { $, currentRound, fmtClock, fmtHM, fmtNum, fmtP, fmtPts, signedUsd } from './util.js';
@@ -272,7 +273,7 @@ function drawBtc(v) {
   }
   if (strike !== null) { lo = Math.min(lo, strike); hi = Math.max(hi, strike); }
   const fc = forecastPath(v);
-  if (fc) for (const p of fc.pts) { lo = Math.min(lo, p.mean - p.sd); hi = Math.max(hi, p.mean + p.sd); }   // ±1σ in view
+  if (fc) for (const p of fc.pts) { lo = Math.min(lo, p.lo68); hi = Math.max(hi, p.hi68); }   // the 68% band in view
   const pad = Math.max((hi - lo) * 0.12, 3);
   ({ lo, hi } = easeRange('btc', lo - pad, hi + pad));
   const yOf = p => Y0 + (hi - p) / (hi - lo) * (Y1 - Y0);
@@ -318,7 +319,7 @@ function drawBtc(v) {
     btcTip.time.textContent = fmtClock(hf) + (hf > v.end - TWAP_MS ? ' · settlement avg' : '');
     for (const k in R) R[k].row.hidden = k !== 'fc' && k !== 'f68';
     R.fc.val.textContent = fmtP(p.mean);
-    R.f68.val.textContent = `${fmtP(p.mean - p.sd)} – ${fmtP(p.mean + p.sd)}`;
+    R.f68.val.textContent = `${fmtP(p.lo68)} – ${fmtP(p.hi68)}`;
     placeTip(btcTip, x, PW);
     return;
   }
@@ -347,36 +348,38 @@ function drawBtc(v) {
 }
 
 // ── Model forecast (toggle) ──────────────────────────────────────────────────
-// From now to the round end, the spread the model expects: ±1σ and ±2σ (68% / 95% of outcomes) of the price until
+// From now to the round end, the spread the model in use expects (68% and 95% of outcomes) of the price until
 // the settlement window opens, then of the window's running average, which at the end is the settlement average.
 // At the right edge its distribution, split at the strike (above: up wash, below: down wash). Live round view only.
 // px the settlement distribution takes at the right edge: 46, at most 12% of the plot (phones)
 const fcWidth = PW => Math.min(46, Math.round(PW * 0.12));
 
+// band edges (68% and 95% of outcomes) of a distribution, Student-t aware
+const band = d => ({ lo68: distQuantile(d, 0.16), hi68: distQuantile(d, 0.84), lo95: distQuantile(d, 0.025), hi95: distQuantile(d, 0.975) });
+
 function forecastPath(v) {
-  if (!S.showFc || !v.live || !v.round || v.strike === null || S.lastMedianP === null) return null;
-  const now = v.tNow, end = v.end, T = (end - now) / 1000;
-  if (T <= 1) return null;
-  const price = S.lastMedianP, sigma = sigmaUsd(), ws = (end - TWAP_MS - now) / 1000;
-  const observed = ws < 0 ? twap(medianHistory, end - TWAP_MS, now) : null;
-  const at = tMs => forecastAt(price, sigma, (tMs - now) / 1000, ws, observed);
+  if (!S.showFc || !v.live || !v.round || v.strike === null) return null;
+  const now = v.tNow, inp = modelInputs(now);
+  if (!inp || inp.T <= 1) return null;
+  const path = modelPath(activeModel(), inp, activeParams());
+  if (!path) return null;
   // denser inside the window, where the shape bends
-  const a = Math.max(ws, 0), ts = [0];
+  const T = inp.T, a = Math.max(inp.ws, 0), ts = [1e-3];
   if (a > 0) for (let k = 1; k <= 30; k++) ts.push(a * k / 30);
   for (let k = 1; k <= 24; k++) ts.push(a + (T - a) * k / 24);
-  const pts = ts.map(t => ({ t: now + t * 1000, ...forecastAt(price, sigma, t, ws, observed) }));
-  pts[0].sd = 0;
+  const pts = ts.map(t => { const d = path(t); return { t: now + t * 1000, ...d, ...band(d) }; });
+  const at = tMs => { const d = path(Math.max(1e-3, (tMs - now) / 1000)); return { ...d, ...band(d) }; };
   return { pts, at, end: pts[pts.length - 1] };
 }
 
 function drawForecast(ctx, fc, xOf, yOf, PW, Y0, Y1, strike) {
   ctx.save();
   ctx.beginPath(); ctx.rect(0, Y0 - 8, PW, Y1 - Y0 + 8); ctx.clip();
-  // ±2σ (lighter) under ±1σ: one neutral ink, the band has no side
-  for (const [k, alpha] of [[2, 0.07], [1, 0.10]]) {
+  // 95% (lighter) under 68%: one neutral ink, the band has no side
+  for (const [lo, hi, alpha] of [['lo95', 'hi95', 0.07], ['lo68', 'hi68', 0.10]]) {
     ctx.beginPath();
-    fc.pts.forEach((p, i) => { const x = xOf(p.t), y = yOf(p.mean + k * p.sd); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
-    for (let i = fc.pts.length - 1; i >= 0; i--) ctx.lineTo(xOf(fc.pts[i].t), yOf(fc.pts[i].mean - k * fc.pts[i].sd));
+    fc.pts.forEach((p, i) => { const x = xOf(p.t), y = yOf(p[hi]); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+    for (let i = fc.pts.length - 1; i >= 0; i--) ctx.lineTo(xOf(fc.pts[i].t), yOf(fc.pts[i][lo]));
     ctx.closePath();
     ctx.globalAlpha = alpha; ctx.fillStyle = T.ink1; ctx.fill();
   }
@@ -386,9 +389,9 @@ function drawForecast(ctx, fc, xOf, yOf, PW, Y0, Y1, strike) {
   ctx.strokeStyle = T.ink2; ctx.lineWidth = 1; ctx.stroke();
 
   // settlement distribution: density across the price axis, drawn leftwards from the right edge
-  const d = fc.end, peak = normalPdf(d.mean, d), shape = new Path2D(), FC_W = fcWidth(PW);
+  const d = fc.end, peak = distPdf(d, d.mean), shape = new Path2D(), FC_W = fcWidth(PW);
   shape.moveTo(PW, yOf(d.mean + 3.5 * d.sd));
-  for (let k = 0; k <= 64; k++) { const p = d.mean + 3.5 * d.sd * (1 - k / 32); shape.lineTo(PW - FC_W * normalPdf(p, d) / peak, yOf(p)); }
+  for (let k = 0; k <= 64; k++) { const p = d.mean + 3.5 * d.sd * (1 - k / 32); shape.lineTo(PW - FC_W * distPdf(d, p) / peak, yOf(p)); }
   shape.closePath();
   const ys = Math.max(Y0 - 8, Math.min(Y1, yOf(strike)));
   for (const [y0, y1, color] of [[0, ys, T.up], [ys, Y1 + 8, T.down]]) {

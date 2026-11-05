@@ -10,10 +10,11 @@
 //
 // BTC comes from Kraken (BTC/USD trades; Binance answers Cloudflare's network with 403), volatility from
 // Coinbase 1-minute candles, as in the dashboard.
-import { twap, volFromCloses } from '../js/math.js';
+import { twap } from '../js/math.js';
+import { volsFromCloses } from '../js/models.js';
 import {
   SERIES, seriesById, snapshotRound, endedRounds, polyTouch, kalshiTouch, polyResult, slugStart, kalshiRound,
-  krakenTrades, lastPrice, modelAt, upsert,
+  krakenTrades, lastPrice, tradeVelocity, modelAt, upsert, COLUMNS, MODEL_INPUTS,
 } from './lib.js';
 
 const HEADERS = { 'Accept': 'application/json', 'User-Agent': 'btc-recorder/1.0 (+https://github.com/MariusRapp/btc-poly-dashboard)' };
@@ -56,7 +57,7 @@ async function kalshiBook(start) {
 
 export async function record(env, nowMs) {
   const nowS = Math.floor(nowMs / 1000), writes = [], stats = { snapshots: 0, settled: 0, results: 0, backfilled: 0 };
-  const put = (series, start, fields) => { const u = upsert(series, start, fields, nowS); if (u) writes.push(u); };
+  const put = (series, start, fields) => writes.push({ series, start, fields });   // SQL built at the end (see flush)
 
   // 1. Snapshot: market and model about 60s before a round ends
   const due = SERIES.map(s => ({ s, start: snapshotRound(s.len, nowS) })).filter(x => x.start !== null);
@@ -70,15 +71,17 @@ export async function record(env, nowMs) {
       const [candles, recent, ...atStart] = await Promise.all([
         getJSON(CANDLES), trades(Math.floor(snapMs / 1000) - 90), ...starts.map(st => trades(st - 90)),
       ]);
-      const price = lastPrice(recent), vol = volFromCloses(candles.slice(1, 62).map(c => c[4]).reverse());   // newest first; skip the open minute
-      const sigma = price !== null && vol !== null ? vol * price : null;
+      // closes oldest first, the open minute left out; the volatilities every model in the dashboard uses
+      const vols = volsFromCloses(candles.slice(1).map(c => c[4]).reverse());
+      const price = lastPrice(recent), sigma = price !== null && vols.h60 !== null ? vols.h60 * price : null;
+      const inputs = { vol15: vols.h15, vol240: vols.h240, ewma: vols.ewma, vel: tradeVelocity(recent, snapMs) };
       await Promise.all(due.map(async ({ s, start }) => {
         try {
           const touch = s.venue === 'poly' ? await polyBook(s, start) : await kalshiBook(start);
           const strike = twap(atStart[starts.indexOf(start)], (start - 60) * 1000, start * 1000);
           const observed = snapMs > endMs - 60_000 ? twap(recent, endMs - 60_000, snapMs) : null;
           const model = strike !== null && sigma !== null ? modelAt({ price, strike, sigma, nowMs: snapMs, endMs, observed }) : null;
-          put(s.id, start, { snap_t: Math.floor(snapMs / 1000), bid: touch.bid, ask: touch.ask, model, price, sigma, strike });
+          put(s.id, start, { snap_t: Math.floor(snapMs / 1000), bid: touch.bid, ask: touch.ask, model, price, sigma, strike, ...inputs });
           stats.snapshots++;
         } catch (e) {
           log('error', 'snapshot failed', { series: s.id, start, error: e.message });
@@ -167,7 +170,18 @@ export async function record(env, nowMs) {
     }
   }
 
-  if (writes.length) await env.DB.batch(writes.map(w => env.DB.prepare(w.sql).bind(...w.params)));
+  // one batch for every write; without migrations/0002 the model-input columns are left out (and a reminder logged)
+  const flush = cols => env.DB.batch(writes.map(w => w.sql ? w : upsert(w.series, w.start, w.fields, nowS, cols)).filter(Boolean)
+    .map(w => env.DB.prepare(w.sql).bind(...w.params)));
+  if (writes.length) {
+    try {
+      await flush(COLUMNS);
+    } catch (e) {
+      if (!/no column|no such column|has no column/i.test(e.message)) throw e;
+      log('error', 'model-input columns missing: run npm run migrate in recorder/', { error: e.message });
+      await flush(COLUMNS.filter(c => !MODEL_INPUTS.includes(c)));
+    }
+  }
   log('log', 'recorded', { ...stats, writes: writes.length });
   return stats;
 }
@@ -195,9 +209,11 @@ export default {
       const s = seriesById(url.searchParams.get('series'));
       if (!s) return new Response('unknown series', { status: 400 });
       const days = Math.max(1, Math.min(30, +url.searchParams.get('days') || 7));
-      const cols = ['start', 'snap_t', 'bid', 'ask', 'model', 'price', 'sigma', 'strike', 'settle', 'result', 'k_strike', 'k_settle'];
-      const rows = await env.DB.prepare(`SELECT ${cols.join(', ')} FROM rounds WHERE series = ? AND start >= ? ORDER BY start`)
+      const query = cols => env.DB.prepare(`SELECT ${cols.join(', ')} FROM rounds WHERE series = ? AND start >= ? ORDER BY start`)
         .bind(s.id, nowS - days * 86400).raw();
+      let cols = ['start', ...COLUMNS], rows;
+      try { rows = await query(cols); }
+      catch { cols = cols.filter(c => !MODEL_INPUTS.includes(c)); rows = await query(cols); }   // before migrations/0002
       return json({ series: s.id, cols, rows }, origin, 'public, max-age=60');
     }
 

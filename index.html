@@ -27,6 +27,8 @@
   <link rel="modulepreload" href="js/math.js" />
   <link rel="modulepreload" href="js/mode.js" />
   <link rel="modulepreload" href="js/model.js" />
+  <link rel="modulepreload" href="js/modelcard.js" />
+  <link rel="modulepreload" href="js/models.js" />
   <link rel="modulepreload" href="js/panels.js" />
   <link rel="modulepreload" href="js/polymarket.js" />
   <link rel="modulepreload" href="js/prices.js" />
@@ -250,6 +252,40 @@
 
     </div>
   </main>
+
+  <section class="card" id="card-model" aria-label="Model">
+    <div class="card-head"><h2>Model</h2><span class="card-meta">how the UP probability comes about · heuristics, not advice</span></div>
+    <div class="mdl">
+      <div class="mdl-col">
+        <div class="chart-head">
+          <h3 class="sub">Where the settlement average lands <span class="muted" id="mdl-for"></span></h3>
+          <div class="legend"><span><i class="wk up"></i>UP wins</span><span><i class="wk down"></i>DOWN wins</span><span><i class="lk dash"></i>Strike</span><span><i class="lk"></i>BTC now</span></div>
+        </div>
+        <div class="mdl-curve" id="mdl-curve">
+          <svg id="mdl-svg" role="img" aria-label="Distribution of the settlement average"></svg>
+          <div class="tip" id="mdl-tip" hidden></div>
+        </div>
+        <ol class="mdl-steps" id="mdl-steps"><li class="mstep"><span class="sig-sub">Needs price, strike and volatility…</span></li></ol>
+        <div class="mdl-block">
+          <h3 class="sub">Market vs model <span class="muted" id="mdl-vs-venue"></span></h3>
+          <div id="mdl-vs"></div>
+        </div>
+        <div class="mdl-block">
+          <h3 class="sub">Edge, step by step <span class="muted" id="mdl-edge-venue"></span></h3>
+          <div id="mdl-edge"></div>
+        </div>
+      </div>
+      <div class="mdl-col">
+        <h3 class="sub">Models</h3>
+        <div class="mdl-list" id="mdl-list" role="radiogroup" aria-label="Model in use"></div>
+        <div class="mdl-block">
+          <div class="mdl-set-head"><h3 class="sub">Settings · <span id="mdl-set-name"></span></h3><button class="link-btn" type="button" id="mdl-reset">Reset</button></div>
+          <div id="mdl-params"></div>
+          <div class="sig-sub">Apply at once to the model %, the edge, the forecast cone and the alerts. Remembered in this browser.</div>
+        </div>
+      </div>
+    </div>
+  </section>
 </div>
 
 <div class="toast" id="toast" role="status" aria-live="polite" hidden><b id="toast-title"></b><span id="toast-body"></span></div>

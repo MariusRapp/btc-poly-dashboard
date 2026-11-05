@@ -14,6 +14,10 @@ CREATE TABLE IF NOT EXISTS rounds (
   result   TEXT,               -- official result: up | down
   k_strike REAL,               -- Kalshi's published BRTI start average (kalshi15)
   k_settle REAL,               -- Kalshi's published BRTI settlement average (kalshi15)
+  vol15    REAL,               -- model inputs at the snapshot (migrations/0002): volatility of the last 15 min,
+  vol240   REAL,               --   of the last 4 h, recent minutes weighted (half-life 10 min) — log return per √s —
+  ewma     REAL,
+  vel      REAL,               --   and BTC's speed over the last 60s, $/s
   updated  INTEGER NOT NULL,
   PRIMARY KEY (series, start)
 );

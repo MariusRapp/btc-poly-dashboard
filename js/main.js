@@ -10,6 +10,7 @@ import { updateUI } from './panels.js';
 import { loadPolymarket } from './polymarket.js';
 import { backfill, connectExchanges, getMedian, seedUsdt } from './prices.js';
 import { selectRound, syncBandLegend } from './review.js';
+import { initModelCard, updateModelCard } from './modelcard.js';
 import { onRecorded } from './recorder.js';
 import { refreshRounds, renderRounds, renderTrack } from './rounds.js';
 import { EX, EXCH, ROUND_S, S, TWAP_MS, saveOpts } from './state.js';
@@ -156,7 +157,8 @@ if ('wakeLock' in navigator) {
   try { if (localStorage.getItem('wake') === '1') setWake(true); } catch {}
 }
 
-onRecorded(() => renderTrack());   // the recorder's rounds arrived or refreshed
+onRecorded(() => { renderTrack(); updateModelCard(); });   // the recorder's rounds arrived or refreshed
+initModelCard();
 readTheme();
 attachHover(btcC.el, 'btc');
 attachHover(probC.el, 'prob');

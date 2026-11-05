@@ -34,11 +34,11 @@ export function median(values) {
   return v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2;
 }
 
-// volatility in log-return per √second from 1-minute closes (oldest first); null with fewer than 20 returns
-export function volFromCloses(closes) {
+// volatility in log-return per √second from 1-minute closes (oldest first); null with fewer than `min` returns
+export function volFromCloses(closes, min = 20) {
   const r = [];
   for (let i = 1; i < closes.length; i++) r.push(Math.log(closes[i] / closes[i - 1]));
-  if (r.length < 20) return null;
+  if (r.length < Math.max(2, min)) return null;
   const mean = r.reduce((a, v) => a + v, 0) / r.length;
   const sd1m = Math.sqrt(r.reduce((a, v) => a + (v - mean) ** 2, 0) / (r.length - 1));
   return sd1m / Math.sqrt(60);
@@ -59,26 +59,108 @@ export function settlementDist(price, sigma, T, observed = null) {
   return { mean, sd: Math.max(sd, 1e-6) };
 }
 
+// volatility with more weight on recent minutes: exponentially weighted mean of squared 1-minute log returns,
+// weights halving every `halfLife` minutes; per √second. null with fewer than 10 returns
+export function ewmaVol(closes, halfLife) {
+  if (closes.length < 11) return null;
+  const lam = Math.pow(0.5, 1 / halfLife);
+  let w = 1, sw = 0, sv = 0;
+  for (let i = closes.length - 1; i >= 1; i--) { const r = Math.log(closes[i] / closes[i - 1]); sv += w * r * r; sw += w; w *= lam; }
+  return Math.sqrt(sv / sw) / Math.sqrt(60);
+}
+
 // The model's forecast path: what decides the round, seen from now, t seconds ahead. Times are seconds from now;
 // `ws` = when the settlement window opens (negative once it has), `observed` = average of the window seen so far.
 //   before the window (t <= ws): the price,                 N(price, σ²·t)
 //   inside it: the running average of the window, [ws, t]:  mean (observed·o + price·L) / (t − ws),
 //              Var = σ²·(a·L² + L³/3) / (t − ws)²,  a = max(ws, 0), L = t − a, o = a − ws (seconds already observed)
 // At t = end this is settlementDist; at t = ws both pieces meet.
-export function forecastAt(price, sigma, t, ws, observed = null) {
-  if (t <= ws) return { mean: price, sd: sigma * Math.sqrt(Math.max(0, t)) };
+// `drift` ($/s) adds a trend that fades out: it moves the price by drift·τ·(1 − e^(−t/τ)), at most drift·τ.
+export function forecastAt(price, sigma, t, ws, observed = null, drift = 0, tau = 60) {
+  const g = s => tau * (1 - Math.exp(-s / tau)), G = s => tau * s - tau * tau * (1 - Math.exp(-s / tau));
+  if (t <= ws) return { mean: price + drift * g(Math.max(0, t)), sd: sigma * Math.sqrt(Math.max(0, t)) };
   const a = Math.max(ws, 0), L = t - a, span = t - ws, o = a - ws;
-  return { mean: ((observed ?? price) * o + price * L) / span, sd: sigma * Math.sqrt(a * L * L + L ** 3 / 3) / span };
+  return { mean: ((observed ?? price) * o + price * L + drift * (G(t) - G(a))) / span,
+           sd: sigma * Math.sqrt(a * L * L + L ** 3 / 3) / span };
 }
 
-// normal density, for drawing the settlement distribution
-export const normalPdf = (x, d) => Math.exp(-0.5 * ((x - d.mean) / d.sd) ** 2) / (d.sd * 2.5066282746);
+// ── Distributions: { mean, sd, df } is the normal when df is missing, else a Student-t with df degrees of freedom
+// scaled to the same sd (heavier tails, same spread). Needs df > 2.
+function lgamma(x) {   // Lanczos approximation
+  const c = [0.99999999999980993, 676.5203681218851, -1259.1392167224028, 771.32342877765313, -176.61502916214059,
+             12.507343278686905, -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7];
+  if (x < 0.5) return Math.log(Math.PI / Math.abs(Math.sin(Math.PI * x))) - lgamma(1 - x);
+  x -= 1;
+  let a = c[0];
+  const t = x + 7.5;
+  for (let i = 1; i < 9; i++) a += c[i] / (x + i);
+  return 0.5 * Math.log(2 * Math.PI) + (x + 0.5) * Math.log(t) - t + Math.log(a);
+}
+function betacf(x, a, b) {   // continued fraction of the incomplete beta function (Numerical Recipes)
+  const tiny = 1e-300, qab = a + b, qap = a + 1, qam = a - 1;
+  let c = 1, d = 1 - qab * x / qap;
+  if (Math.abs(d) < tiny) d = tiny;
+  d = 1 / d;
+  let h = d;
+  for (let m = 1; m <= 200; m++) {
+    const m2 = 2 * m;
+    for (const aa of [m * (b - m) * x / ((qam + m2) * (a + m2)), -(a + m) * (qab + m) * x / ((a + m2) * (qap + m2))]) {
+      d = 1 + aa * d; if (Math.abs(d) < tiny) d = tiny;
+      c = 1 + aa / c; if (Math.abs(c) < tiny) c = tiny;
+      d = 1 / d; h *= d * c;
+    }
+    if (Math.abs(d * c - 1) < 3e-12) break;
+  }
+  return h;
+}
+function betainc(x, a, b) {   // regularized incomplete beta I_x(a, b)
+  if (x <= 0) return 0;
+  if (x >= 1) return 1;
+  const bt = Math.exp(lgamma(a + b) - lgamma(a) - lgamma(b) + a * Math.log(x) + b * Math.log(1 - x));
+  return x < (a + 1) / (a + b + 2) ? bt * betacf(x, a, b) / a : 1 - bt * betacf(1 - x, b, a) / b;
+}
+export function tCdf(x, df) {
+  const p = 0.5 * betainc(df / (df + x * x), df / 2, 0.5);
+  return x >= 0 ? 1 - p : p;
+}
+export const tPdf = (x, df) => Math.exp(lgamma((df + 1) / 2) - lgamma(df / 2) - 0.5 * Math.log(df * Math.PI) - (df + 1) / 2 * Math.log(1 + x * x / df));
 
-// P(X >= level) and P(|X − level| <= band) for X ~ N(d.mean, d.sd²)
-export const probAbove = (d, level) => normalCDF((d.mean - level) / d.sd);
-export function probWithin(d, level, band) {
-  const z = (d.mean - level) / d.sd, w = band / d.sd;
-  return Math.max(0, normalCDF(w - z) - normalCDF(-w - z));
+// standard quantile (normal, or unit Student-t), by bisection; memoised: the charts ask for the same few every frame
+const qMemo = new Map();
+export function stdQuantile(p, df) {
+  const key = p + '|' + (df || 0);
+  if (qMemo.has(key)) return qMemo.get(key);
+  const cdf = df ? x => tCdf(x, df) : normalCDF;
+  let lo = -60, hi = 60;
+  for (let i = 0; i < 90; i++) { const m = (lo + hi) / 2; if (cdf(m) < p) lo = m; else hi = m; }
+  if (qMemo.size > 500) qMemo.clear();
+  qMemo.set(key, (lo + hi) / 2);
+  return (lo + hi) / 2;
+}
+const tScale = df => Math.sqrt((df - 2) / df);   // unit Student-t → sd 1
+export function distCdf(d, x) {
+  const z = (x - d.mean) / d.sd;
+  return d.df ? tCdf(z / tScale(d.df), d.df) : normalCDF(z);
+}
+export function distPdf(d, x) {
+  const z = (x - d.mean) / d.sd;
+  if (!d.df) return Math.exp(-0.5 * z * z) / (d.sd * 2.5066282746);
+  const s = tScale(d.df);
+  return tPdf(z / s, d.df) / (d.sd * s);
+}
+export const distQuantile = (d, p) => d.mean + d.sd * (d.df ? tScale(d.df) : 1) * stdQuantile(p, d.df);
+
+// P(X >= level) and P(|X − level| <= band)
+export const probAbove = (d, level) => 1 - distCdf(d, level);
+export const probWithin = (d, level, band) => Math.max(0, distCdf(d, level + band) - distCdf(d, level - band));
+
+// The volatility a market price implies under the standard model: the σ ($/√s) for which N(mean, (σ·k)²) puts the
+// market's probability above the strike (k = the sd per unit σ, e.g. forecastAt with σ = 1). null when the market
+// favours the other side than the price does — no volatility explains that — or sits too close to 50/50.
+export function impliedSigma(pMarket, mean, strike, k) {
+  const z = stdQuantile(Math.min(0.999, Math.max(0.001, pMarket))), gap = mean - strike;
+  if (Math.abs(z) < 0.03 || gap === 0 || Math.sign(z) !== Math.sign(gap) || !(k > 0)) return null;
+  return gap / (k * z);
 }
 
 // taker fee per share at price p (0..1) on both venues: rate × p × (1 − p)

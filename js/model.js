@@ -1,8 +1,9 @@
-// Strike, expected settlement and the model probability (normal approximation of the 60s settlement average).
+// Strike, expected settlement, and the model in use: its inputs, distribution and probability (models.js).
 
 import { fetchStrike } from './chainlink.js';
 import { yRange } from './charts.js';
-import { firstIdx, probAbove, probWithin, settlementDist, twap, volFromCloses } from './math.js';
+import { firstIdx, probAbove, probWithin, twap } from './math.js';
+import { modelById, modelDist as modelDistOf, paramsOf, volsFromCloses } from './models.js';
 import { S, TWAP_MS, medianHistory } from './state.js';
 import { currentRound, getJSON } from './util.js';
 import { KS } from './venues.js';
@@ -45,9 +46,8 @@ export function expectedSettlement(now) {
   return { value: done * e + S.lastMedianP * (1 - e), locked: e };
 }
 
-// σ in $ per √s: last hour of 1-minute returns; until that loads, the 60s range as a rough proxy
-export function sigmaUsd() {
-  if (S.volPerSqrtS !== null && S.lastMedianP !== null) return S.lastMedianP * S.volPerSqrtS;
+// rough σ in $ per √s from the last 60s range, while the 1-minute candles have not loaded yet
+function rangeSigma() {
   const cut60 = Date.now() - 60_000;
   let lo60 = Infinity, hi60 = -Infinity;
   for (let i = medianHistory.length - 1; i >= 0 && medianHistory[i].t >= cut60; i--) {
@@ -56,20 +56,34 @@ export function sigmaUsd() {
   return (isFinite(lo60) ? Math.max(25, (hi60 - lo60) / 3) : 80) / Math.sqrt(60);
 }
 
+// 1-minute closes of the last five hours (Coinbase; oldest first, the running minute left out) and the
+// volatilities the models use from them, refreshed every round
 export async function fetchVol() {
   try {
     const d = await getJSON('https://api.exchange.coinbase.com/products/BTC-USD/candles?granularity=60');
-    const v = volFromCloses(d.slice(1, 62).map(c => c[4]).reverse());   // newest first; skip the unfinished minute
-    if (v !== null) S.volPerSqrtS = v;
+    S.closes1m = d.slice(1).map(c => c[4]).reverse();
+    S.vols = volsFromCloses(S.closes1m);
   } catch (e) { console.warn('vol:', e.message); }
 }
 
-// distribution of the running round's settlement average (see settlementDist in math.js)
-export function modelDist() {
+// ── The model in use (models.js): picked and tuned in the Model card, remembered per browser ──
+export const activeModel = () => modelById(S.modelId);
+export const activeParams = (m = activeModel()) => paramsOf(m, S.modelParams?.[m.id]);
+
+// what the models get: price, strike, time left, the window seen so far, volatilities, the last minute's speed
+export function modelInputs(now = Date.now()) {
   if (S.strike === null || S.lastMedianP === null) return null;
-  const now = Date.now(), end = currentRound(now).end, T = (end - now) / 1000;
+  const end = currentRound(now).end, T = (end - now) / 1000;
   if (T <= 0) return null;
-  return settlementDist(S.lastMedianP, sigmaUsd(), T, T < 60 ? twap(medianHistory, end - TWAP_MS, now) : null);
+  return { price: S.lastMedianP, strike: S.strike, T, ws: T - 60, end,
+           observed: T < 60 ? twap(medianHistory, end - TWAP_MS, now) : null,
+           vol: k => S.vols?.[k] ?? null, velocity: velocity(now, 60_000), fallback: rangeSigma() };
+}
+
+// distribution of the running round's settlement average under the model in use
+export function modelDist() {
+  const inp = modelInputs();
+  return inp && modelDistOf(activeModel(), inp, activeParams());
 }
 
 // P(settlement average >= strike), in %
@@ -84,8 +98,9 @@ export function nearStrikeProb(band) {
   return d && probWithin(d, S.strike, band) * 100;
 }
 
-export function velocity(now) {
-  const old = medianHistory[Math.max(0, firstIdx(medianHistory, now - 30_000) - 1)];
+// $/s over the last `span` ms (30s for the projected settlement, 60s for the momentum model)
+export function velocity(now, span = 30_000) {
+  const old = medianHistory[Math.max(0, firstIdx(medianHistory, now - span) - 1)];
   if (!old || S.lastMedianP === null || now - old.t < 1000) return null;
-  return (S.lastMedianP - old.p) / ((now - old.t) / 1000);   // $/s
+  return (S.lastMedianP - old.p) / ((now - old.t) / 1000);
 }

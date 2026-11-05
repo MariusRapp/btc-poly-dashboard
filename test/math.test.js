@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   firstIdx, twap, median, normalCDF, volFromCloses, settlementDist, probAbove, probWithin,
-  takerFee, buyEdge, bookLevels, walkPair, mirrorBook, niceStep, forecastAt, normalPdf,
+  takerFee, buyEdge, bookLevels, walkPair, mirrorBook, niceStep, forecastAt, distPdf, distCdf, distQuantile, tCdf, tPdf, stdQuantile, ewmaVol, impliedSigma,
 } from '../js/math.js';
 import { decodeRound } from '../js/chainlink.js';
 
@@ -103,7 +103,7 @@ test('forecastAt: price before the window, running average in it, settlementDist
   near(inWin.sd, d.sd, 1e-12);
   // narrows relative to the price inside the window: the average moves slower than the price
   assert.ok(forecastAt(price, sigma, 300, 240).sd < sigma * Math.sqrt(300));
-  near(normalPdf(5, { mean: 5, sd: 2 }), 1 / (2 * Math.sqrt(2 * Math.PI)), 1e-9);
+  near(distPdf({ mean: 5, sd: 2 }, 5), 1 / (2 * Math.sqrt(2 * Math.PI)), 1e-9);
 });
 
 test('probAbove / probWithin', () => {
@@ -157,4 +157,47 @@ test('decodeRound: Chainlink latestRoundData answer', () => {
   // int256: a negative answer comes back negative
   const neg = hex.slice(0, 66) + 'f'.repeat(63) + 'f' + hex.slice(130);
   assert.equal(decodeRound(neg).price, -1e-8);
+});
+
+test('Student-t: CDF against table values, density, quantiles', () => {
+  near(tCdf(2.132, 4), 0.95, 2e-4);
+  near(tCdf(1.812, 10), 0.95, 2e-4);
+  near(tCdf(3.182, 3), 0.975, 2e-4);
+  near(tCdf(1, 1), 0.75, 1e-9, 'Cauchy');
+  near(tCdf(-1.5, 7) + tCdf(1.5, 7), 1, 1e-12);
+  near(tPdf(0, 1), 1 / Math.PI, 1e-9);
+  near(stdQuantile(0.975), 1.959964, 2e-5);
+  near(stdQuantile(0.95, 4), 2.1318, 2e-4);
+});
+
+test('distributions: normal and variance-matched t agree on round trips; t has fatter tails', () => {
+  const n = { mean: 100, sd: 10 }, t = { mean: 100, sd: 10, df: 4 };
+  for (const d of [n, t]) {
+    near(distCdf(d, 100), 0.5, 1e-9);
+    near(distCdf(d, distQuantile(d, 0.9)), 0.9, 1e-6);
+  }
+  assert.ok(1 - distCdf(t, 140) > 1 - distCdf(n, 140), 'P(4 sd above) larger with fat tails');
+  assert.ok(1 - distCdf(t, 110) < 1 - distCdf(n, 110), 'and smaller 1 sd above (more mass in the middle)');
+  near(distPdf(n, 100), 1 / (10 * Math.sqrt(2 * Math.PI)), 1e-12);
+});
+
+test('forecastAt with a fading trend', () => {
+  const base = forecastAt(100, 2, 120, 240), up = forecastAt(100, 2, 120, 240, null, 0.5);
+  assert.equal(up.sd, base.sd, 'a trend moves the centre, not the spread');
+  near(up.mean, 100 + 0.5 * 60 * (1 - Math.exp(-2)), 1e-9);
+  near(forecastAt(100, 2, 1e6, 2e6, null, 0.5).mean, 130, 1e-6, 'at most drift × τ');
+  near(forecastAt(100, 2, 240 + 1e-7, 240, null, 0.5).mean, forecastAt(100, 2, 240, 240, null, 0.5).mean, 1e-4, 'continuous at the window');
+  assert.deepEqual(forecastAt(100, 2, 300, 240, null, 0), forecastAt(100, 2, 300, 240));
+});
+
+test('ewmaVol and implied volatility', () => {
+  const r = 0.001, closes = [100];
+  for (let i = 0; i < 60; i++) closes.push(closes[i] * Math.exp(i % 2 ? -r : r));
+  near(ewmaVol(closes, 10), r / Math.sqrt(60), 1e-9, 'equal-sized moves');
+  assert.equal(ewmaVol([1, 2, 3], 10), null);
+  // σ = 2 $/√s, 300s left: the model probability, and back
+  const k = Math.sqrt(260), p = probAbove({ mean: 100030, sd: 2 * k }, 100000);
+  near(impliedSigma(p, 100030, 100000, k), 2, 1e-3);
+  assert.equal(impliedSigma(0.3, 100030, 100000, k), null, 'market favours the other side');
+  assert.equal(impliedSigma(0.5, 100030, 100000, k), null, '50/50');
 });

@@ -1,6 +1,6 @@
 // Pure helpers of the recorder Worker: which round to snapshot, parsing books and results, BTC averages,
 // the model at the snapshot, upsert SQL. No I/O; covered by recorder/lib.test.js.
-import { probAbove, settlementDist, twap } from '../js/math.js';
+import { firstIdx, probAbove, settlementDist, twap } from '../js/math.js';
 
 // the three markets the dashboard shows; ids match the dashboard's track stores
 export const SERIES = [
@@ -68,6 +68,12 @@ export function krakenTrades(d) {
 export const windowAvg = (trades, a, b) => twap(trades, a, b);
 export const lastPrice = trades => trades.length ? trades[trades.length - 1].p : null;
 
+// BTC's speed in $/s over the last `span` ms: the latest price against the one in force `span` earlier
+export function tradeVelocity(trades, nowMs, span = 60_000) {
+  const i = firstIdx(trades, nowMs - span + 1) - 1;
+  return i < 0 || !trades.length ? null : (trades[trades.length - 1].p - trades[i].p) / (span / 1000);
+}
+
 // model P(up) at the snapshot: the dashboard's model, on Binance BTC/USDT (strike and price share the basis)
 export function modelAt({ price, strike, sigma, nowMs, endMs, observed = null }) {
   const T = (endMs - nowMs) / 1000;
@@ -77,9 +83,12 @@ export function modelAt({ price, strike, sigma, nowMs, endMs, observed = null })
 
 // INSERT … ON CONFLICT DO UPDATE for the given columns only; null/undefined values are left out, so a partial
 // update never wipes what an earlier run stored
-export const COLUMNS = ['snap_t', 'bid', 'ask', 'model', 'price', 'sigma', 'strike', 'settle', 'result', 'k_strike', 'k_settle'];
-export function upsert(series, start, fields, nowS) {
-  const cols = COLUMNS.filter(c => fields[c] !== null && fields[c] !== undefined);
+// added by migrations/0002; left out again when that migration has not run yet
+export const MODEL_INPUTS = ['vol15', 'vol240', 'ewma', 'vel'];
+export const COLUMNS = ['snap_t', 'bid', 'ask', 'model', 'price', 'sigma', 'strike', 'settle', 'result', 'k_strike', 'k_settle',
+                        ...MODEL_INPUTS];
+export function upsert(series, start, fields, nowS, columns = COLUMNS) {
+  const cols = columns.filter(c => fields[c] !== null && fields[c] !== undefined);
   if (!cols.length) return null;
   const all = ['series', 'start', ...cols, 'updated'];
   return {
