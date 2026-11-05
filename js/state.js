@@ -56,11 +56,12 @@ S.clStrike = null;
 S.bookView = 'now';       // order book card: 'now' or 'next'
 
 S.showBands = !!opts.bands;   // the two 60s averaging windows (off by default)
+S.showFc = !!opts.fc;         // the model forecast cone and settlement distribution (off by default)
 S.showGap = opts.gap !== false;   // both venues: shade the gap between the two probabilities
 S.bookSide = opts.side === 'down' ? 'down' : 'up';   // order book card: UP shares, or DOWN (the UP book mirrored)
 S.bookVenue = opts.bv === 'kalshi' ? 'kalshi' : 'poly';   // order book card with both venues on
 export const saveOpts = () => { try { localStorage.setItem(OPTS_KEY, JSON.stringify({
-  ex: S.showExchanges, bands: S.showBands, gap: S.showGap, side: S.bookSide, bv: S.bookVenue, venue: S.venueMode, len: S.polyLenMin })); } catch {} };
+  ex: S.showExchanges, bands: S.showBands, fc: S.showFc, gap: S.showGap, side: S.bookSide, bv: S.bookVenue, venue: S.venueMode, len: S.polyLenMin })); } catch {} };
 
 // past round shown in the charts (null = live)
 export const ROUNDS_SHOWN = 24;

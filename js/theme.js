@@ -20,7 +20,7 @@ export function readTheme() {
   const v = n => cs.getPropertyValue('--' + n).trim();
   Object.assign(T, {
     surface: v('surface'), ink1: v('ink-1'), ink2: v('ink-2'), muted: v('muted'),
-    grid: v('grid'), axis: v('axis'), band: v('band'), upWash: v('up-wash'), downWash: v('down-wash'),
+    grid: v('grid'), axis: v('axis'), band: v('band'), upWash: v('up-wash'), downWash: v('down-wash'), up: v('up'), down: v('down'),
     vpm: v('v-pm'), vks: v('v-ks'),
   });
   EXCH.forEach((ex, i) => ex.color = v('ex-' + (i + 1)));

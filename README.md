@@ -184,6 +184,12 @@ Auf dem Handy: im Browser-Menü „Zum Home-Bildschirm“ – dann startet das D
 sich jede der letzten 24 Runden im Chart ansehen. „Exchange lines“, „Averaging windows“ (die beiden
 60-s-Fenster, aus denen Strike und Abrechnung berechnet werden) und „Price gap“ sind Schalter und werden im Browser gemerkt.
 
+„Model forecast“ zeigt im Rundenmodus, was das Modell bis zum Rundenende erwartet: ein Band für 68 % und 95 % der
+Ausgänge – bis das Abrechnungsfenster öffnet für den Preis, danach für den laufenden 60-s-Durchschnitt, der am Ende
+die Abrechnung ist. Am rechten Rand liegt die Verteilung dieses Durchschnitts, oberhalb des Strikes grün, unterhalb rot;
+ihr grüner Anteil ist die Modell-Wahrscheinlichkeit. Mit dem Zeiger in der Zukunft zeigt der Tooltip den erwarteten
+Wert und den 68-%-Bereich für diesen Zeitpunkt. Standardmäßig aus, die Wahl wird gemerkt.
+
 Für das Notebook:
 
 ```bash

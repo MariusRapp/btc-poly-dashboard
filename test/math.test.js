@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   firstIdx, twap, median, normalCDF, volFromCloses, settlementDist, probAbove, probWithin,
-  takerFee, buyEdge, bookLevels, walkPair, mirrorBook, niceStep,
+  takerFee, buyEdge, bookLevels, walkPair, mirrorBook, niceStep, forecastAt, normalPdf,
 } from '../js/math.js';
 import { decodeRound } from '../js/chainlink.js';
 
@@ -88,6 +88,22 @@ test('settlementDist matches a simulation of the 60s average', () => {
     const sd = Math.sqrt(avgs.reduce((a, v) => a + (v - mean) ** 2, 0) / (N - 1));
     near(sd, settlementDist(0, sigma, T, 0).sd, settlementDist(0, sigma, T, 0).sd * 0.06, `T = ${T}s`);
   }
+});
+
+test('forecastAt: price before the window, running average in it, settlementDist at the end', () => {
+  const sigma = 2, price = 100;
+  // 300s left, window opens in 240s
+  assert.deepEqual(forecastAt(price, sigma, 100, 240), { mean: 100, sd: sigma * 10 });
+  const end = forecastAt(price, sigma, 300, 240), sd = settlementDist(price, sigma, 300);
+  near(end.sd, sd.sd, 1e-9, 'end = settlement average');
+  near(forecastAt(price, sigma, 240 + 1e-9, 240).sd, forecastAt(price, sigma, 240, 240).sd, 1e-4, 'continuous at the window start');
+  // 30s left inside the window (opened 30s ago), first half averaged 90
+  const inWin = forecastAt(price, sigma, 30, -30, 90), d = settlementDist(price, sigma, 30, 90);
+  near(inWin.mean, d.mean, 1e-12);
+  near(inWin.sd, d.sd, 1e-12);
+  // narrows relative to the price inside the window: the average moves slower than the price
+  assert.ok(forecastAt(price, sigma, 300, 240).sd < sigma * Math.sqrt(300));
+  near(normalPdf(5, { mean: 5, sd: 2 }), 1 / (2 * Math.sqrt(2 * Math.PI)), 1e-9);
 });
 
 test('probAbove / probWithin', () => {

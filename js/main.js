@@ -68,6 +68,12 @@ $('show-bands').addEventListener('change', e => {
   syncBandLegend();
   saveOpts();
 });
+$('show-fc').checked = S.showFc;
+$('show-fc').addEventListener('change', e => {
+  S.showFc = e.target.checked;
+  delete yRange.btc;   // the cone widens the price axis: snap to the new range
+  saveOpts();
+});
 $('show-gap').checked = S.showGap;
 $('show-gap').addEventListener('change', e => {
   S.showGap = e.target.checked;

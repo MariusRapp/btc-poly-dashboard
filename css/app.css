@@ -175,6 +175,7 @@ h2 { font-size:13px; font-weight:600; }
 .wk.down { background:var(--down); opacity:.4; }
 .wk.band { background:var(--ink-2); opacity:.15; }
 .wk.gap  { background:var(--ink-2); opacity:.14; }
+.wk.fc   { background:var(--ink-1); opacity:.17; }
 
 .plot { position:relative; height:clamp(280px, 44vh, 520px); }
 .plot-prob { height:clamp(150px, 20vh, 220px); }

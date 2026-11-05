@@ -59,6 +59,21 @@ export function settlementDist(price, sigma, T, observed = null) {
   return { mean, sd: Math.max(sd, 1e-6) };
 }
 
+// The model's forecast path: what decides the round, seen from now, t seconds ahead. Times are seconds from now;
+// `ws` = when the settlement window opens (negative once it has), `observed` = average of the window seen so far.
+//   before the window (t <= ws): the price,                 N(price, σ²·t)
+//   inside it: the running average of the window, [ws, t]:  mean (observed·o + price·L) / (t − ws),
+//              Var = σ²·(a·L² + L³/3) / (t − ws)²,  a = max(ws, 0), L = t − a, o = a − ws (seconds already observed)
+// At t = end this is settlementDist; at t = ws both pieces meet.
+export function forecastAt(price, sigma, t, ws, observed = null) {
+  if (t <= ws) return { mean: price, sd: sigma * Math.sqrt(Math.max(0, t)) };
+  const a = Math.max(ws, 0), L = t - a, span = t - ws, o = a - ws;
+  return { mean: ((observed ?? price) * o + price * L) / span, sd: sigma * Math.sqrt(a * L * L + L ** 3 / 3) / span };
+}
+
+// normal density, for drawing the settlement distribution
+export const normalPdf = (x, d) => Math.exp(-0.5 * ((x - d.mean) / d.sd) ** 2) / (d.sd * 2.5066282746);
+
 // P(X >= level) and P(|X − level| <= band) for X ~ N(d.mean, d.sd²)
 export const probAbove = (d, level) => normalCDF((d.mean - level) / d.sd);
 export function probWithin(d, level, band) {

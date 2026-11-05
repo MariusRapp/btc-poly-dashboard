@@ -118,6 +118,7 @@
           <div class="tools">
             <label class="toggle"><input type="checkbox" id="show-ex"> Exchange lines</label>
             <label class="toggle" title="The two 60s windows the result is computed from: average before the round start (strike) and over its last minute (settlement)"><input type="checkbox" id="show-bands"> Averaging windows</label>
+            <label class="toggle" title="The spread the model expects until the round ends: 68% and 95% of outcomes, the price until the settlement window opens, then its running average. At the right edge: where the settlement average lands, above and below the strike. Live round view."><input type="checkbox" id="show-fc"> Model forecast</label>
             <label class="toggle" id="gap-toggle" title="Shade the gap between the Polymarket and Kalshi probability" hidden><input type="checkbox" id="show-gap"> Price gap</label>
           </div>
         </div>
@@ -136,6 +137,7 @@
             <span><i class="wk up"></i>Above</span>
             <span><i class="wk down"></i>Below</span>
             <span id="leg-band" hidden><i class="wk band"></i>60s averaging windows</span>
+            <span id="leg-fc" hidden><i class="wk fc"></i>Model 68% / 95%</span>
             <span id="legend-ex" hidden></span>
           </div>
         </div>

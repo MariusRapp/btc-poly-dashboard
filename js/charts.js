@@ -2,7 +2,8 @@
 
 import { KALSHI_PROXY } from './kalshi.js';
 import { renderLadder } from './ladder.js';
-import { firstIdx, niceStep } from './math.js';
+import { firstIdx, forecastAt, niceStep, normalPdf, twap } from './math.js';
+import { sigmaUsd } from './model.js';
 import { EXCH, S, TWAP_MS, medianHistory } from './state.js';
 import { T } from './theme.js';
 import { $, currentRound, fmtClock, fmtHM, fmtNum, fmtP, fmtPts, signedUsd } from './util.js';
@@ -270,6 +271,8 @@ function drawBtc(v) {
     lo = Math.min(lo, s.lo); hi = Math.max(hi, s.hi);
   }
   if (strike !== null) { lo = Math.min(lo, strike); hi = Math.max(hi, strike); }
+  const fc = forecastPath(v);
+  if (fc) for (const p of fc.pts) { lo = Math.min(lo, p.mean - p.sd); hi = Math.max(hi, p.mean + p.sd); }   // ±1σ in view
   const pad = Math.max((hi - lo) * 0.12, 3);
   ({ lo, hi } = easeRange('btc', lo - pad, hi + pad));
   const yOf = p => Y0 + (hi - p) / (hi - lo) * (Y1 - Y0);
@@ -282,6 +285,8 @@ function drawBtc(v) {
   const verts = vertices(med.pts, yOf, false, xNow);
   if (strike !== null) washVerts(ctx, verts, yOf(strike), PW, H);
   for (const [ex, s] of exLines) strokeVerts(ctx, vertices(s.pts, yOf, false, xNow), ex.color, 1.25);
+  if (fc) drawForecast(ctx, fc, xOf, yOf, PW, Y0, Y1, strike);
+  if (!!fc === $('leg-fc').hidden) $('leg-fc').hidden = !fc;
 
   if (strike !== null) refLine(ctx, Math.round(yOf(strike)) + .5, PW);
   strokeVerts(ctx, verts, T.ink1, 2);
@@ -292,7 +297,8 @@ function drawBtc(v) {
     const lbl = (strikeSrc === 'twap' ? 'Strike ' : 'Strike ≈ ') + fmtP(strike);
     ctx.font = '11px ' + FONT;
     const lw = ctx.measureText(lbl).width;
-    const lx = xNow + 100 < PW - lw - 12 ? PW - lw - 12 : 4;
+    const right = PW - lw - 12 - (fc ? fcWidth(PW) : 0);   // left of the settlement distribution when it is shown
+    const lx = xNow + 100 < right ? right : 4;
     const ly = sy - 12 > Y0 + 4 ? sy - 11 : sy + 11;
     ctx.fillStyle = T.surface; rrect(ctx, lx, ly - 8, lw + 8, 16, 4); ctx.fill();
     ctx.fillStyle = T.ink2; ctx.textBaseline = 'middle'; ctx.fillText(lbl, lx + 4, ly);
@@ -301,6 +307,23 @@ function drawBtc(v) {
   endTag(ctx, xNow, yOf(lastP), fmtNum(lastP), Y0, Y1);
 
   if (S.hoverFrac === null) { btcTip.el.hidden = true; return; }
+  const R = btcTip.refs;
+  // in the future part of the round with the forecast on: what the model expects at that moment
+  const hf = t0 + S.hoverFrac * D;
+  if (fc && hf > now) {
+    const x = xOf(hf), p = fc.at(hf);
+    vline(ctx, x, Y0, Y1);
+    dot(ctx, x, yOf(p.mean), T.ink2);
+    if (S.hoverSrc !== 'btc') { btcTip.el.hidden = true; return; }
+    btcTip.time.textContent = fmtClock(hf) + (hf > v.end - TWAP_MS ? ' · settlement avg' : '');
+    for (const k in R) R[k].row.hidden = k !== 'fc' && k !== 'f68';
+    R.fc.val.textContent = fmtP(p.mean);
+    R.f68.val.textContent = `${fmtP(p.mean - p.sd)} – ${fmtP(p.mean + p.sd)}`;
+    placeTip(btcTip, x, PW);
+    return;
+  }
+  R.fc.row.hidden = R.f68.row.hidden = true;
+  R.med.row.hidden = R.vs.row.hidden = false;
   const ht = hoverTime(t0, D, now), x = xOf(ht);
   const i  = firstIdx(hist, ht);
   const a = hist[i - 1], b = hist[i];
@@ -321,6 +344,59 @@ function drawBtc(v) {
     r.val.textContent = j >= 0 ? fmtP(ex.trades[j].p) : '—';
   }
   placeTip(btcTip, x, PW);
+}
+
+// ── Model forecast (toggle) ──────────────────────────────────────────────────
+// From now to the round end, the spread the model expects: ±1σ and ±2σ (68% / 95% of outcomes) of the price until
+// the settlement window opens, then of the window's running average, which at the end is the settlement average.
+// At the right edge its distribution, split at the strike (above: up wash, below: down wash). Live round view only.
+// px the settlement distribution takes at the right edge: 46, at most 12% of the plot (phones)
+const fcWidth = PW => Math.min(46, Math.round(PW * 0.12));
+
+function forecastPath(v) {
+  if (!S.showFc || !v.live || !v.round || v.strike === null || S.lastMedianP === null) return null;
+  const now = v.tNow, end = v.end, T = (end - now) / 1000;
+  if (T <= 1) return null;
+  const price = S.lastMedianP, sigma = sigmaUsd(), ws = (end - TWAP_MS - now) / 1000;
+  const observed = ws < 0 ? twap(medianHistory, end - TWAP_MS, now) : null;
+  const at = tMs => forecastAt(price, sigma, (tMs - now) / 1000, ws, observed);
+  // denser inside the window, where the shape bends
+  const a = Math.max(ws, 0), ts = [0];
+  if (a > 0) for (let k = 1; k <= 30; k++) ts.push(a * k / 30);
+  for (let k = 1; k <= 24; k++) ts.push(a + (T - a) * k / 24);
+  const pts = ts.map(t => ({ t: now + t * 1000, ...forecastAt(price, sigma, t, ws, observed) }));
+  pts[0].sd = 0;
+  return { pts, at, end: pts[pts.length - 1] };
+}
+
+function drawForecast(ctx, fc, xOf, yOf, PW, Y0, Y1, strike) {
+  ctx.save();
+  ctx.beginPath(); ctx.rect(0, Y0 - 8, PW, Y1 - Y0 + 8); ctx.clip();
+  // ±2σ (lighter) under ±1σ: one neutral ink, the band has no side
+  for (const [k, alpha] of [[2, 0.07], [1, 0.10]]) {
+    ctx.beginPath();
+    fc.pts.forEach((p, i) => { const x = xOf(p.t), y = yOf(p.mean + k * p.sd); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+    for (let i = fc.pts.length - 1; i >= 0; i--) ctx.lineTo(xOf(fc.pts[i].t), yOf(fc.pts[i].mean - k * fc.pts[i].sd));
+    ctx.closePath();
+    ctx.globalAlpha = alpha; ctx.fillStyle = T.ink1; ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  ctx.beginPath();
+  fc.pts.forEach((p, i) => { const x = xOf(p.t), y = yOf(p.mean); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+  ctx.strokeStyle = T.ink2; ctx.lineWidth = 1; ctx.stroke();
+
+  // settlement distribution: density across the price axis, drawn leftwards from the right edge
+  const d = fc.end, peak = normalPdf(d.mean, d), shape = new Path2D(), FC_W = fcWidth(PW);
+  shape.moveTo(PW, yOf(d.mean + 3.5 * d.sd));
+  for (let k = 0; k <= 64; k++) { const p = d.mean + 3.5 * d.sd * (1 - k / 32); shape.lineTo(PW - FC_W * normalPdf(p, d) / peak, yOf(p)); }
+  shape.closePath();
+  const ys = Math.max(Y0 - 8, Math.min(Y1, yOf(strike)));
+  for (const [y0, y1, color] of [[0, ys, T.up], [ys, Y1 + 8, T.down]]) {
+    ctx.save(); ctx.beginPath(); ctx.rect(PW - FC_W - 1, y0, FC_W + 1, y1 - y0); ctx.clip();
+    ctx.globalAlpha = 0.4; ctx.fillStyle = color; ctx.fill(shape); ctx.restore();
+  }
+  ctx.globalAlpha = 1; ctx.strokeStyle = T.ink2; ctx.lineWidth = 1; ctx.stroke(shape);
+  ctx.restore();
 }
 
 // ── Probability chart ────────────────────────────────────────────────────────
@@ -446,6 +522,8 @@ function render() {
 export const btcTip = makeTip('btc-tip', [
   { id:'med', label:'Median',    key:' ' },
   { id:'vs',  label:'vs strike', key:'ghost' },
+  { id:'fc',  label:'Model expects', key:'ghost' },
+  { id:'f68', label:'68% between', key:'ghost' },
   ...EXCH.map((ex, i) => ({ id: ex.key, label: ex.name, key: ' ', color: `var(--ex-${i + 1})` })),
 ]);
 const probTip = makeTip('prob-tip', [
