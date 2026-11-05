@@ -313,3 +313,16 @@ label.src-name { cursor:pointer; }
   .hide-sm, .src-name .muted { display:none; }
   .src { column-gap:10px; }
 }
+
+/* ── Calibration chart (track record from the recorder) ── */
+.cal-wrap { margin-top:12px; }
+.cal-wrap .chart-head { margin:4px 0 2px; }
+.cal-note { font-size:11px; color:var(--muted-text); margin-bottom:4px; }
+.cal { display:block; width:100%; height:auto; overflow:visible; }
+.cal-grid { stroke:var(--grid); stroke-width:1; }
+.cal-ref { stroke:var(--ink-2); stroke-width:1; stroke-dasharray:4 4; }
+.cal-tick { font-size:10px; fill:var(--muted-text); font-variant-numeric:tabular-nums; }
+.cal-line { fill:none; stroke-width:2; stroke-linejoin:round; stroke-linecap:round; }
+.cal-dot { stroke:var(--surface); stroke-width:2; }
+.cal-hit { fill:transparent; }
+.cal-pt:hover .cal-dot { r:5; }

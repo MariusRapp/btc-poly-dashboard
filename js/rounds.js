@@ -1,11 +1,14 @@
 // Recent rounds with official results, and the track record kept in this browser.
 
+import { KS_FEE, PM_FEE } from './arb.js';
 import { ksFetchResult, ksRefreshResults } from './kalshi.js';
 import { twap } from './math.js';
 import { pmFetchResult } from './polymarket.js';
+import { loadRecorded, recorded } from './recorder.js';
 import { syncReview } from './review.js';
 import { ROUNDS_SHOWN, ROUND_S, S, TWAP_MS, medianHistory } from './state.js';
-import { $, currentRound, fmtHM, roundSpan } from './util.js';
+import { backtest, calibration, marketProb, summary } from './stats.js';
+import { $, currentRound, fmtHM, roundSpan, signedC } from './util.js';
 import { KS, PM, activeVenues, both, mainVenue } from './venues.js';
 
 // ── Recent rounds + track record ─────────────────────────────────────────────
@@ -13,7 +16,7 @@ import { KS, PM, activeVenues, both, mainVenue } from './venues.js';
 // lives in this browser's localStorage, one store per venue and round length
 const TRACK_KEYS = { poly5: 'btc5m-track-v1', poly15: 'btc-track-poly15-v1', kalshi15: 'btc-track-kalshi15-v1' };
 const tracks = {};
-const trackId = V => V === KS ? 'kalshi15' : 'poly' + ROUND_S / 60;
+export const trackId = V => V === KS ? 'kalshi15' : 'poly' + ROUND_S / 60;
 function trackOf(V) {
   const id = trackId(V);
   if (!tracks[id]) tracks[id] = (() => { try { return JSON.parse(localStorage.getItem(TRACK_KEYS[id])) || {}; } catch { return {}; } })();
@@ -100,8 +103,14 @@ function trackStats(V) {
            match: basis.filter(r => r.own === r.outcome).length };
 }
 
-function renderTrack() {
-  const st = activeVenues().map(trackStats), el = $('track');
+// the recorder's rounds when it has scored any for the active market(s), else the track record of this browser
+export function renderTrack() {
+  const vs = activeVenues(), el = $('track');
+  for (const V of vs) loadRecorded(trackId(V));
+  const server = vs.map(V => ({ V, recs: recorded(trackId(V)) }));
+  if (server.every(x => x.recs) && server.some(x => summary(x.recs).n)) return renderServerTrack(el, server);
+
+  const st = vs.map(trackStats);
   if (!st.some(s => s.n || s.nb)) {
     el.innerHTML = '<div class="sig-sub">Track record fills in while the dashboard is open: market and model are recorded 60s before each round ends and checked against the official result.</div>';
     return;
@@ -124,6 +133,62 @@ function renderTrack() {
     for (const V of activeVenues()) { tracks[trackId(V)] = {}; saveTrack(V); }
     renderTrack();
   });
+}
+
+// ── Track record from the recorder (recorder/) ───────────────────────────────
+const BT_EDGE = 0.03;   // backtest: buy when the model edge after the fee is at least 3¢ a share
+const fmtDay = ts => new Date(ts * 1000).toLocaleDateString([], { month: 'short', day: 'numeric' });
+
+function renderServerTrack(el, server) {
+  const two = server.length > 1;
+  const st = server.map(({ V, recs }) => ({ V, recs, s: summary(recs), fee: V === KS ? KS_FEE : PM_FEE })).filter(x => x.s.n);
+  const per = f => st.map(x => (two ? x.V.short + ' ' : '') + f(x)).join(' · ');
+  const pct = v => Math.round(v * 100) + '%';
+  const rows = [
+    [`Rounds recorded <span class="muted">· since ${fmtDay(Math.min(...st.map(x => x.s.since)))}</span>`, per(x => x.s.n)],
+    ['Market favourite won <span class="muted">· at −60s</span>', per(x => pct(x.s.fav))],
+    ['Brier score <span class="muted">· lower is better</span>', per(x => `market ${x.s.brierMkt.toFixed(3)} · model ${x.s.brierModel.toFixed(3)}`)],
+    [`Model edge ≥ ${BT_EDGE * 100}¢, bought at the ask <span class="muted">· after fees</span>`, per(x => {
+      const b = backtest(x.recs, BT_EDGE, x.fee);
+      return b.trades ? `<span class="${b.pnl >= 0 ? 'up-t' : 'down-t'}">${signedC(b.perTrade)}</span>&nbsp;a&nbsp;trade · ${b.trades}&nbsp;trades` : 'no trades yet';
+    })],
+    ['BTC (Binance) settled like the market', per(x => `${x.s.ownMatch} / ${x.s.ownN}`)],
+  ];
+  el.innerHTML = rows.map(([k, v]) => `<div class="trow"><span>${k}</span><b>${v}</b></div>`).join('') +
+    (!two && st[0].s.n >= 20 ? calibrationChart(st[0].recs, st[0].V) : '') +
+    '<div class="track-foot"><span>Recorded on the server every round, also with no tab open</span></div>';
+}
+
+// Reliability diagram: forecast probability at −60s (x) against the share of those rounds that went UP (y).
+// Points on the diagonal = forecasts mean what they say. Bins of 10 points, shown from 3 rounds.
+function calibrationChart(recs, V) {
+  const W = 320, H = 176, L = 34, R = 10, T = 8, B = 22, pw = W - L - R, ph = H - T - B;
+  const x = p => (L + p * pw).toFixed(1), y = f => (T + (1 - f) * ph).toFixed(1);
+  const series = [
+    { name: 'Market', key: V === KS ? 'ks' : 'pm', color: V === KS ? 'var(--v-ks)' : 'var(--v-pm)', f: marketProb },
+    { name: 'Model', key: '', color: 'var(--ink-1)', f: r => r.model },
+  ];
+  let svg = '';
+  for (const v of [0, 0.5, 1]) {
+    svg += `<line class="cal-grid" x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/>` +
+      `<text class="cal-tick" x="${L - 6}" y="${y(v)}" text-anchor="end" dominant-baseline="middle">${v * 100}%</text>` +
+      `<text class="cal-tick" x="${x(v)}" y="${H - 6}" text-anchor="${v === 0 ? 'start' : v === 1 ? 'end' : 'middle'}">${v * 100}%</text>`;
+  }
+  svg += `<line class="cal-ref" x1="${x(0)}" y1="${y(0)}" x2="${x(1)}" y2="${y(1)}"/>`;
+  for (const s of series) {
+    const bins = calibration(recs, s.f).filter(b => b.n >= 3);
+    if (bins.length > 1) svg += `<polyline class="cal-line" style="stroke:${s.color}" points="${bins.map(b => `${x(b.p)},${y(b.freq)}`).join(' ')}"/>`;
+    for (const b of bins) {
+      const tip = `${s.name}: forecast ${Math.round(b.lo * 100)}–${Math.round(b.hi * 100)}% (avg ${Math.round(b.p * 100)}%) · UP won ${Math.round(b.freq * 100)}% of ${b.n} rounds`;
+      svg += `<g class="cal-pt"><title>${tip}</title><circle class="cal-hit" cx="${x(b.p)}" cy="${y(b.freq)}" r="10"/>` +
+        `<circle class="cal-dot" style="fill:${s.color}" cx="${x(b.p)}" cy="${y(b.freq)}" r="4"/></g>`;
+    }
+  }
+  return `<div class="cal-wrap"><div class="chart-head"><h2>Calibration</h2><div class="legend">` +
+    series.map(s => `<span><i class="lk ${s.key}"></i>${s.name}</span>`).join('') +
+    `<span><i class="lk dash"></i>Calibrated</span></div></div>` +
+    `<div class="cal-note">Forecast at −60s (across) against how often UP won (up)</div>` +
+    `<svg class="cal" viewBox="0 0 ${W} ${H}" role="img" aria-label="Calibration of the ${V.name} market and the model over ${recs.length} recorded rounds">${svg}</svg></div>`;
 }
 
 export function recordTrack(now, modelP) {

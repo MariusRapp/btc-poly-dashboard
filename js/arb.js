@@ -6,12 +6,20 @@ import { ksTarget, nearStrikeProb } from './model.js';
 import { EXCH, ROUNDS_SHOWN, ROUND_S, S, STALE_MS } from './state.js';
 import { $, currentRound, fmtC, fmtP, fmtPts, fmtSz, signedUsd } from './util.js';
 import { KS, PM, activeVenues } from './venues.js';
+import { recorded } from './recorder.js';
+import { settleApart } from './stats.js';
 
 // Both venues charge takers rate × p × (1 − p) per share/contract: Polymarket crypto 0.07, Kalshi 0.07 × the
 // series multiplier (1 for KXBTC15M), rounded up to the cent per order — that rounding only matters for tiny orders.
 export const PM_FEE = 0.07, KS_FEE = 0.07;
-// how far Chainlink's and CF Benchmarks' 60s averages may move apart over one round — an estimate, not measured
+// how far Chainlink's and CF Benchmarks' 60s averages may move apart over one round: an estimate, used until the
+// recorder has seen 3 rounds the venues settled apart (then: the widest BRTI distance from the strike among those)
 const SETTLE_BAND = 5;
+function settleBand() {
+  const p = recorded('poly15'), k = recorded('kalshi15'), sa = p && k ? settleApart(p, k) : null;
+  const measured = !!sa && sa.splits >= 3 && sa.maxDist !== null;
+  return { sa, measured, band: measured ? Math.max(1, Math.ceil(sa.maxDist)) : SETTLE_BAND };
+}
 
 // ── Model edge ───────────────────────────────────────────────────────────────
 // Buy one side of the running round at its best ask. If the model is right, the expected gain per $1 share
@@ -77,11 +85,12 @@ export function updateArb(arb) {
     arbRow('arb1', arb.upPm);
     arbRow('arb2', arb.downPm);
   }
-  const near = nearStrikeProb(SETTLE_BAND), agree = venueAgreement();
+  const { sa, measured, band } = settleBand(), near = nearStrikeProb(band), agree = venueAgreement();
   $('risk-val').textContent = near === null ? '—' : near < 0.1 ? '<0.1%' : near.toFixed(1) + '%';
   $('risk-val').className = 'sig-value' + (near !== null && near >= 5 ? ' warn' : '');
-  $('risk-sub').textContent = `Model chance the settlement ends within ±$${SETTLE_BAND} of the strike, where the two indices can disagree` +
-    (agree ? ` · same result in ${agree.same} of the last ${agree.n} rounds` : '');
+  $('risk-sub').textContent = `Model chance the settlement ends within ±$${band} of the strike ` +
+    (measured ? `(the widest of ${sa.splits} recorded splits)` : '(an estimate)') + ', where the two indices can disagree' +
+    (sa?.n ? ` · settled apart in ${sa.splits} of ${sa.n} rounds, last 14 days` : agree ? ` · same result in ${agree.same} of the last ${agree.n} rounds` : '');
 }
 
 export function updateSources() {

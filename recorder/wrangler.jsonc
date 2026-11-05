@@ -1,0 +1,17 @@
+// Recorder Worker for the dashboard: runs every minute, stores rounds in D1, serves them at GET /rounds.
+// Deploy: npx wrangler deploy (from recorder/). First time: npx wrangler d1 create btc-rounds, put the id below,
+// then npx wrangler d1 execute btc-rounds --remote --file schema.sql
+{
+  "name": "btc-recorder",
+  "main": "worker.js",
+  "compatibility_date": "2026-11-05",
+  "triggers": { "crons": ["* * * * *"] },
+  "d1_databases": [
+    { "binding": "DB", "database_name": "btc-rounds", "database_id": "74110ddd-c183-4d81-afba-a9303cb39975" }
+  ],
+  "observability": {
+    "enabled": true,
+    "logs": { "enabled": true, "head_sampling_rate": 1 },
+    "traces": { "enabled": true, "head_sampling_rate": 0.01 }
+  }
+}
