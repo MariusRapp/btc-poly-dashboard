@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { toRecords, marketProb, scored, summary, calibration, backtest, settleApart, logLoss, scores, isOpen, LOG_CLIP } from '../js/stats.js';
-import { takerFee } from '../js/math.js';
+import { toRecords, marketProb, scored, summary, calibration, backtest, logLoss, scores, isOpen, LOG_CLIP, splitCurve, splitProb, pairBacktest, SPLIT_DEFAULT } from '../js/stats.js';
+import { takerFee, probWithin } from '../js/math.js';
 
 const near = (a, b, tol = 1e-9) => assert.ok(Math.abs(a - b) <= tol, `${a} vs ${b}`);
 const rec = (o) => ({ start: 0, bid: null, ask: null, model: null, strike: null, settle: null, result: null, k_strike: null, k_settle: null, ...o });
@@ -78,13 +78,50 @@ test('backtest: buys the side with enough edge at the ask, after the fee', () =>
   assert.equal(backtest([], 0.03, fee).perTrade, null);
 });
 
-test('settleApart: rounds both venues settled, splits and their BRTI distance', () => {
-  const poly = [rec({ start: 1, result: 'up' }), rec({ start: 2, result: 'down' }), rec({ start: 3, result: 'up' }), rec({ start: 4, result: 'up' })];
+test('splitCurve: split rate by distance to the strike in bp, pulled towards the default', () => {
+  const K = 100_000;   // 1 bp = $10
+  const poly = [1, 2, 3, 4].map(s => rec({ start: s, result: 'up' }));
   const kalshi = [
-    rec({ start: 1, result: 'up', k_strike: 100, k_settle: 140 }),
-    rec({ start: 2, result: 'up', k_strike: 100, k_settle: 103.5 }),    // split, BRTI ended $3.50 above
-    rec({ start: 3, result: 'down', k_strike: 100, k_settle: 98 }),     // split, $2 below
+    rec({ start: 1, result: 'down', k_strike: K, k_settle: K - 1 }),     // 0.1 bp, split
+    rec({ start: 2, result: 'up', k_strike: K, k_settle: K + 2 }),       // 0.2 bp, same
+    rec({ start: 3, result: 'up', k_strike: K, k_settle: K + 500 }),     // 50 bp, same
+    rec({ start: 9, result: 'up', k_strike: K, k_settle: K + 1 }),       // no Polymarket round
   ];
-  assert.deepEqual(settleApart(poly, kalshi), { n: 3, splits: 2, maxDist: 3.5 });
-  assert.deepEqual(settleApart([], kalshi), { n: 0, splits: 0, maxDist: null });
+  const c = splitCurve(poly, kalshi, SPLIT_DEFAULT, 10);
+  assert.deepEqual([c.n, c.splits], [3, 1]);
+  assert.deepEqual([c.bins[0].n, c.bins[0].s], [2, 1]);
+  near(c.bins[0].rate, (1 + 10 * SPLIT_DEFAULT[0]) / 12);
+  near(c.bins[4].rate, (0 + 10 * SPLIT_DEFAULT[4]) / 11);
+  near(splitCurve([], []).bins[2].rate, SPLIT_DEFAULT[2], 1e-12, 'no data: the default');
+});
+
+test('splitProb: mass of the settlement distribution near the strike × the split rate there', () => {
+  const c = { bins: [{ lo: 0, hi: 1, rate: 0.5 }, { lo: 1, hi: Infinity, rate: 0 }] }, K = 100_000;
+  near(splitProb(c, { mean: K, sd: 1e-6 }, K), 0.5, 1e-9, 'certain to land on the strike');
+  near(splitProb(c, { mean: K + 1000, sd: 1 }, K), 0, 1e-9, 'far away');
+  const d = { mean: K, sd: 10 };   // ±1 bp = ±$10 = ±1 sd → 68% of the mass
+  near(splitProb(c, d, K), 0.5 * probWithin(d, K, 10), 1e-12);
+});
+
+test('pairBacktest: pairs under $1 at the snapshot, P&L from the actual results', () => {
+  const fee = 0.07, c = { bins: [{ lo: 0, hi: Infinity, rate: 0 }] };
+  const snap = { snap_t: 840, price: 100_000, sigma: 1, strike: 100_000 };
+  const poly = [
+    rec({ start: 0, ...snap, bid: 0.44, ask: 0.45, result: 'up' }),      // Poly UP 45¢ + Kalshi NO 45¢: cheap pair, both agree → +
+    rec({ start: 900, ...snap, snap_t: 1740, bid: 0.44, ask: 0.45, result: 'down' }),   // same prices, split: both legs lose
+    rec({ start: 1800, ...snap, snap_t: 2640, bid: 0.49, ask: 0.51, result: 'up' }),    // no pair under $1
+  ];
+  const kalshi = [
+    rec({ start: 0, snap_t: 840, bid: 0.55, ask: 0.56, result: 'up' }),
+    rec({ start: 900, snap_t: 1740, bid: 0.55, ask: 0.56, result: 'up' }),
+    rec({ start: 1800, snap_t: 2640, bid: 0.49, ask: 0.51, result: 'up' }),
+  ];
+  const cost = 0.45 + 0.45 + takerFee(0.45, fee) * 2;
+  const bt = pairBacktest(poly, kalshi, c, fee, fee);
+  assert.equal(bt.rounds, 3);
+  assert.deepEqual([bt.raw.n, bt.raw.splits, bt.raw.lossSplits], [2, 1, 1]);
+  near(bt.raw.pnl, (1 - cost) + (0 - cost));
+  assert.equal(bt.aware.n, 2, 'no split risk in this curve: the same pairs');
+  const risky = { bins: [{ lo: 0, hi: Infinity, rate: 0.5 }] };
+  assert.equal(pairBacktest(poly, kalshi, risky, fee, fee).aware.n, 0, 'a 50% split risk eats the edge');
 });

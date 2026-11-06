@@ -77,9 +77,11 @@ export function checkAlerts(now, modelP, exp, arb) {
     alertOnce('edge-' + V.key, start, `Model edge: buy ${best.side.toUpperCase()}${both() ? ' on ' + V.name : ''}`,
       `${fmtC(best.price)} ask + fee vs model ${(best.side === 'up' ? modelP : 100 - modelP).toFixed(0)}% → ${signedC(best.edge)} per share`);
   }
-  // both venues: a pair (UP on one, DOWN on the other) below $1 after fees, with some size behind it
+  // both venues: a pair (UP on one, DOWN on the other) below $1 after fees, with some size behind it, that still
+  // earns at least 0.5¢ once the chance of the venues settling apart is taken off (arb.js splitRisk)
   if (arb && T > 5) for (const [k, r, name] of [['arb-up', arb.upPm, 'Poly UP + Kalshi NO'], ['arb-down', arb.downPm, 'Poly DOWN + Kalshi YES']]) {
-    if (!r || r.edge < 0.005 || r.pairs < 5) continue;
-    alertOnce(k, start, `Arbitrage: ${name}`, `${fmtC(r.pa)} + ${fmtC(r.pb)} + fees → +${fmtC(r.edge)} per pair, up to ${fmtSz(r.pairs)} pairs`);
+    if (!r || r.ev === null || r.ev < 0.005 || r.pairs < 5) continue;
+    alertOnce(k, start, `Arbitrage: ${name}`, `${fmtC(r.pa)} + ${fmtC(r.pb)} + fees → +${fmtC(r.edge)} per pair, ` +
+      `+${fmtC(r.ev)} after the split risk, up to ${fmtSz(r.pairs)} pairs`);
   }
 }

@@ -2,7 +2,7 @@
 
 import { fetchStrike } from './chainlink.js';
 import { yRange } from './charts.js';
-import { firstIdx, probAbove, probWithin, twap } from './math.js';
+import { firstIdx, probAbove, twap } from './math.js';
 import { modelById, modelDist as modelDistOf, paramsOf, volsFromCloses } from './models.js';
 import { S, TWAP_MS, medianHistory } from './state.js';
 import { currentRound, getJSON } from './util.js';
@@ -93,12 +93,6 @@ export function modelDist() {
 export function computeModelProb() {
   const d = modelDist();
   return d && Math.max(0.5, Math.min(99.5, probAbove(d, S.strike) * 100));
-}
-
-// model chance that the settlement average lands within ±band of the strike, in %
-export function nearStrikeProb(band) {
-  const d = modelDist();
-  return d && probWithin(d, S.strike, band) * 100;
 }
 
 // $/s over the last `span` ms (30s for the projected settlement, 60s for the momentum model)

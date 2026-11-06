@@ -1,6 +1,6 @@
 // Statistics over the rounds the recorder Worker stored (recorder/): Brier score, calibration, a backtest of the
 // model edge, and how often Polymarket and Kalshi settled the same round apart. Pure; covered by test/stats.test.js.
-import { buyEdge, takerFee } from './math.js';
+import { buyEdge, probWithin, settlementDist, takerFee } from './math.js';
 
 // { cols, rows } from GET /rounds → one object per round
 export const toRecords = ({ cols, rows }) => rows.map(r => Object.fromEntries(cols.map((c, i) => [c, r[i]])));
@@ -76,18 +76,63 @@ export function backtest(recs, minEdge, fee) {
   return { trades, wins, pnl, perTrade: trades ? pnl / trades : null, curve };
 }
 
-// Same 15-minute rounds on both venues: how many both settled, how many they settled apart, and for those how far
-// Kalshi's BRTI settlement average ended from its start average (how close to the strike a round has to end to split)
-export function settleApart(poly, kalshi) {
-  const k = new Map(kalshi.filter(r => r.result === 'up' || r.result === 'down').map(r => [r.start, r]));
-  let n = 0;
-  const splits = [];
-  for (const r of poly) {
-    const x = k.get(r.start);
-    if (!x || (r.result !== 'up' && r.result !== 'down')) continue;
-    n++;
-    if (r.result !== x.result) splits.push(x.k_settle != null && x.k_strike != null ? Math.abs(x.k_settle - x.k_strike) : null);
+// ── Settle-apart risk between Polymarket (Chainlink) and Kalshi (CF Benchmarks) ──
+// How often the two venues settle the same 15-minute round apart, by how far the settlement average ended from the
+// strike, in basis points of the price (the indices differ by cents, so only near-ties split). Measured on Bitcoin,
+// 1,403 rounds to 2026-11-06: 12 of 26 rounds within 0.25 bp ($2) split, 7 of 28 at 0.25–0.5, 5 of 56 at 0.5–1,
+// none of 100 at 1–2 bp and 1 of 1,193 beyond. That is the default; each coin's own recorded rounds pull its curve
+// towards what they show (shrinkage: `m` rounds' worth of weight for the default per bin).
+export const SPLIT_EDGES = [0, 0.25, 0.5, 1, 2, Infinity];
+export const SPLIT_DEFAULT = [0.46, 0.25, 0.09, 0.005, 0.001];
+export function splitCurve(poly, kalshi, prior = SPLIT_DEFAULT, m = 10) {
+  const p = new Map((poly || []).filter(r => r.result === 'up' || r.result === 'down').map(r => [r.start, r.result]));
+  const bins = prior.map((_, i) => ({ lo: SPLIT_EDGES[i], hi: SPLIT_EDGES[i + 1], n: 0, s: 0 }));
+  let n = 0, s = 0;
+  for (const k of kalshi || []) {
+    const pr = p.get(k.start);
+    if (!pr || (k.result !== 'up' && k.result !== 'down') || k.k_strike == null || k.k_settle == null || !(k.k_strike > 0)) continue;
+    const bp = Math.abs(k.k_settle - k.k_strike) / k.k_strike * 1e4, b = bins.find(x => bp >= x.lo && bp < x.hi);
+    b.n++; n++;
+    if (pr !== k.result) { b.s++; s++; }
   }
-  const d = splits.filter(v => v !== null);
-  return { n, splits: splits.length, maxDist: d.length ? Math.max(...d) : null };
+  for (const [i, b] of bins.entries()) b.rate = (b.s + m * prior[i]) / (b.n + m);
+  return { bins, n, splits: s };
+}
+// chance the venues settle apart, for a settlement average distributed as `dist` around `strike`
+export function splitProb(curve, dist, strike) {
+  let p = 0;
+  for (const b of curve.bins) {
+    const lo = b.lo * strike / 1e4, hi = b.hi * strike / 1e4;
+    const mass = (b.hi === Infinity ? 1 : probWithin(dist, strike, hi)) - (b.lo === 0 ? 0 : probWithin(dist, strike, lo));
+    p += Math.max(0, mass) * b.rate;
+  }
+  return p;
+}
+
+// The pairs the recorded snapshots (60s before the end) offered: UP on one venue + DOWN on the other below $1 after
+// fees. `raw`: every such pair. `aware`: only where the price advantage beats the chance of a split (both legs lose).
+// P&L from what actually happened (a pair pays $1 when the venues agree, $0 or $2 when they split).
+export function pairBacktest(poly, kalshi, curve, feeP, feeK, len = 900) {
+  const k = new Map((kalshi || []).map(r => [r.start, r]));
+  const out = { rounds: 0, raw: { n: 0, pnl: 0, splits: 0, lossSplits: 0 }, aware: { n: 0, pnl: 0, splits: 0 } };
+  const done = r => r?.result === 'up' || r?.result === 'down';
+  for (const a of poly || []) {
+    const b = k.get(a.start);
+    if (!done(a) || !done(b) || a.snap_t == null || a.snap_t !== b.snap_t) continue;
+    out.rounds++;
+    const legs = [];
+    // Poly UP (its ask) + Kalshi NO (1 − its YES bid); Poly DOWN (1 − its UP bid) + Kalshi YES (its ask)
+    if (a.ask != null && b.bid != null) legs.push({ pa: a.ask, pb: 1 - b.bid, pays: (a.result === 'up') + (b.result === 'down') });
+    if (a.bid != null && b.ask != null) legs.push({ pa: 1 - a.bid, pb: b.ask, pays: (a.result === 'down') + (b.result === 'up') });
+    const best = legs.map(l => ({ ...l, cost: l.pa + l.pb + takerFee(l.pa, feeP) + takerFee(l.pb, feeK) }))
+      .reduce((x, l) => !x || l.cost < x.cost ? l : x, null);
+    if (!best || best.cost >= 1) continue;
+    const pnl = best.pays - best.cost, split = a.result !== b.result;
+    out.raw.n++; out.raw.pnl += pnl;
+    if (split) { out.raw.splits++; if (best.pays === 0) out.raw.lossSplits++; }
+    if (a.price == null || a.sigma == null || a.strike == null) continue;
+    const ps = splitProb(curve, settlementDist(a.price, a.sigma, a.start + len - a.snap_t), a.strike);
+    if (1 - best.cost - ps > 0) { out.aware.n++; out.aware.pnl += pnl; if (split) out.aware.splits++; }
+  }
+  return out;
 }
