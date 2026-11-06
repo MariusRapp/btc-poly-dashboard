@@ -7,6 +7,8 @@
     "schema:local": "wrangler d1 execute btc-rounds --local --file schema.sql",
     "schema": "wrangler d1 execute btc-rounds --remote --file schema.sql",
     "migrate": "wrangler d1 execute btc-rounds --remote --file migrations/0002_model_inputs.sql",
+    "migrate:3": "wrangler d1 execute btc-rounds --remote --file migrations/0003_snaps.sql",
+    "migrate:3:local": "wrangler d1 execute btc-rounds --local --file migrations/0003_snaps.sql",
     "deploy": "wrangler deploy"
   },
   "devDependencies": {
