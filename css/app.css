@@ -402,3 +402,27 @@ label.src-name { cursor:pointer; }
 .mparam .sig-sub { margin-top:2px; }
 
 @media (max-width: 980px) { .mdl { grid-template-columns:minmax(0,1fr); } }
+
+/* ── Recorded rounds: model vs market, through the round, time of day ── */
+.lab-tabs { margin-bottom:12px; flex-wrap:wrap; }
+.lab-ctl { display:flex; flex-wrap:wrap; gap:6px 10px; margin-bottom:10px; }
+.lab-verdict { font-size:15px; font-weight:650; margin:2px 0 8px; }
+.lab-verdict .muted { font-weight:400; font-size:13px; }
+.lab-msg { padding:6px 0; }
+.lab-note { margin:6px 0 8px; line-height:1.45; }
+.lab-chart { margin:2px 0 6px; }
+.lab-chart .cal-line.lab-pm { stroke:var(--v-pm); }
+.lab-chart .cal-line.lab-ks { stroke:var(--v-ks); }
+.lab-chart .cal-line.lab-md { stroke:var(--ink-1); }
+.lab-chart .cal-dot.lab-pm { fill:var(--v-pm); }
+.lab-chart .cal-dot.lab-ks { fill:var(--v-ks); }
+.lab-chart .cal-dot.lab-md { fill:var(--ink-1); }
+.tod-bar  { fill:var(--ink-2); }
+.tod-up   { fill:var(--up); }
+.tod-down { fill:var(--down); }
+.tod-g.thin path { opacity:.4; }
+.tod-g:hover path { filter:brightness(1.15); }
+.lab-scroll { overflow-x:auto; }
+.lab-t td, .lab-t th { white-space:nowrap; }
+.lab-details { margin-top:6px; font-size:12px; color:var(--ink-2); }
+.lab-details summary { cursor:pointer; margin-bottom:4px; }

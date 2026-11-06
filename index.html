@@ -19,12 +19,14 @@
   <!-- all modules up front, in parallel, instead of one import level after the other -->
   <link rel="modulepreload" href="js/main.js" />
   <link rel="modulepreload" href="js/alerts.js" />
+  <link rel="modulepreload" href="js/analysis.js" />
   <link rel="modulepreload" href="js/arb.js" />
   <link rel="modulepreload" href="js/assets.js" />
   <link rel="modulepreload" href="js/chainlink.js" />
   <link rel="modulepreload" href="js/charts.js" />
   <link rel="modulepreload" href="js/kalshi.js" />
   <link rel="modulepreload" href="js/ladder.js" />
+  <link rel="modulepreload" href="js/learn.js" />
   <link rel="modulepreload" href="js/math.js" />
   <link rel="modulepreload" href="js/mode.js" />
   <link rel="modulepreload" href="js/model.js" />
@@ -297,6 +299,16 @@
         </div>
       </div>
     </div>
+  </section>
+
+  <section class="card" id="card-lab" aria-label="Analysis of the recorded rounds">
+    <div class="card-head"><h2>Recorded rounds</h2><span class="card-meta" id="lab-meta">—</span></div>
+    <div class="seg lab-tabs" role="group" aria-label="Which analysis">
+      <button type="button" data-lab="stack" aria-pressed="true" title="Does the model know anything the market price doesn’t?">Model vs market</button>
+      <button type="button" data-lab="round" aria-pressed="false" title="Market and model minute by minute through the round: when is there an edge?">By minute</button>
+      <button type="button" data-lab="hour" aria-pressed="false" title="UP share, typical move and spread by hour of the day">By hour</button>
+    </div>
+    <div id="lab-body"></div>
   </section>
 </div>
 

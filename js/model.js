@@ -4,7 +4,8 @@ import { fetchStrike } from './chainlink.js';
 import { yRange } from './charts.js';
 import { firstIdx, probAbove, twap } from './math.js';
 import { modelById, modelDist as modelDistOf, paramsOf, volsFromCloses } from './models.js';
-import { S, TWAP_MS, medianHistory } from './state.js';
+import { seriesId } from './assets.js';
+import { ROUND_S, S, TWAP_MS, medianHistory } from './state.js';
 import { currentRound, getJSON } from './util.js';
 import { KS } from './venues.js';
 
@@ -73,12 +74,15 @@ export async function fetchVol() {
 export const activeModel = () => modelById(S.modelId);
 export const activeParams = (m = activeModel()) => paramsOf(m, S.modelParams?.[m.id]);
 
+// the market the model is tuned on and scored against: the one in view (with both venues, Polymarket 15m)
+export const modelSeries = () => S.venueMode === 'kalshi' ? seriesId(S.asset, 'kalshi', 15) : seriesId(S.asset, 'poly', ROUND_S / 60);
+
 // what the models get: price, strike, time left, the window seen so far, volatilities, the last minute's speed
 export function modelInputs(now = Date.now()) {
   if (S.strike === null || S.lastMedianP === null) return null;
   const end = currentRound(now).end, T = (end - now) / 1000;
   if (T <= 0) return null;
-  return { price: S.lastMedianP, strike: S.strike, T, ws: T - 60, end,
+  return { price: S.lastMedianP, strike: S.strike, T, ws: T - 60, end, series: modelSeries(),
            observed: T < 60 ? twap(medianHistory, end - TWAP_MS, now) : null,
            vol: k => S.vols?.[k] ?? null, velocity: velocity(now, 60_000), fallback: rangeSigma() };
 }

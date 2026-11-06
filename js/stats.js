@@ -58,13 +58,14 @@ export function calibration(recs, forecast, bins = 10) {
 
 // Backtest: at each snapshot buy one share of the side whose model edge after the taker fee is at least
 // `minEdge`, at the best ask (DOWN at 1 − the UP bid). Gain per share: payout − price − fee.
+// `sizeMed`: the median size (shares) the book offered at that price, where the recorder stored it (v3).
 export function backtest(recs, minEdge, fee) {
   let trades = 0, wins = 0, pnl = 0;
-  const curve = [];
+  const curve = [], sizes = [];
   for (const r of scored(recs)) {
     const sides = [];
-    if (r.ask != null) sides.push({ side: 'up', price: r.ask, edge: buyEdge(r.ask, r.model, fee) });
-    if (r.bid != null) sides.push({ side: 'down', price: 1 - r.bid, edge: buyEdge(1 - r.bid, 1 - r.model, fee) });
+    if (r.ask != null) sides.push({ side: 'up', price: r.ask, edge: buyEdge(r.ask, r.model, fee), size: r.ask_sz });
+    if (r.bid != null) sides.push({ side: 'down', price: 1 - r.bid, edge: buyEdge(1 - r.bid, 1 - r.model, fee), size: r.bid_sz });
     const best = sides.reduce((a, x) => !a || x.edge > a.edge ? x : a, null);
     if (!best || best.edge < minEdge) continue;
     const won = best.side === r.result;
@@ -72,8 +73,10 @@ export function backtest(recs, minEdge, fee) {
     if (won) wins++;
     pnl += (won ? 1 : 0) - best.price - takerFee(best.price, fee);
     curve.push({ t: r.start, pnl });
+    if (best.size != null) sizes.push(best.size);
   }
-  return { trades, wins, pnl, perTrade: trades ? pnl / trades : null, curve };
+  sizes.sort((a, b) => a - b);
+  return { trades, wins, pnl, perTrade: trades ? pnl / trades : null, curve, sizeMed: sizes.length ? sizes[sizes.length >> 1] : null };
 }
 
 // ── Settle-apart risk between Polymarket (Chainlink) and Kalshi (CF Benchmarks) ──

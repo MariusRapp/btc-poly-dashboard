@@ -1,6 +1,7 @@
 // Text panels: KPIs, time left, signals, data sources, live status. updateUI() runs on a timer (main.js).
 
 import { checkAlerts } from './alerts.js';
+import { updateLab } from './analysis.js';
 import { arbState, bestEdge, modelEdges, updateArb, updateLive, updateSources } from './arb.js';
 import { btcC, probC } from './charts.js';
 import { KALSHI_PROXY, ksCheckSwitch } from './kalshi.js';
@@ -82,6 +83,7 @@ export function updateUI(now) {
     const arb = both() ? arbState() : null;
     updateSignals(now, modelP);
     updateModelCard();
+    updateLab();
     if (arb) updateArb(arb);
     updateSources();
     updateLive();

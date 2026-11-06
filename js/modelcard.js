@@ -4,7 +4,7 @@
 import { KS_FEE, PM_FEE, modelEdges } from './arb.js';
 import { distCdf, distPdf, distQuantile, impliedSigma, niceStep, probAbove, takerFee } from './math.js';
 import { activeModel, activeParams, modelInputs } from './model.js';
-import { EWMA_HALF_LIFE, MODELS, modelPath, paramsOf, scoreModel } from './models.js';
+import { EWMA_HALF_LIFE, LEARN_FEATURES, LEARN_MIN, MODELS, fitFactor, learnedFit, modelPath, paramsOf, scoreModel, trainLearned } from './models.js';
 import { recorded } from './recorder.js';
 import { trackId } from './rounds.js';
 import { ROUND_S, S, saveOpts } from './state.js';
@@ -60,6 +60,11 @@ function renderParams() {
     return `<div class="mparam"><div class="mparam-top"><label for="mp-${q.key}">${esc(q.label)}</label><output id="mpo-${q.key}">${esc(q.fmt ? q.fmt(p[q.key]) : p[q.key])}</output></div>
       <input type="range" id="mp-${q.key}" data-param="${q.key}" min="${q.min}" max="${q.max}" step="${q.step}" value="${p[q.key]}">${help}</div>`;
   }).join('');
+  // the Learned model has no settings: what it learned instead; models with a volatility factor can fit it
+  if (m.learned) $('mdl-params').innerHTML = '<div class="mparam" id="mdl-learn"></div>';
+  if (m.params.some(q => q.key === 'f')) $('mdl-params').insertAdjacentHTML('beforeend',
+    `<div class="mparam"><div class="mparam-top"><span>Volatility × that fits this market best</span><button class="link-btn" type="button" id="mdl-fit">Fit to recorded rounds</button></div>
+     <div class="sig-sub" id="mdl-fit-msg">Tries ×0.50 … ×2.00 on the recorded rounds of the market in view and keeps the one with the lowest log loss.</div></div>`);
   const set = (key, v) => {
     S.modelParams = { ...S.modelParams, [m.id]: { ...activeParams(m), [key]: v } };
     const q = m.params.find(x => x.key === key), out = $('mpo-' + key);
@@ -71,6 +76,35 @@ function renderParams() {
     set(el.dataset.param, +el.dataset.value);
     el.parentElement.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b === el)));
   }));
+  $('mdl-fit')?.addEventListener('click', () => {
+    const recs = recorded(trackId(cardVenue())), msg = $('mdl-fit-msg'), before = activeParams(m).f;
+    const r = recs && fitFactor(m, activeParams(m), recs, ROUND_S);
+    if (!r) { msg.textContent = 'No recorded rounds of this market with this model’s inputs yet.'; return; }
+    set('f', r.f);
+    if ($('mp-f')) $('mp-f').value = r.f;
+    msg.textContent = `Fitted on ${r.n} rounds: ×${r.f.toFixed(2)} has the lowest log loss, ${r.log.toFixed(3)}` +
+      (r.f !== before ? ` (×${before.toFixed(2)}: ${r.now.toFixed(3)}).` : ' — the setting already was the best.') +
+      ' Fitted on the same rounds it is scored on, so its score looks a little better than it will be.';
+  });
+  renderLearnInfo();
+}
+
+// what the Learned model took from the recorded rounds of the market in view
+function renderLearnInfo() {
+  const el = $('mdl-learn');
+  if (!el) return;
+  const series = trackId(cardVenue()), fit = learnedFit(series), m = MODELS.find(x => x.learned);
+  if (!fit) {
+    const recs = recorded(series), n = recs ? recs.filter(r => r.snap_t != null && r.result && r.vol15 != null && r.vel != null).length : 0;
+    el.innerHTML = `<div class="sig-sub">Not trained yet: needs ${LEARN_MIN} recorded rounds of this market with every input, has ${n}. ` +
+      'Until then it gives the Standard model’s probability.</div>';
+    return;
+  }
+  const w = fit.w.slice(1).map((v, i) => `<tr><td>${esc(LEARN_FEATURES[i])}</td><td>${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(2)}</td><td>±${fit.se[i + 1].toFixed(2)}</td></tr>`).join('');
+  el.innerHTML = `<div class="mparam-top"><span>Learned from ${fit.n} rounds</span></div>
+    <table class="edge-t"><thead><tr><th>Weight on</th><th>weight</th><th>±</th></tr></thead><tbody>${w}</tbody></table>
+    <div class="sig-sub">Log-odds per unit: distance and trend in typical moves, volatility as ln(15 min ÷ 4 h). About 1.6 on the distance is ` +
+    `what the Standard model implies; a trend weight well away from 0 (more than twice its ±) means trends carried on (or reversed). Refitted as rounds come in. ${esc(m.name)} is scored out of sample.</div>`;
 }
 
 // ── Score of every model on the recorded rounds of the market in view ────────
@@ -80,6 +114,8 @@ function renderScores() {
   const key = `${series}|${recs ? recs.length + ':' + (recs[recs.length - 1]?.start ?? '') : 'none'}|${JSON.stringify(S.modelParams)}`;
   if (key === scoreKey) return;
   scoreKey = key;
+  if (recs) trainLearned(series, recs, ROUND_S);
+  renderLearnInfo();
   const fee = V === KS ? KS_FEE : PM_FEE, withSnap = recs?.filter(r => r.snap_t != null && r.result).length ?? 0;
   for (const m of MODELS) {
     const el = $('msc-' + m.id);
@@ -87,8 +123,9 @@ function renderScores() {
     if (!recs) { el.textContent = 'Not scored yet: the recorder collects the rounds of this market.'; continue; }
     const sc = scoreModel(m, paramsOf(m, S.modelParams[m.id]), recs, ROUND_S, fee, BT_EDGE);
     if (!sc) {
-      el.textContent = withSnap ? 'Scored once the recorder also stores this model’s inputs (recorder update).'
-                                : 'Not scored yet: no recorded round of this market has ended with a snapshot.';
+      el.textContent = m.learned ? `Learns and is scored once ${LEARN_MIN} recorded rounds of this market have every input.`
+        : withSnap ? 'Scored once the recorder also stores this model’s inputs (recorder update).'
+                   : 'Not scored yet: no recorded round of this market has ended with a snapshot.';
       continue;
     }
     const bt = sc.bt.trades ? `${signedC(sc.bt.perTrade)} a trade (${sc.bt.trades})` : 'no trades';
@@ -142,7 +179,9 @@ function renderSteps(m, p, inp, d, { sigma, drift }, pUp) {
       'Moves grow with the square root of time; averaging the last minute damps them.' +
       (drift ? ` Trend: the last minute’s speed adds ${shift >= 0 ? '+' : '−'}${fmtAmt(Math.abs(shift))}.` : '')],
     ['Typical moves away from the strike', `${Math.abs(z).toFixed(1)}×`, `${fmtAmt(Math.abs(d.mean - inp.strike))} ÷ ${fmtAmt(d.sd)} — ${leaning}`],
-    ['UP probability', pct(pUp), `The share of the curve right of the strike${d.df ? `, with fat tails (${d.df})` : ''}. DOWN: ${pct(1 - pUp)}.`],
+    ['UP probability', pct(pUp), `The share of the curve right of the strike${d.df ? `, with fat tails (${d.df})` : ''}. DOWN: ${pct(1 - pUp)}.` +
+      (m.learned ? (learnedFit(inp.series) ? ` Learned from ${learnedFit(inp.series).n} rounds: the curve sits where the weights put it; the Standard model says ${pct(probAbove({ mean: base, sd: d.sd }, inp.strike))}.`
+                                           : ' Not trained yet, so this is the Standard model’s probability.') : '')],
   ];
   $('mdl-steps').innerHTML = rows.map(([l, v, s], i) =>
     `<li class="mstep n${i === 3 ? ' result' : ''}"><span class="ms-l">${l}</span><span class="ms-v">${v}</span><span class="ms-s">${s}</span></li>`).join('');

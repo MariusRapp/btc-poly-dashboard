@@ -1,6 +1,7 @@
 // Entry point: builds the sources table and tooltips, wires up the controls, starts the feeds and timers.
 
 import { alertsOn, setAlerts } from './alerts.js';
+import { initLab, updateLab } from './analysis.js';
 import { pollChainlink } from './chainlink.js';
 import { attachHover, btcC, probC, wakeFrame, yRange } from './charts.js';
 import { ksLoad, ksSchedule } from './kalshi.js';
@@ -158,8 +159,9 @@ if ('wakeLock' in navigator) {
   try { if (localStorage.getItem('wake') === '1') setWake(true); } catch {}
 }
 
-onRecorded(() => { renderTrack(); updateModelCard(); });   // the recorder's rounds arrived or refreshed
+onRecorded(() => { renderTrack(); updateModelCard(); updateLab(); });   // the recorder's rounds arrived or refreshed
 initModelCard();
+initLab();
 readTheme();
 attachHover(btcC.el, 'btc');
 attachHover(probC.el, 'prob');
