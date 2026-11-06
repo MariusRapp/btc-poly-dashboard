@@ -17,7 +17,7 @@ const pct = v => Math.round(v * 100) + '%';
 const FACTOR = { key: 'f', label: 'Volatility ×', type: 'range', min: 0.5, max: 2, step: 0.05, def: 1, fmt: v => v.toFixed(2) + '×',
                  help: 'Scales the expected movement: above 1 the model expects bigger moves, so its probabilities stay closer to 50%.' };
 export const EWMA_HALF_LIFE = 10;   // minutes
-export const MOMENTUM_CAP = 2;      // $/s: a trend the model takes on at most
+export const MOMENTUM_CAP = 2.7e-5; // per s, as a share of the price: a trend the model takes on at most (~$2/s on BTC)
 
 // ── Adding a model ───────────────────────────────────────────────────────────
 // Add an object to MODELS; the Model card lists it, scores it on recorded rounds and builds its settings:
@@ -44,7 +44,7 @@ export const MOMENTUM_CAP = 2;      // $/s: a trend the model takes on at most
 export const MODELS = [
   {
     id: 'rw', name: 'Standard',
-    tagline: 'No direction: from here BTC is as likely to go up as down. How far it typically moves comes from the recent 1-minute moves.',
+    tagline: 'No direction: from here the price is as likely to go up as down. How far it typically moves comes from the recent 1-minute moves.',
     assumes: ['no trend', 'bell curve', 'volatility of the last hour'],
     params: [
       { key: 'win', label: 'Volatility from the last', type: 'choice', options: [[15, '15 min'], [60, '1 h'], [240, '4 h']], def: 60,
@@ -71,7 +71,10 @@ export const MODELS = [
         help: 'Share of the last minute’s speed the model expects to continue. 0% is the Standard model.' },
       FACTOR,
     ],
-    setup: (inp, p) => ({ sigma: sigmaOf(inp, 'h60', p.f), drift: Math.max(-MOMENTUM_CAP, Math.min(MOMENTUM_CAP, p.w * (inp.velocity ?? 0))) }),
+    setup: (inp, p) => {
+      const cap = MOMENTUM_CAP * inp.price;
+      return { sigma: sigmaOf(inp, 'h60', p.f), drift: Math.max(-cap, Math.min(cap, p.w * (inp.velocity ?? 0))) };
+    },
     needs: () => ['h60', 'vel'],
   },
   {

@@ -1,5 +1,6 @@
 // Shared state and settings. `S` holds the values that several modules assign (an imported binding cannot be
 // assigned); constants, chart/market options remembered per browser and the list of exchanges live here too.
+import { assetById } from './assets.js';
 
 export const S = {};   // shared state that several modules assign
 
@@ -17,6 +18,10 @@ const opts = (() => { try { return JSON.parse(localStorage.getItem(OPTS_KEY)) ||
 // which venue(s): 'poly', 'kalshi' or 'both'. Kalshi only lists 15-minute rounds, so Kalshi and both run on 15m;
 // Polymarket alone runs on 5m or 15m.
 S.venueMode = ['poly', 'kalshi', 'both'].includes(opts.venue) ? opts.venue : 'poly';
+// which coin (assets.js); ?asset=eth picks one and is remembered like the other choices
+S.asset = assetById((() => { try { return new URLSearchParams(location.search).get('asset'); } catch { return null; } })() || opts.asset).id;
+S.A = assetById(S.asset);   // its symbols and decimals
+S.assetGen = 0;             // bumped on every coin switch; price loads started before it are dropped
 S.polyLenMin = opts.len === 15 ? 15 : 5;
 export let ROUND_MS = 300_000, ROUND_S = 300;
 export function applyRoundLen() {
@@ -41,7 +46,7 @@ export const EXCH = [
 export const EX = Object.fromEntries(EXCH.map(e => [e.key, e]));
 
 S.showExchanges = !!opts.ex;
-S.usdtUsd = 1;            // converts Binance BTCUSDT to USD (live from Coinbase USDT-USD)
+S.usdtUsd = 1;            // converts Binance and Bitfinex USDT prices to USD (live from Coinbase USDT-USD)
 
 S.lastMedianP = null;
 S.tpsCount = 0;
@@ -61,7 +66,7 @@ S.showGap = opts.gap !== false;   // both venues: shade the gap between the two 
 S.bookSide = opts.side === 'down' ? 'down' : 'up';   // order book card: UP shares, or DOWN (the UP book mirrored)
 S.bookVenue = opts.bv === 'kalshi' ? 'kalshi' : 'poly';   // order book card with both venues on
 export const saveOpts = () => { try { localStorage.setItem(OPTS_KEY, JSON.stringify({
-  ex: S.showExchanges, bands: S.showBands, fc: S.showFc, model: S.modelId, mp: S.modelParams, gap: S.showGap, side: S.bookSide, bv: S.bookVenue, venue: S.venueMode, len: S.polyLenMin })); } catch {} };
+  ex: S.showExchanges, bands: S.showBands, fc: S.showFc, model: S.modelId, mp: S.modelParams, gap: S.showGap, side: S.bookSide, bv: S.bookVenue, venue: S.venueMode, len: S.polyLenMin, asset: S.asset })); } catch {} };
 
 // past round shown in the charts (null = live)
 export const ROUNDS_SHOWN = 24;

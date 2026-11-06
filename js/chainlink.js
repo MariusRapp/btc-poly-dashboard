@@ -1,12 +1,12 @@
-// Chainlink BTC/USD on Polygon over JSON-RPC eth_call: price for the sources table and the strike fallback.
+// Chainlink <coin>/USD on Polygon over JSON-RPC eth_call: price for the sources table and the strike fallback.
 
 import { S } from './state.js';
 
 // ── Chainlink (Polygon): price for the sources table + on-chain strike fallback ──
 // Two read-only calls to the aggregator contract as plain JSON-RPC eth_call, no library needed.
-// (polygon-rpc.com now wants an API key; 1rpc.io answers these calls with zeros.)
+// (polygon-rpc.com now wants an API key; 1rpc.io answers these calls with zeros.) The feed of the coin in view
+// (assets.js); all of them report 8 decimals.
 const CL_RPCS    = ['https://polygon-bor-rpc.publicnode.com', 'https://polygon.drpc.org'];
-const FEED_ADDR  = '0xc907E116054Ad103354f2D350FD2514433D57F6f';
 const SEL_LATEST = '0xfeaf968c';   // latestRoundData()
 const SEL_ROUND  = '0x9a6fc8f5';   // getRoundData(uint80)
 let clRpc = 0;                     // the RPC that answered last is asked first
@@ -19,14 +19,14 @@ export function decodeRound(hex) {
   return { id: word(0), price: Number(answer) / 1e8, ts: Number(word(3)) };
 }
 
-async function clCall(data) {
+async function clCall(feed, data) {
   let err;
   for (let k = 0; k < CL_RPCS.length; k++) {
     const i = (clRpc + k) % CL_RPCS.length;
     try {
       const r = await fetch(CL_RPCS[i], {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(8000),
-        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_call', params: [{ to: FEED_ADDR, data }, 'latest'] }),
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_call', params: [{ to: feed, data }, 'latest'] }),
       });
       const j = await r.json();
       if (!r.ok || !/^0x[0-9a-f]{320}$/i.test(j.result || '')) throw new Error(j.error?.message || `HTTP ${r.status}`);
@@ -37,31 +37,37 @@ async function clCall(data) {
   throw err;
 }
 
-const clLatest = () => clCall(SEL_LATEST);
-const clRound  = id => clCall(SEL_ROUND + id.toString(16).padStart(64, '0'));
+const clLatest = feed => clCall(feed, SEL_LATEST);
+const clRound  = (feed, id) => clCall(feed, SEL_ROUND + id.toString(16).padStart(64, '0'));
 
-export async function pollChainlink() {
+export async function pollChainlinkOnce() {
+  const gen = S.assetGen;
   try {
-    const d = await clLatest();
-    if (d.price > 0) { S.clPrice = d.price; S.clState = 'live'; }
+    const d = await clLatest(S.A.chainlink);
+    if (gen === S.assetGen && d.price > 0) { S.clPrice = d.price; S.clState = 'live'; }
   } catch (e) {
-    S.clState = 'wait';
+    if (gen === S.assetGen) S.clState = 'wait';
     console.warn('CL poll:', e.message);
   }
+}
+export async function pollChainlink() {
+  await pollChainlinkOnce();
   setTimeout(pollChainlink, 12000);
 }
 
 // on-chain Chainlink round in force at the round start (fallback strike + cross-check)
 export async function fetchStrike(wts) {
-  const done = v => { if (S.strikeRound === wts * 1000) S.clStrike = v; };
+  const gen = S.assetGen, feed = S.A.chainlink;
+  const done = v => { if (S.strikeRound === wts * 1000 && gen === S.assetGen) S.clStrike = v; };
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      const latest = await clLatest();
+      const latest = await clLatest(feed);
       if (latest.ts > 0 && latest.ts <= wts) return done(latest.price);
       // round ids are (phase << 64) | n: step back through the phase to the round in force at the start
       const phase = latest.id >> 64n, n = latest.id & 0xFFFFFFFFFFFFFFFFn;
       for (let i = 1n; i <= 80n && i < n; i++) {
-        const r = await clRound((phase << 64n) | (n - i));
+        if (gen !== S.assetGen) return;
+        const r = await clRound(feed, (phase << 64n) | (n - i));
         if (r.ts > 0 && r.ts <= wts) return done(r.price);
       }
       return;

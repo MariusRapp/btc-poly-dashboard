@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { MODELS, modelById, defaultParams, paramsOf, modelPath, modelDist, recordInputs, scoreModel, volsFromCloses } from '../js/models.js';
+import { MODELS, MOMENTUM_CAP, modelById, defaultParams, paramsOf, modelPath, modelDist, recordInputs, scoreModel, volsFromCloses } from '../js/models.js';
 import { probAbove, settlementDist } from '../js/math.js';
 
 const near = (a, b, tol = 1e-9, msg = '') => assert.ok(Math.abs(a - b) <= tol, `${msg} ${a} vs ${b}`);
@@ -32,7 +32,8 @@ test('each model changes what it says it changes', () => {
   assert.ok(mom.mean > std.mean, 'rising last minute → expects higher');
   near(mom.sd, std.sd, 1e-9);
   near(modelDist(modelById('mom'), inp(), { w: 0, f: 1 }).mean, std.mean, 1e-9, '0% trend = Standard');
-  near(modelDist(modelById('mom'), inp({ velocity: 1000 }), { w: 1, f: 1 }).mean, modelDist(modelById('mom'), inp({ velocity: 2 }), { w: 1, f: 1 }).mean, 1e-9, 'capped');
+  // capped at MOMENTUM_CAP × price ($/s), the same share of the price for every coin
+  near(modelDist(modelById('mom'), inp({ velocity: 1000 }), { w: 1, f: 1 }).mean, modelDist(modelById('mom'), inp({ velocity: MOMENTUM_CAP * 100000 }), { w: 1, f: 1 }).mean, 1e-9, 'capped');
   const fat = modelDist(modelById('fat'), inp(), { df: 4, f: 1 });
   assert.equal(fat.df, 4);
   near(fat.sd, std.sd, 1e-9, 'same spread');

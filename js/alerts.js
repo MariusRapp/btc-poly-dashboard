@@ -51,7 +51,7 @@ export async function setAlerts(on, fromClick) {
 }
 
 function alertOnce(kind, start, title, body) {
-  const k = kind + '|' + start;
+  const k = kind + '|' + S.asset + '|' + start;
   if (alerted.has(k)) return;
   alerted.add(k);
   if (alerted.size > 200) alerted.delete(alerted.values().next().value);

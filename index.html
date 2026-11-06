@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="color-scheme" content="light dark" />
-  <title>BTC Up/Down · Polymarket &amp; Kalshi</title>
+  <title>Crypto Up/Down · Polymarket &amp; Kalshi</title>
   <meta name="theme-color" content="#f9f9f7" media="(prefers-color-scheme: light)" />
   <meta name="theme-color" content="#0d0d0d" media="(prefers-color-scheme: dark)" />
   <meta name="apple-mobile-web-app-title" content="BTC Up/Down" />
@@ -20,6 +20,7 @@
   <link rel="modulepreload" href="js/main.js" />
   <link rel="modulepreload" href="js/alerts.js" />
   <link rel="modulepreload" href="js/arb.js" />
+  <link rel="modulepreload" href="js/assets.js" />
   <link rel="modulepreload" href="js/chainlink.js" />
   <link rel="modulepreload" href="js/charts.js" />
   <link rel="modulepreload" href="js/kalshi.js" />
@@ -46,7 +47,7 @@
 
   <header class="topbar">
     <div class="brand">
-      <div class="brand-title">BTC Up or Down <span class="muted hide-sm" id="brand-len">· 5-minute rounds</span></div>
+      <div class="brand-title"><span class="asym">BTC</span> Up or Down <span class="muted hide-sm" id="brand-len">· 5-minute rounds</span></div>
       <div class="brand-sub" id="market-title">Loading market…</div>
     </div>
     <span class="status"><i class="dot wait" id="live-dot"></i><span id="live-text">Connecting</span></span>
@@ -62,6 +63,13 @@
   </header>
 
   <nav class="venuebar" aria-label="Market">
+    <div class="seg" id="asset-seg" role="group" aria-label="Which coin">
+      <button type="button" data-asset="btc"  aria-pressed="true"  title="Bitcoin">BTC</button>
+      <button type="button" data-asset="eth"  aria-pressed="false" title="Ethereum">ETH</button>
+      <button type="button" data-asset="sol"  aria-pressed="false" title="Solana">SOL</button>
+      <button type="button" data-asset="xrp"  aria-pressed="false" title="XRP">XRP</button>
+      <button type="button" data-asset="doge" aria-pressed="false" title="Dogecoin">DOGE</button>
+    </div>
     <div class="seg" id="venue-seg" role="group" aria-label="Which market">
       <button type="button" data-venue="poly"   aria-pressed="true"><i class="lk pm thick"></i>Polymarket</button>
       <button type="button" data-venue="kalshi" aria-pressed="false"><i class="lk ks thick"></i>Kalshi</button>
@@ -76,7 +84,7 @@
 
   <section class="kpis" aria-label="Current round">
     <div class="card kpi kpi-hero">
-      <div class="kpi-label">BTC / USD <span class="muted">· median of exchanges</span></div>
+      <div class="kpi-label"><span class="asym">BTC</span> / USD <span class="muted">· median of exchanges</span></div>
       <div class="hero" id="btc-price">—</div>
       <div class="kpi-delta muted" id="btc-delta">
         <span id="btc-delta-text">Waiting for trades…</span>
@@ -132,7 +140,7 @@
         </div>
 
         <div class="chart-head">
-          <h2>BTC price vs strike</h2>
+          <h2><span class="asym">BTC</span> price vs strike</h2>
           <div class="legend">
             <span><i class="lk"></i><span id="leg-med">Median</span></span>
             <span><i class="lk dash"></i>Strike</span>
@@ -144,7 +152,7 @@
           </div>
         </div>
         <div class="plot" id="btc-plot">
-          <canvas id="btc-canvas" role="img" aria-label="BTC price chart"></canvas>
+          <canvas id="btc-canvas" role="img" aria-label="Price chart"></canvas>
           <div class="tip" id="btc-tip" hidden></div>
         </div>
 

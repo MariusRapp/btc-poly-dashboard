@@ -26,9 +26,9 @@ export async function pmFetchResult(ts) {
 const GAMMA = 'https://gamma-api.polymarket.com';
 const PM_WS = 'wss://ws-subscriptions-clob.polymarket.com/ws/market';
 
-// rounds are listed as btc-updown-5m-<start> and btc-updown-15m-<start>
+// rounds are listed as <coin>-updown-5m-<start> and <coin>-updown-15m-<start> (btc, eth, sol, xrp, doge)
 async function fetchEvent(wts) {
-  const d = await getJSON(`${GAMMA}/events?slug=btc-updown-${ROUND_S / 60}m-${wts}`);
+  const d = await getJSON(`${GAMMA}/events?slug=${S.A.poly}-updown-${ROUND_S / 60}m-${wts}`);
   return d[0]?.markets?.length ? d[0] : null;
 }
 

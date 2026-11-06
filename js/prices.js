@@ -1,4 +1,4 @@
-// BTC price: trade feeds of six exchanges, their median, and REST backfill after loading or a gap.
+// Price of the coin in view: trade feeds of six exchanges, their median, and REST backfill after loading or a gap.
 
 import { firstIdx, median } from './math.js';
 import { EX, EXCH, MAX_BUF, MED_BUF, S, STALE_MS, medianHistory } from './state.js';
@@ -37,11 +37,11 @@ function onTrade(key, tr) {
 
 // ── Backfill: recent trades over REST so charts, strike and model work right after loading ──
 // (Coinbase, Kraken and Binance allow browser requests; Bitstamp answers browsers with 403, Gemini and Bitfinex send no CORS)
-async function fetchCoinbaseTrades(since) {
+async function fetchCoinbaseTrades(since, A) {
   const out = [];
   let after = '';
   for (let page = 0; page < 14; page++) {   // a 15-minute round plus the minute before it
-    const d = await getJSON(`https://api.exchange.coinbase.com/products/BTC-USD/trades?limit=1000${after}`);
+    const d = await getJSON(`https://api.exchange.coinbase.com/products/${A.coinbase}/trades?limit=1000${after}`);
     if (!d.length) break;
     // side is the maker side: maker 'buy' = taker sold
     for (const x of d) out.push({ id: x.trade_id, t: Date.parse(x.time), p: +x.price, q: +x.size, sell: x.side === 'buy' });
@@ -52,11 +52,11 @@ async function fetchCoinbaseTrades(since) {
   return out.filter(x => x.t >= since).reverse();
 }
 
-async function fetchKrakenTrades(since) {
+async function fetchKrakenTrades(since, A) {
   const out = [];
   let cursor = Math.floor(since / 1000);
   for (let page = 0; page < 8; page++) {
-    const d = await getJSON(`https://api.kraken.com/0/public/Trades?pair=XBTUSD&since=${cursor}`);
+    const d = await getJSON(`https://api.kraken.com/0/public/Trades?pair=${A.kraken}&since=${cursor}`);
     const pair = Object.keys(d.result || {}).find(k => k !== 'last');
     const rows = pair ? d.result[pair] : [];
     for (const x of rows) out.push({ t: Math.round(x[2] * 1000), p: +x[0], q: +x[1], sell: x[3] === 's' });
@@ -66,9 +66,9 @@ async function fetchKrakenTrades(since) {
   return out;
 }
 
-async function fetchBinanceTrades(since) {
-  const get = q => getJSON(`https://api.binance.com/api/v3/aggTrades?symbol=BTCUSDT&limit=1000&${q}`)
-    .catch(() => getJSON(`https://data-api.binance.vision/api/v3/aggTrades?symbol=BTCUSDT&limit=1000&${q}`));
+async function fetchBinanceTrades(since, A) {
+  const get = q => getJSON(`https://api.binance.com/api/v3/aggTrades?symbol=${A.binance}&limit=1000&${q}`)
+    .catch(() => getJSON(`https://data-api.binance.vision/api/v3/aggTrades?symbol=${A.binance}&limit=1000&${q}`));
   const out = [];
   let q = `startTime=${since}`;
   for (let page = 0; page < 24; page++) {
@@ -121,14 +121,16 @@ function rebuildMedian(from) {
   S.lastMedianP = getMedian() ?? S.lastMedianP;
 }
 
-let backfilling = false;
+// one backfill at a time per coin; one for a coin no longer in view is dropped when it lands
+let backfilling = null;
 export async function backfill(since) {
-  if (backfilling) return;
-  backfilling = true;
+  if (backfilling === S.assetGen) return;
+  const gen = backfilling = S.assetGen, A = S.A;
   try {
     await seedUsdt();
     const jobs = [['coinbase', fetchCoinbaseTrades], ['kraken', fetchKrakenTrades], ['binance', fetchBinanceTrades]];
-    const res = await Promise.allSettled(jobs.map(([, f]) => f(since)));
+    const res = await Promise.allSettled(jobs.map(([, f]) => f(since, A)));
+    if (gen !== S.assetGen) return;
     let added = 0;
     res.forEach((r, i) => {
       if (r.status === 'fulfilled') added += mergeTrades(EX[jobs[i][0]], r.value);
@@ -136,7 +138,7 @@ export async function backfill(since) {
     });
     if (added) rebuildMedian(since);
   } finally {
-    backfilling = false;
+    if (backfilling === gen) backfilling = null;
   }
 }
 
@@ -147,6 +149,7 @@ function openFeed(key, url, subscribe, makeHandler) {
   ex.ws = ws;
   ws.onopen = () => { ex.lastMsgT = Date.now(); if (subscribe) ws.send(JSON.stringify(subscribe)); };
   ws.onmessage = e => {
+    if (ex.ws !== ws) return;   // replaced (another coin): late messages are not this coin's trades
     ex.lastMsgT = Date.now();
     let d;
     try { d = JSON.parse(e.data); } catch { return; }
@@ -155,14 +158,29 @@ function openFeed(key, url, subscribe, makeHandler) {
   ws.onclose = () => {
     if (ex.ws !== ws) return;
     ex.ws = null;
-    setTimeout(() => openFeed(key, url, subscribe, makeHandler), 2500);
+    const gen = S.assetGen;
+    setTimeout(() => { if (gen === S.assetGen) openFeed(key, url, subscribe, makeHandler); }, 2500);   // unless another coin took over
   };
   ws.onerror = () => ws.close();
 }
 
+// another coin: close every feed, forget its trades and median, and connect the new coin's feeds
+export function switchExchanges() {
+  for (const ex of EXCH) {
+    const ws = ex.ws;
+    ex.ws = null;               // its onclose then does not reconnect
+    try { ws?.close(); } catch {}
+    ex.trades = []; ex.lastP = null; ex.lastTT = 0; ex.lastMsgT = 0;
+  }
+  medianHistory.length = 0;
+  S.lastMedianP = null;
+  connectExchanges();
+}
+
 export function connectExchanges() {
+  const A = S.A;
   openFeed('coinbase', 'wss://ws-feed.exchange.coinbase.com',
-    { type:'subscribe', channels:['matches'], product_ids:['BTC-USD', 'USDT-USD'] },
+    { type:'subscribe', channels:['matches'], product_ids:[A.coinbase, 'USDT-USD'] },
     () => d => {
       if (d.type !== 'match') return;   // skips last_match, a stale replay on subscribe
       if (d.product_id === 'USDT-USD') { const p = parseFloat(d.price); if (p > 0.9 && p < 1.1) S.usdtUsd = p; return; }
@@ -171,7 +189,7 @@ export function connectExchanges() {
     });
 
   openFeed('kraken', 'wss://ws.kraken.com',
-    { event:'subscribe', pair:['XBT/USD'], subscription:{ name:'trade' } },
+    { event:'subscribe', pair:[A.krakenWs], subscription:{ name:'trade' } },
     () => d => {
       if (!Array.isArray(d) || d[2] !== 'trade') return;
       for (const t of d[1])
@@ -179,14 +197,14 @@ export function connectExchanges() {
     });
 
   openFeed('bitstamp', 'wss://ws.bitstamp.net',
-    { event:'bts:subscribe', data:{ channel:'live_trades_btcusd' } },
+    { event:'bts:subscribe', data:{ channel:'live_trades_' + A.bitstamp } },
     () => d => {
       if (d.event !== 'trade') return;
       const td = d.data;
       onTrade('bitstamp', { id: td.id, t: Math.round(+td.microtimestamp / 1000), p: +td.price, q: +td.amount, sell: td.type === 1 });
     });
 
-  openFeed('gemini', 'wss://api.gemini.com/v1/marketdata/BTCUSD', null,
+  openFeed('gemini', 'wss://api.gemini.com/v1/marketdata/' + A.gemini, null,
     () => d => {
       if (d.type !== 'update') return;
       for (const ev of (d.events || [])) {
@@ -195,10 +213,10 @@ export function connectExchanges() {
       }
     });
 
-  // BTC/USDt, not BTC/USD: dollars on Bitfinex are hard to withdraw and trade ~0.15% below bank dollars,
+  // <coin>/USDt, not <coin>/USD: dollars on Bitfinex are hard to withdraw and trade ~0.15% below bank dollars,
   // so its USD pair sits $100+ above everyone else. Via USDt and Coinbase's USDT-USD rate it is in line.
   openFeed('bitfinex', 'wss://api-pub.bitfinex.com/ws/2',
-    { event:'subscribe', channel:'trades', symbol:'tBTCUST' },
+    { event:'subscribe', channel:'trades', symbol:A.bitfinex },
     () => {
       let chanId = null;
       return d => {
@@ -209,7 +227,7 @@ export function connectExchanges() {
       };
     });
 
-  openFeed('binance', 'wss://stream.binance.com:9443/ws/btcusdt@aggTrade', null,
+  openFeed('binance', `wss://stream.binance.com:9443/ws/${A.binance.toLowerCase()}@aggTrade`, null,
     () => d => {
       if (d.e !== 'aggTrade') return;
       onTrade('binance', { id: d.a, t: d.T, p: parseFloat(d.p) * S.usdtUsd, q: parseFloat(d.q), sell: d.m });

@@ -1,5 +1,6 @@
 // Taker fees, model edge per side, and Polymarket vs Kalshi: price gap, arbitrage pairs, settle-apart risk.
 
+import { seriesId } from './assets.js';
 import { KALSHI_PROXY } from './kalshi.js';
 import { bookLevels, buyEdge, walkPair } from './math.js';
 import { ksTarget, nearStrikeProb } from './model.js';
@@ -16,7 +17,7 @@ export const PM_FEE = 0.07, KS_FEE = 0.07;
 // recorder has seen 3 rounds the venues settled apart (then: the widest BRTI distance from the strike among those)
 const SETTLE_BAND = 5;
 function settleBand() {
-  const p = recorded('poly15'), k = recorded('kalshi15'), sa = p && k ? settleApart(p, k) : null;
+  const p = recorded(seriesId(S.asset, 'poly', 15)), k = recorded(seriesId(S.asset, 'kalshi', 15)), sa = p && k ? settleApart(p, k) : null;
   const measured = !!sa && sa.splits >= 3 && sa.maxDist !== null;
   return { sa, measured, band: measured ? Math.max(1, Math.ceil(sa.maxDist)) : SETTLE_BAND };
 }

@@ -47,20 +47,23 @@ export function expectedSettlement(now) {
 }
 
 // rough σ in $ per √s from the last 60s range, while the 1-minute candles have not loaded yet
+// (at least 0.033% of the price a minute, 0.1% when there is no range yet: $25 and $75 on BTC)
 function rangeSigma() {
-  const cut60 = Date.now() - 60_000;
+  const cut60 = Date.now() - 60_000, p = S.lastMedianP ?? 0;
   let lo60 = Infinity, hi60 = -Infinity;
   for (let i = medianHistory.length - 1; i >= 0 && medianHistory[i].t >= cut60; i--) {
     lo60 = Math.min(lo60, medianHistory[i].p); hi60 = Math.max(hi60, medianHistory[i].p);
   }
-  return (isFinite(lo60) ? Math.max(25, (hi60 - lo60) / 3) : 80) / Math.sqrt(60);
+  return (isFinite(lo60) ? Math.max(3.3e-4 * p, (hi60 - lo60) / 3) : 1e-3 * p) / Math.sqrt(60);
 }
 
 // 1-minute closes of the last five hours (Coinbase; oldest first, the running minute left out) and the
 // volatilities the models use from them, refreshed every round
 export async function fetchVol() {
+  const gen = S.assetGen;
   try {
-    const d = await getJSON('https://api.exchange.coinbase.com/products/BTC-USD/candles?granularity=60');
+    const d = await getJSON(`https://api.exchange.coinbase.com/products/${S.A.coinbase}/candles?granularity=60`);
+    if (gen !== S.assetGen) return;   // another coin by now
     S.closes1m = d.slice(1).map(c => c[4]).reverse();
     S.vols = volsFromCloses(S.closes1m);
   } catch (e) { console.warn('vol:', e.message); }

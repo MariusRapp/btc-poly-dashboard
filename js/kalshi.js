@@ -1,4 +1,4 @@
-// Kalshi (KXBTC15M) through the proxy: book polled once a second, round switch, official results, past rounds.
+// Kalshi (KXBTC15M and the other coins' 15-minute series) through the proxy: book polled once a second, round switch, official results, past rounds.
 
 import { updateTitle } from './mode.js';
 import { fetchVol } from './model.js';
@@ -24,7 +24,7 @@ export const KALSHI_PROXY = (() => {
   } catch {}
   return (q || KALSHI_PROXY_DEFAULT).replace(/\/+$/, '');
 })();
-const KS_SERIES = 'KXBTC15M';
+const ksSeries = () => S.A.kalshi;   // KXBTC15M, KXETH15M, … (assets.js)
 // with a timeout: a hung request must not stall the once-a-second poll
 const kapi = async path => {
   const url = `${KALSHI_PROXY}/trade-api/v2${path}`, r = await fetch(url, { signal: AbortSignal.timeout(8000) });
@@ -34,7 +34,7 @@ const kapi = async path => {
 
 function ksParse(m) {
   const last = +m.last_price_dollars;
-  return { wts: Date.parse(m.close_time) / 1000 - 900, ticker: m.ticker, question: m.title || 'BTC price up in next 15 mins?',
+  return { wts: Date.parse(m.close_time) / 1000 - 900, ticker: m.ticker, question: m.title || `${S.A.sym} price up in next 15 mins?`,
            status: m.status, strike: m.floor_strike ?? null, settle: m.expiration_value ? +m.expiration_value : null,
            result: m.result === 'yes' ? 'up' : m.result === 'no' ? 'down' : 'pending', last: last > 0 ? last : null };
 }
@@ -42,7 +42,7 @@ function ksParse(m) {
 // the market that closes when the round starting at `wts` ends
 async function ksMarket(wts) {
   const e = wts + 900;
-  const d = await kapi(`/markets?series_ticker=${KS_SERIES}&min_close_ts=${e}&max_close_ts=${e}`);
+  const d = await kapi(`/markets?series_ticker=${ksSeries()}&min_close_ts=${e}&max_close_ts=${e}`);
   const m = (d.markets || []).find(x => Date.parse(x.close_time) / 1000 === e);
   return m ? ksParse(m) : null;
 }
@@ -56,7 +56,7 @@ function ksNote(m) {
 export async function ksRefreshResults() {
   if (!KALSHI_PROXY) return;
   try {
-    const d = await kapi(`/markets?series_ticker=${KS_SERIES}&status=settled&limit=${ROUNDS_SHOWN + 4}`);
+    const d = await kapi(`/markets?series_ticker=${ksSeries()}&status=settled&limit=${ROUNDS_SHOWN + 4}`);
     for (const x of d.markets || []) ksNote(ksParse(x));
   } catch (e) { console.warn('kalshi results:', e.message); }
 }
@@ -188,7 +188,7 @@ function ksCandlePoints(d) {
 }
 
 const ksCandles = (ticker, ts) =>
-  kapi(`/series/${KS_SERIES}/markets/${ticker}/candlesticks?start_ts=${ts}&end_ts=${ts + 900}&period_interval=1`);
+  kapi(`/series/${ksSeries()}/markets/${ticker}/candlesticks?start_ts=${ts}&end_ts=${ts + 900}&period_interval=1`);
 
 // probability so far in the running round, from 1-minute candles, ahead of the live points
 async function ksBackfillProb(f) {

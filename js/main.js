@@ -5,7 +5,7 @@ import { pollChainlink } from './chainlink.js';
 import { attachHover, btcC, probC, wakeFrame, yRange } from './charts.js';
 import { ksLoad, ksSchedule } from './kalshi.js';
 import { setBookSide, setBookVenue, setBookView } from './ladder.js';
-import { setMode, syncModeUI } from './mode.js';
+import { setAsset, setMode, syncModeUI } from './mode.js';
 import { updateUI } from './panels.js';
 import { loadPolymarket } from './polymarket.js';
 import { backfill, connectExchanges, getMedian, seedUsdt } from './prices.js';
@@ -82,7 +82,8 @@ $('show-gap').addEventListener('change', e => {
   saveOpts();
 });
 
-// market switch: Polymarket / Kalshi / both, and the round length (Polymarket alone only)
+// coin switch, market switch: Polymarket / Kalshi / both, and the round length (Polymarket alone only)
+document.querySelectorAll('[data-asset]').forEach(b => b.addEventListener('click', () => setAsset(b.dataset.asset)));
 document.querySelectorAll('[data-venue]').forEach(b => b.addEventListener('click', () => {
   if (b.dataset.venue !== S.venueMode) setMode(b.dataset.venue);
 }));

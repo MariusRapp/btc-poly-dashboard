@@ -1,6 +1,7 @@
 // Rounds stored by the recorder Worker (recorder/), fetched per market and refreshed every few minutes. Without a
 // reachable recorder the dashboard falls back to the track record kept in this browser.
 // ?recorder=<url> uses another recorder and is remembered in this browser (?recorder= with nothing clears it).
+import { parseSeries } from './assets.js';
 import { toRecords } from './stats.js';
 
 const RECORDER_DEFAULT = 'https://btc-recorder.mariusrapp-kit.workers.dev';
@@ -15,12 +16,12 @@ export const RECORDER = (() => {
 })();
 
 const REFRESH_MS = 5 * 60_000;
-const DAYS = { poly5: 7, poly15: 14, kalshi15: 14 };   // about 2,000 and 1,300 rounds
-const store = new Map();                               // series → { recs, t, pending }
+const daysOf = series => parseSeries(series)?.len === 300 ? 7 : 14;   // about 2,000 and 1,300 rounds
+const store = new Map();                                              // series → { recs, t, pending }
 let onUpdate = () => {};
 export const onRecorded = f => { onUpdate = f; };
 
-// the stored rounds of a series ('poly5' | 'poly15' | 'kalshi15'), or null until they have loaded
+// the stored rounds of a series (assets.js seriesId: 'poly5', 'kalshi15', 'eth-poly5', …), or null until they have loaded
 export const recorded = series => store.get(series)?.recs ?? null;
 
 export async function loadRecorded(series) {
@@ -28,7 +29,7 @@ export async function loadRecorded(series) {
   if (e.pending || Date.now() - e.t < REFRESH_MS) return;
   e.pending = true;
   try {
-    const r = await fetch(`${RECORDER}/rounds?series=${series}&days=${DAYS[series] ?? 7}`, { signal: AbortSignal.timeout(10_000) });
+    const r = await fetch(`${RECORDER}/rounds?series=${series}&days=${daysOf(series)}`, { signal: AbortSignal.timeout(10_000) });
     if (!r.ok) throw new Error('HTTP ' + r.status);
     e.recs = toRecords(await r.json());
     onUpdate(series);
