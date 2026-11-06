@@ -33,6 +33,7 @@
   <link rel="modulepreload" href="js/modelcard.js" />
   <link rel="modulepreload" href="js/models.js" />
   <link rel="modulepreload" href="js/panels.js" />
+  <link rel="modulepreload" href="js/paper.js" />
   <link rel="modulepreload" href="js/polymarket.js" />
   <link rel="modulepreload" href="js/prices.js" />
   <link rel="modulepreload" href="js/recorder.js" />
@@ -254,6 +255,19 @@
           <div class="sig-top"><span class="sig-label" id="bp-label">Buy pressure</span><span class="sig-value" id="bp-val">—</span></div>
           <div class="segbar thin idle" id="bp-bar" aria-hidden="true"><span class="sb-up" id="bp-buy"></span><span class="sb-down" id="bp-sell"></span></div>
           <div class="sig-sub" id="bp-sub">—</div>
+        </div>
+      </section>
+
+      <section class="card" id="card-paper" aria-label="Paper trades">
+        <div class="card-head"><h2>Paper trades</h2><span class="card-meta" id="paper-venue">—</span></div>
+        <div class="paper-ctl">
+          <label class="paper-qty">Shares <input type="number" id="paper-qty" min="1" max="100000" step="1" value="10" inputmode="numeric"></label>
+          <button type="button" class="pbtn up" id="paper-up" disabled>Buy ▲ UP <b>—</b></button>
+          <button type="button" class="pbtn down" id="paper-down" disabled>Buy ▼ DOWN <b>—</b></button>
+        </div>
+        <div id="paper">
+          <div id="paper-stats"></div>
+          <div id="paper-list"></div>
         </div>
       </section>
 

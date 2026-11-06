@@ -2,6 +2,7 @@
 
 import { alertsOn, setAlerts } from './alerts.js';
 import { initLab, updateLab } from './analysis.js';
+import { initPaper, settlePaper } from './paper.js';
 import { pollChainlink } from './chainlink.js';
 import { attachHover, btcC, probC, wakeFrame, yRange } from './charts.js';
 import { ksLoad, ksSchedule } from './kalshi.js';
@@ -162,6 +163,7 @@ if ('wakeLock' in navigator) {
 onRecorded(() => { renderTrack(); updateModelCard(); updateLab(); });   // the recorder's rounds arrived or refreshed
 initModelCard();
 initLab();
+initPaper();
 readTheme();
 attachHover(btcC.el, 'btc');
 attachHover(probC.el, 'prob');
@@ -184,6 +186,8 @@ wakeFrame();
 // Safety sampler: ensure each probability history always has a recent point even during quiet markets
 setInterval(() => { for (const V of activeVenues()) if (V.lastProb !== null) pushProbPoint(V, V.lastProb); }, 1000);
 setInterval(refreshRounds, 30_000);
+setInterval(settlePaper, 30_000);
+setTimeout(settlePaper, 5000);
 
 // watchdog: mobile browsers can leave sockets open but silent — close them so they reconnect
 setInterval(() => {

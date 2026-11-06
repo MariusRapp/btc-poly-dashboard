@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   firstIdx, twap, median, normalCDF, volFromCloses, settlementDist, probAbove, probWithin,
   takerFee, buyEdge, bookLevels, walkPair, mirrorBook, niceStep, forecastAt, distPdf, distCdf, distQuantile, tCdf, tPdf, stdQuantile, ewmaVol, impliedSigma,
+  fillOrder,
 } from '../js/math.js';
 import { decodeRound } from '../js/chainlink.js';
 
@@ -200,4 +201,15 @@ test('ewmaVol and implied volatility', () => {
   near(impliedSigma(p, 100030, 100000, k), 2, 1e-3);
   assert.equal(impliedSigma(0.3, 100030, 100000, k), null, 'market favours the other side');
   assert.equal(impliedSigma(0.5, 100030, 100000, k), null, '50/50');
+});
+
+test('fillOrder: walks the ask levels, fee on each, partial when the book runs out', () => {
+  const lv = [[0.40, 5], [0.42, 10]];
+  const f = fillOrder(lv, 8, 0.07);
+  assert.equal(f.qty, 8);
+  near(f.avg, (5 * 0.40 + 3 * 0.42) / 8, 1e-12);
+  near(f.fees, 5 * takerFee(0.40, 0.07) + 3 * takerFee(0.42, 0.07), 1e-12);
+  near(f.total, 5 * 0.40 + 3 * 0.42 + f.fees, 1e-12);
+  assert.equal(fillOrder(lv, 100, 0.07).qty, 15, 'only what the book has');
+  assert.equal(fillOrder([], 5, 0.07), null);
 });

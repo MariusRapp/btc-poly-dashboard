@@ -2,6 +2,7 @@
 
 import { checkAlerts } from './alerts.js';
 import { updateLab } from './analysis.js';
+import { updatePaper } from './paper.js';
 import { arbState, bestEdge, modelEdges, updateArb, updateLive, updateSources } from './arb.js';
 import { btcC, probC } from './charts.js';
 import { KALSHI_PROXY, ksCheckSwitch } from './kalshi.js';
@@ -84,6 +85,7 @@ export function updateUI(now) {
     updateSignals(now, modelP);
     updateModelCard();
     updateLab();
+    updatePaper();
     if (arb) updateArb(arb);
     updateSources();
     updateLive();
