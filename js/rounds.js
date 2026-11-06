@@ -7,7 +7,7 @@ import { pmFetchResult } from './polymarket.js';
 import { loadRecorded, recorded } from './recorder.js';
 import { syncReview } from './review.js';
 import { ROUNDS_SHOWN, ROUND_S, S, TWAP_MS, medianHistory } from './state.js';
-import { backtest, calibration, marketProb, summary } from './stats.js';
+import { OPEN, backtest, calibration, marketProb, summary } from './stats.js';
 import { $, currentRound, fmtHM, roundSpan, signedC } from './util.js';
 import { KS, PM, activeVenues, both, mainVenue } from './venues.js';
 
@@ -148,6 +148,9 @@ function renderServerTrack(el, server) {
     [`Rounds recorded <span class="muted">· since ${fmtDay(Math.min(...st.map(x => x.s.since)))}</span>`, per(x => x.s.n)],
     ['Market favourite won <span class="muted">· at −60s</span>', per(x => pct(x.s.fav))],
     ['Brier score <span class="muted">· lower is better</span>', per(x => `market ${x.s.brierMkt.toFixed(3)} · model ${x.s.brierModel.toFixed(3)}`)],
+    ['Log loss <span class="muted">· punishes confident misses</span>', per(x => `market ${x.s.logMkt.toFixed(3)} · model ${x.s.logModel.toFixed(3)}`)],
+    [`Still open at −60s <span class="muted">· market ${OPEN[0] * 100}–${OPEN[1] * 100}%</span>`, per(x => x.s.open.n
+      ? `${x.s.open.n} rounds · log loss market ${x.s.open.logMkt.toFixed(3)} · model ${x.s.open.logModel.toFixed(3)}` : 'none yet')],
     [`Model edge ≥ ${BT_EDGE * 100}¢, bought at the ask <span class="muted">· after fees</span>`, per(x => {
       const b = backtest(x.recs, BT_EDGE, x.fee);
       return b.trades ? `<span class="${b.pnl >= 0 ? 'up-t' : 'down-t'}">${signedC(b.perTrade)}</span>&nbsp;a&nbsp;trade · ${b.trades}&nbsp;trades` : 'no trades yet';

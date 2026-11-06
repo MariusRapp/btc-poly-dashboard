@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { toRecords, marketProb, scored, summary, calibration, backtest, settleApart } from '../js/stats.js';
+import { toRecords, marketProb, scored, summary, calibration, backtest, settleApart, logLoss, scores, isOpen, LOG_CLIP } from '../js/stats.js';
 import { takerFee } from '../js/math.js';
 
 const near = (a, b, tol = 1e-9) => assert.ok(Math.abs(a - b) <= tol, `${a} vs ${b}`);
@@ -10,8 +10,26 @@ test('toRecords / marketProb / scored', () => {
   const recs = toRecords({ cols: ['start', 'bid', 'ask'], rows: [[1, 0.4, 0.42], [2, null, 0.5]] });
   assert.deepEqual(recs, [{ start: 1, bid: 0.4, ask: 0.42 }, { start: 2, bid: null, ask: 0.5 }]);
   near(marketProb(recs[0]), 0.41);
-  assert.equal(marketProb(recs[1]), null);
-  assert.equal(scored([rec({ bid: 0.4, ask: 0.42, model: 0.5, result: 'up' }), rec({ bid: 0.4, ask: 0.42, model: 0.5 })]).length, 1);
+  // one side empty (a decided round): the missing side counts as 0¢ / 100¢
+  near(marketProb(recs[1]), 0.25);
+  near(marketProb({ bid: 0.99, ask: null }), 0.995);
+  assert.equal(marketProb({ bid: null, ask: null }), null);
+  assert.equal(scored([rec({ bid: 0.4, ask: 0.42, model: 0.5, result: 'up' }), rec({ bid: 0.4, ask: 0.42, model: 0.5 }),
+                       rec({ bid: null, ask: 0.01, model: 0.001, result: 'down' })]).length, 2);
+});
+
+test('logLoss / scores / isOpen', () => {
+  near(logLoss(0.8, true), -Math.log(0.8));
+  near(logLoss(0.8, false), -Math.log(0.2));
+  near(logLoss(0, true), -Math.log(LOG_CLIP), 1e-12, 'clipped, not infinite');
+  const rows = [rec({ model: 0.9, result: 'up' }), rec({ model: 0.4, result: 'down' })];
+  const s = scores(rows, r => r.model);
+  near(s.brier, (0.01 + 0.16) / 2);
+  near(s.log, (-Math.log(0.9) - Math.log(0.6)) / 2);
+  assert.deepEqual(scores([], r => r.model), { brier: null, log: null });
+  assert.equal(isOpen({ bid: 0.5, ask: 0.52 }), true);
+  assert.equal(isOpen({ bid: 0.95, ask: 0.96 }), false);
+  assert.equal(isOpen({ bid: null, ask: null }), false);
 });
 
 test('summary: favourite, Brier, own basis', () => {
@@ -26,8 +44,12 @@ test('summary: favourite, Brier, own basis', () => {
   assert.equal(s.fav, 0.5);
   near(s.brierMkt, ((0.71 - 1) ** 2 + 0.61 ** 2) / 2);
   near(s.brierModel, ((0.8 - 1) ** 2 + 0.3 ** 2) / 2);
+  near(s.logModel, (-Math.log(0.8) - Math.log(0.7)) / 2);
+  assert.equal(s.open.n, 2, 'both at 61–71%: still open');
+  near(s.open.brierMkt, s.brierMkt);
   assert.deepEqual([s.ownN, s.ownMatch], [3, 2]);
   assert.equal(summary([]).n, 0);
+  assert.equal(summary([]).open.brierMkt, null);
 });
 
 test('calibration: bins with their observed UP share', () => {

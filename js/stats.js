@@ -5,21 +5,42 @@ import { buyEdge, takerFee } from './math.js';
 // { cols, rows } from GET /rounds → one object per round
 export const toRecords = ({ cols, rows }) => rows.map(r => Object.fromEntries(cols.map((c, i) => [c, r[i]])));
 
-// market probability at the snapshot: mid of the best bid and ask
-export const marketProb = r => r.bid != null && r.ask != null ? (r.bid + r.ask) / 2 : null;
+// market probability at the snapshot: mid of the best bid and ask. A round that is already decided often has one
+// side empty (nobody sells UP below 100¢, or nobody bids above 0¢): the missing side then counts as 100¢ / 0¢,
+// so those rounds are scored too instead of dropping out.
+export const marketProb = r => r.bid == null && r.ask == null ? null : ((r.bid ?? 0) + (r.ask ?? 1)) / 2;
 // rounds with a snapshot (market and model about 60s before the end) and an official result
 export const scored = recs => recs.filter(r => (r.result === 'up' || r.result === 'down') && marketProb(r) !== null && r.model != null);
 
+// "Open" rounds: the market still between 10% and 90% at the snapshot. Decided rounds score almost 0 for everyone
+// and dilute the difference between market and model; this is where they part.
+export const OPEN = [0.1, 0.9];
+export const isOpen = r => { const p = marketProb(r); return p !== null && p >= OPEN[0] && p <= OPEN[1]; };
+
+// Log loss: −ln of the probability given to what happened. It punishes confident misses much harder than the
+// Brier score. Probabilities are clipped to 0.1% … 99.9% (a model that says 0.0001% and misses would count as ∞).
+export const LOG_CLIP = 0.001;
+export const logLoss = (p, up) => { const q = Math.min(1 - LOG_CLIP, Math.max(LOG_CLIP, p)); return -Math.log(up ? q : 1 - q); };
+
+// Brier score and log loss of a forecast over scored rounds (null without any)
+export function scores(rows, f) {
+  if (!rows.length) return { brier: null, log: null };
+  let b = 0, l = 0;
+  for (const r of rows) { const p = f(r), up = r.result === 'up'; b += (p - (up ? 1 : 0)) ** 2; l += logLoss(p, up); }
+  return { brier: b / rows.length, log: l / rows.length };
+}
+
 export function summary(recs) {
-  const s = scored(recs), o = r => r.result === 'up' ? 1 : 0;
+  const s = scored(recs), open = s.filter(isOpen);
   const own = recs.filter(r => r.result && r.strike != null && r.settle != null);
-  const brier = f => s.reduce((a, r) => a + (f(r) - o(r)) ** 2, 0) / s.length;
+  const mkt = scores(s, marketProb), mod = scores(s, r => r.model);
+  const oMkt = scores(open, marketProb), oMod = scores(open, r => r.model);
   return {
     n: s.length,
     since: s.length ? Math.min(...s.map(r => r.start)) : null,
     fav: s.length ? s.filter(r => (marketProb(r) >= 0.5) === (r.result === 'up')).length / s.length : null,
-    brierMkt: s.length ? brier(marketProb) : null,
-    brierModel: s.length ? brier(r => r.model) : null,
+    brierMkt: mkt.brier, brierModel: mod.brier, logMkt: mkt.log, logModel: mod.log,
+    open: { n: open.length, brierMkt: oMkt.brier, brierModel: oMod.brier, logMkt: oMkt.log, logModel: oMod.log },
     ownN: own.length,
     ownMatch: own.filter(r => (r.settle >= r.strike) === (r.result === 'up')).length,
   };

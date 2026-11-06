@@ -93,10 +93,12 @@ function renderScores() {
       continue;
     }
     const bt = sc.bt.trades ? `${signedC(sc.bt.perTrade)} a trade (${sc.bt.trades})` : 'no trades';
-    el.innerHTML = `Brier <b>${sc.brierModel.toFixed(3)}</b> vs market ${sc.brierMkt.toFixed(3)} · ${sc.n} rounds · ` +
-      `edge ≥ ${BT_EDGE * 100}¢: ${bt}` + (sc.n < 50 ? ' · <i>too few rounds to judge</i>' : '');
-    el.title = 'On recorded rounds of this market, 60s before the end. Brier: lower is better. Backtest: buy the side with ' +
-      'a model edge of at least 3¢ at the best ask, after fees.';
+    const o = sc.open;
+    el.innerHTML = `Log loss <b>${sc.logModel.toFixed(3)}</b> vs market ${sc.logMkt.toFixed(3)} · Brier ${sc.brierModel.toFixed(3)} vs ${sc.brierMkt.toFixed(3)} · ` +
+      `${sc.n} rounds` + (o.n ? `, ${o.n} still open: log loss <b>${o.logModel.toFixed(3)}</b> vs ${o.logMkt.toFixed(3)}` : '') +
+      ` · edge ≥ ${BT_EDGE * 100}¢: ${bt}` + (sc.n < 50 ? ' · <i>too few rounds to judge</i>' : '');
+    el.title = 'On recorded rounds of this market, 60s before the end. Log loss and Brier: lower is better; "still open" = market ' +
+      'between 10% and 90%, where market and model part. Backtest: buy the side with a model edge of at least 3¢ at the best ask, after fees.';
   }
 }
 
