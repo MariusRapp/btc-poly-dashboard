@@ -2,9 +2,10 @@
 
 import { fetchStrike } from './chainlink.js';
 import { yRange } from './charts.js';
-import { firstIdx, probAbove, probWithin, twap } from './math.js';
+import { firstIdx, probAbove, twap } from './math.js';
 import { modelById, modelDist as modelDistOf, paramsOf, volsFromCloses } from './models.js';
-import { S, TWAP_MS, medianHistory } from './state.js';
+import { seriesId } from './assets.js';
+import { ROUND_S, S, TWAP_MS, medianHistory } from './state.js';
 import { currentRound, getJSON } from './util.js';
 import { KS } from './venues.js';
 
@@ -47,20 +48,23 @@ export function expectedSettlement(now) {
 }
 
 // rough σ in $ per √s from the last 60s range, while the 1-minute candles have not loaded yet
+// (at least 0.033% of the price a minute, 0.1% when there is no range yet: $25 and $75 on BTC)
 function rangeSigma() {
-  const cut60 = Date.now() - 60_000;
+  const cut60 = Date.now() - 60_000, p = S.lastMedianP ?? 0;
   let lo60 = Infinity, hi60 = -Infinity;
   for (let i = medianHistory.length - 1; i >= 0 && medianHistory[i].t >= cut60; i--) {
     lo60 = Math.min(lo60, medianHistory[i].p); hi60 = Math.max(hi60, medianHistory[i].p);
   }
-  return (isFinite(lo60) ? Math.max(25, (hi60 - lo60) / 3) : 80) / Math.sqrt(60);
+  return (isFinite(lo60) ? Math.max(3.3e-4 * p, (hi60 - lo60) / 3) : 1e-3 * p) / Math.sqrt(60);
 }
 
 // 1-minute closes of the last five hours (Coinbase; oldest first, the running minute left out) and the
 // volatilities the models use from them, refreshed every round
 export async function fetchVol() {
+  const gen = S.assetGen;
   try {
-    const d = await getJSON('https://api.exchange.coinbase.com/products/BTC-USD/candles?granularity=60');
+    const d = await getJSON(`https://api.exchange.coinbase.com/products/${S.A.coinbase}/candles?granularity=60`);
+    if (gen !== S.assetGen) return;   // another coin by now
     S.closes1m = d.slice(1).map(c => c[4]).reverse();
     S.vols = volsFromCloses(S.closes1m);
   } catch (e) { console.warn('vol:', e.message); }
@@ -70,12 +74,15 @@ export async function fetchVol() {
 export const activeModel = () => modelById(S.modelId);
 export const activeParams = (m = activeModel()) => paramsOf(m, S.modelParams?.[m.id]);
 
+// the market the model is tuned on and scored against: the one in view (with both venues, Polymarket 15m)
+export const modelSeries = () => S.venueMode === 'kalshi' ? seriesId(S.asset, 'kalshi', 15) : seriesId(S.asset, 'poly', ROUND_S / 60);
+
 // what the models get: price, strike, time left, the window seen so far, volatilities, the last minute's speed
 export function modelInputs(now = Date.now()) {
   if (S.strike === null || S.lastMedianP === null) return null;
   const end = currentRound(now).end, T = (end - now) / 1000;
   if (T <= 0) return null;
-  return { price: S.lastMedianP, strike: S.strike, T, ws: T - 60, end,
+  return { price: S.lastMedianP, strike: S.strike, T, ws: T - 60, end, series: modelSeries(),
            observed: T < 60 ? twap(medianHistory, end - TWAP_MS, now) : null,
            vol: k => S.vols?.[k] ?? null, velocity: velocity(now, 60_000), fallback: rangeSigma() };
 }
@@ -90,12 +97,6 @@ export function modelDist() {
 export function computeModelProb() {
   const d = modelDist();
   return d && Math.max(0.5, Math.min(99.5, probAbove(d, S.strike) * 100));
-}
-
-// model chance that the settlement average lands within ±band of the strike, in %
-export function nearStrikeProb(band) {
-  const d = modelDist();
-  return d && probWithin(d, S.strike, band) * 100;
 }
 
 // $/s over the last `span` ms (30s for the projected settlement, 60s for the momentum model)

@@ -1,6 +1,9 @@
 // Text panels: KPIs, time left, signals, data sources, live status. updateUI() runs on a timer (main.js).
 
 import { checkAlerts } from './alerts.js';
+import { updateLab } from './analysis.js';
+import { updatePaper } from './paper.js';
+import { renderLag } from './lag.js';
 import { arbState, bestEdge, modelEdges, updateArb, updateLive, updateSources } from './arb.js';
 import { btcC, probC } from './charts.js';
 import { KALSHI_PROXY, ksCheckSwitch } from './kalshi.js';
@@ -10,7 +13,7 @@ import { updateModelCard } from './modelcard.js';
 import { checkRoundSwitch } from './polymarket.js';
 import { recordTrack } from './rounds.js';
 import { EXCH, ROUND_S, S, TWAP_MS, buyPressureSnaps, medianHistory } from './state.js';
-import { $, currentRound, fmtC, fmtClock, fmtP, secsLeft, signedC, winLabel } from './util.js';
+import { $, currentRound, fmtAmt, fmtC, fmtClock, fmtP, secsLeft, signedC, winLabel } from './util.js';
 import { KS, PM, activeVenues, both, mainVenue } from './venues.js';
 
 // ── Panels (text updates are throttled; charts redraw every frame) ───────────
@@ -43,7 +46,7 @@ export function updateUI(now) {
       `${above ? '▲' : '▼'} ${fmtP(Math.abs(d))} ${above ? 'above' : 'below'} strike` +
       (exp.locked > 0 ? ' · settlement avg' : ` (${above ? '+' : '−'}${Math.abs(d / S.strike * 100).toFixed(2)}%)`);
     // "close" = outcome still open according to the model (or within $50 until it is available)
-    chip.hidden = modelP !== null ? (modelP < 25 || modelP > 75) : Math.abs(d) >= 50;
+    chip.hidden = modelP !== null ? (modelP < 25 || modelP > 75) : Math.abs(d / S.strike) >= 7e-4;   // ($50 on BTC)
   } else {
     $('btc-delta').className = 'kpi-delta muted';
     $('btc-delta-text').textContent = med === null ? 'Waiting for trades…' : 'Waiting for strike…';
@@ -81,14 +84,17 @@ export function updateUI(now) {
     S.lastSlowT = now;
     const arb = both() ? arbState() : null;
     updateSignals(now, modelP);
+    renderLag();
     updateModelCard();
-    if (arb) updateArb(arb);
+    updateLab();
+    updatePaper();
+    if (both()) updateArb(arb);   // also without both books: the split risk and the recorded pairs
     updateSources();
     updateLive();
     recordTrack(now, modelP);
     checkAlerts(now, modelP, exp, arb);
     btcC.el.setAttribute('aria-label',
-      `BTC median price ${med !== null ? fmtP(med) : 'unknown'}${S.strike !== null ? ', strike ' + fmtP(S.strike) : ''}, ${winLabel()}`);
+      `${S.A.sym} median price ${med !== null ? fmtP(med) : 'unknown'}${S.strike !== null ? ', strike ' + fmtP(S.strike) : ''}, ${winLabel()}`);
     probC.el.setAttribute('aria-label', 'Implied UP probability: ' + activeVenues().map(V =>
       `${V.name} ${V.up !== null ? V.up.toFixed(1) + '%' : 'unknown'}`).join(', ') + `, ${winLabel()}`);
   }
@@ -135,7 +141,7 @@ function updateSignals(now, modelP) {
       sp.textContent = above ? '▲ above strike' : '▼ below strike';
       sub.append(sp, ' · ');
     }
-    sub.append(`momentum ${vel >= 0 ? '+' : '−'}$${Math.abs(vel * 60).toFixed(0)}/min · ${s < 30 ? 'high' : s < 90 ? 'medium' : 'low'} confidence`);
+    sub.append(`momentum ${vel >= 0 ? '+' : '−'}${fmtAmt(Math.abs(vel * 60))}/min ·${s < 30 ? 'high' : s < 90 ? 'medium' : 'low'} confidence`);
   } else {
     $('proj-val').textContent = '—';
   }

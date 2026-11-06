@@ -1,6 +1,7 @@
 // Rounds stored by the recorder Worker (recorder/), fetched per market and refreshed every few minutes. Without a
 // reachable recorder the dashboard falls back to the track record kept in this browser.
 // ?recorder=<url> uses another recorder and is remembered in this browser (?recorder= with nothing clears it).
+import { parseSeries } from './assets.js';
 import { toRecords } from './stats.js';
 
 const RECORDER_DEFAULT = 'https://btc-recorder.mariusrapp-kit.workers.dev';
@@ -15,12 +16,14 @@ export const RECORDER = (() => {
 })();
 
 const REFRESH_MS = 5 * 60_000;
-const DAYS = { poly5: 7, poly15: 14, kalshi15: 14 };   // about 2,000 and 1,300 rounds
-const store = new Map();                               // series → { recs, t, pending }
-let onUpdate = () => {};
+const daysOf = series => parseSeries(series)?.len === 300 ? 7 : 14;   // about 2,000 and 1,300 rounds
+const store = new Map();                                              // series → { recs, t, pending }
+let onUpdate = () => {}, version = 0;
 export const onRecorded = f => { onUpdate = f; };
+// bumped whenever new data arrived (rounds or snapshots of any series)
+export const recordedVersion = () => version;
 
-// the stored rounds of a series ('poly5' | 'poly15' | 'kalshi15'), or null until they have loaded
+// the stored rounds of a series (assets.js seriesId: 'poly5', 'kalshi15', 'eth-poly5', …), or null until they have loaded
 export const recorded = series => store.get(series)?.recs ?? null;
 
 export async function loadRecorded(series) {
@@ -28,12 +31,38 @@ export async function loadRecorded(series) {
   if (e.pending || Date.now() - e.t < REFRESH_MS) return;
   e.pending = true;
   try {
-    const r = await fetch(`${RECORDER}/rounds?series=${series}&days=${DAYS[series] ?? 7}`, { signal: AbortSignal.timeout(10_000) });
+    const r = await fetch(`${RECORDER}/rounds?series=${series}&days=${daysOf(series)}`, { signal: AbortSignal.timeout(10_000) });
     if (!r.ok) throw new Error('HTTP ' + r.status);
     e.recs = toRecords(await r.json());
+    version++;
     onUpdate(series);
   } catch (err) {
     console.warn('recorder', series, err.message);
+  } finally {
+    e.t = Date.now();
+    e.pending = false;
+  }
+}
+
+// Every minute's snapshot of the rounds of a series (recorder v3, GET /snaps), the last `SNAP_DAYS` days, each with
+// its round's strike and result. Loaded only when the analysis asks for them (a few hundred kB).
+// null until loaded; { recs: [] , missing: true } when the recorder has none (not on v3 yet).
+const SNAP_DAYS = 3;
+const snapStore = new Map();
+export const recordedSnaps = series => snapStore.get(series)?.data ?? null;
+export async function loadSnaps(series) {
+  const e = snapStore.get(series) || snapStore.set(series, { data: null, t: 0, pending: false }).get(series);
+  if (e.pending || Date.now() - e.t < REFRESH_MS) return;
+  e.pending = true;
+  try {
+    const r = await fetch(`${RECORDER}/snaps?series=${series}&days=${SNAP_DAYS}`, { signal: AbortSignal.timeout(20_000) });
+    if (r.status === 503 || r.status === 404) e.data = { recs: [], missing: true };
+    else if (!r.ok) throw new Error('HTTP ' + r.status);
+    else e.data = { recs: toRecords(await r.json()).map(x => ({ ...x, snap_t: x.t })), days: SNAP_DAYS };
+    version++;
+    onUpdate(series);
+  } catch (err) {
+    console.warn('recorder snaps', series, err.message);
   } finally {
     e.t = Date.now();
     e.pending = false;

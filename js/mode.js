@@ -1,13 +1,15 @@
 // Market switch: Polymarket / Kalshi / both, and the round length.
 
+import { assetById } from './assets.js';
+import { pollChainlinkOnce } from './chainlink.js';
 import { yRange } from './charts.js';
 import { ksLoad, ksTimer } from './kalshi.js';
 import { lad } from './ladder.js';
 import { loadPolymarket } from './polymarket.js';
-import { backfill } from './prices.js';
+import { backfill, switchExchanges } from './prices.js';
 import { selectRound } from './review.js';
 import { renderRounds } from './rounds.js';
-import { ROUND_MS, ROUND_S, S, TWAP_MS, applyRoundLen, medianHistory, saveOpts } from './state.js';
+import { ROUND_MS, ROUND_S, S, TWAP_MS, applyRoundLen, buyPressureSnaps, medianHistory, saveOpts } from './state.js';
 import { $, currentRound, roundSpan } from './util.js';
 import { KS, PM, VENUES, both, closeFeed, mainVenue } from './venues.js';
 
@@ -15,7 +17,7 @@ import { KS, PM, VENUES, both, closeFeed, mainVenue } from './venues.js';
 export function updateTitle(msg) {
   const len = ROUND_S / 60, f = mainVenue().cur;
   $('brand-len').textContent = `· ${len}-minute rounds`;
-  document.title = `BTC ${len}m · ${both() ? 'Polymarket vs Kalshi' : mainVenue().name}`;
+  document.title = `${S.A.sym} ${len}m · ${both() ? 'Polymarket vs Kalshi' : mainVenue().name}`;
   $('market-title').textContent = msg ?? (
     both() ? `Polymarket + Kalshi · ${roundSpan(currentRound().start / 1000)}` :
     !f ? 'Loading market…' :
@@ -25,6 +27,9 @@ export function updateTitle(msg) {
 // buttons, legends, toggles and cards that depend on the mode
 export function syncModeUI() {
   document.body.classList.toggle('both', both());
+  document.querySelectorAll('[data-asset]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.asset === S.asset)));
+  document.querySelectorAll('.asym').forEach(el => { el.textContent = S.A.sym; });
+  document.querySelectorAll('.aname').forEach(el => { el.textContent = S.A.name; });
   document.querySelectorAll('[data-venue]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.venue === S.venueMode)));
   document.querySelectorAll('[data-len]').forEach(b => {
     b.setAttribute('aria-pressed', String(+b.dataset.len === ROUND_S / 60));
@@ -43,7 +48,20 @@ export function syncModeUI() {
   updateTitle();
 }
 
-export function setMode(venue, lenMin) {
+// another coin: its own exchange feeds, Chainlink feed, volatility and markets; venue and round length stay
+export function setAsset(id) {
+  const A = assetById(id);
+  if (A.id === S.asset) return;
+  S.asset = A.id; S.A = A; S.assetGen++;
+  S.clPrice = null; S.clStrike = null; S.clState = 'wait';
+  S.closes1m = []; S.vols = null;
+  buyPressureSnaps.length = 0;
+  switchExchanges();
+  pollChainlinkOnce();
+  setMode(S.venueMode, null, true);
+}
+
+export function setMode(venue, lenMin, otherCoin = false) {
   const prevLen = ROUND_MS;
   S.venueMode = venue;
   if (lenMin) S.polyLenMin = lenMin;
@@ -58,7 +76,9 @@ export function setMode(venue, lenMin) {
     V.loading = V.preloading = false; V.retryT = V.preloadRetryT = 0;
   }
   clearTimeout(ksTimer);
-  if (ROUND_MS !== prevLen) { PM.results.clear(); PM.meta.clear(); PM.archive.clear(); }   // other markets, same start times
+  // other markets, same start times
+  if (ROUND_MS !== prevLen || otherCoin) { PM.results.clear(); PM.meta.clear(); PM.archive.clear(); }
+  if (otherCoin) { KS.results.clear(); KS.meta.clear(); KS.archive.clear(); }
   PM.on = S.venueMode !== 'kalshi';
   KS.on = S.venueMode !== 'poly';
   S.strikeRound = null;
@@ -66,8 +86,8 @@ export function setMode(venue, lenMin) {
   S.lroundKey = ''; lad.feed = undefined;
   syncModeUI();
   renderRounds();
-  // a longer round needs more history for the chart and the strike window
-  const need = currentRound().start - TWAP_MS - 10_000;
+  // a longer round (or another coin) needs more history for the chart and the strike window
+  const need = Math.min(Date.now() - 300_000, currentRound().start - TWAP_MS - 10_000);
   if (!medianHistory.length || medianHistory[0].t > need) backfill(need);
   if (PM.on) loadPolymarket();
   if (KS.on) ksLoad();

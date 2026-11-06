@@ -10,13 +10,13 @@ import { $, currentRound, fmtP, getJSON, roundSpan, signedUsd } from './util.js'
 import { KS, PM, activeVenues } from './venues.js';
 
 // ── Past rounds in the charts ────────────────────────────────────────────────
-// BTC: our own median while it is still in memory, else Binance 1s candles (USDT→USD).
+// Price: our own median while it is still in memory, else Binance 1s candles (USDT→USD).
 // Probability: the live mids recorded while the round ran, else its trades (UP price; DOWN as 1 − price).
 async function reviewBtc(start, end) {
   const a = start - TWAP_MS, h = medianHistory;
   if (h.length && h[0].t <= a + 5000 && h[h.length - 1].t >= end - 2000)
     return { pts: h.slice(Math.max(0, firstIdx(h, a) - 1), firstIdx(h, end + 1)), src: 'median of exchanges' };
-  const q = `symbol=BTCUSDT&interval=1s&startTime=${a}&endTime=${end - 1}&limit=1000`;
+  const q = `symbol=${S.A.binance}&interval=1s&startTime=${a}&endTime=${end - 1}&limit=1000`;
   const d = await getJSON(`https://api.binance.com/api/v3/klines?${q}`)
     .catch(() => getJSON(`https://data-api.binance.vision/api/v3/klines?${q}`));
   return { pts: d.map(k => ({ t: k[0], p: +k[4] * S.usdtUsd })), src: 'Binance 1s (USDT→USD)' };
@@ -78,5 +78,5 @@ export function syncReview() {
   $('rv-sub').textContent = r.loading ? 'Loading round…' : r.failed ? 'Could not load this round' :
     (r.strike != null && r.settle != null
       ? `Strike ${fmtP(r.strike)} → settlement avg ${fmtP(r.settle)} (${signedUsd(r.settle - r.strike)}) · ` : '') +
-    kTxt + `BTC: ${r.src || 'no data'}`;
+    kTxt + `${S.A.sym}: ${r.src || 'no data'}`;
 }

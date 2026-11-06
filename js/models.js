@@ -2,8 +2,9 @@
 // path to it, for the forecast cone. All share one skeleton (the price as a random walk, averaged over the last
 // 60s); they differ in how much it moves, whether a trend continues, and how often big jumps happen.
 // Pure: the dashboard picks one (S.modelId, S.modelParams); recorded rounds can re-score any of them.
-import { ewmaVol, forecastAt, probAbove, volFromCloses } from './math.js';
-import { backtest, summary } from './stats.js';
+import { crossPredict, fitLogistic, predict } from './learn.js';
+import { ewmaVol, forecastAt, probAbove, stdQuantile, volFromCloses } from './math.js';
+import { backtest, scores, summary } from './stats.js';
 
 // Inputs: { price, strike, T (s to the end), ws (s until the settlement window opens, T − 60),
 //           observed (average of the window so far, or null), vol(kind) → volatility per √s as a log return for
@@ -17,7 +18,9 @@ const pct = v => Math.round(v * 100) + '%';
 const FACTOR = { key: 'f', label: 'Volatility ×', type: 'range', min: 0.5, max: 2, step: 0.05, def: 1, fmt: v => v.toFixed(2) + '×',
                  help: 'Scales the expected movement: above 1 the model expects bigger moves, so its probabilities stay closer to 50%.' };
 export const EWMA_HALF_LIFE = 10;   // minutes
-export const MOMENTUM_CAP = 2;      // $/s: a trend the model takes on at most
+export const MOMENTUM_CAP = 2.7e-5; // per s, as a share of the price: a trend the model takes on at most (~$2/s on BTC)
+export const LEARN_MIN = 100;       // recorded rounds with every input before the Learned model trains
+const fits = new Map();             // Learned: series → fit on all its recorded rounds (trainLearned)
 
 // ── Adding a model ───────────────────────────────────────────────────────────
 // Add an object to MODELS; the Model card lists it, scores it on recorded rounds and builds its settings:
@@ -44,7 +47,7 @@ export const MOMENTUM_CAP = 2;      // $/s: a trend the model takes on at most
 export const MODELS = [
   {
     id: 'rw', name: 'Standard',
-    tagline: 'No direction: from here BTC is as likely to go up as down. How far it typically moves comes from the recent 1-minute moves.',
+    tagline: 'No direction: from here the price is as likely to go up as down. How far it typically moves comes from the recent 1-minute moves.',
     assumes: ['no trend', 'bell curve', 'volatility of the last hour'],
     params: [
       { key: 'win', label: 'Volatility from the last', type: 'choice', options: [[15, '15 min'], [60, '1 h'], [240, '4 h']], def: 60,
@@ -71,7 +74,10 @@ export const MODELS = [
         help: 'Share of the last minute’s speed the model expects to continue. 0% is the Standard model.' },
       FACTOR,
     ],
-    setup: (inp, p) => ({ sigma: sigmaOf(inp, 'h60', p.f), drift: Math.max(-MOMENTUM_CAP, Math.min(MOMENTUM_CAP, p.w * (inp.velocity ?? 0))) }),
+    setup: (inp, p) => {
+      const cap = MOMENTUM_CAP * inp.price;
+      return { sigma: sigmaOf(inp, 'h60', p.f), drift: Math.max(-cap, Math.min(cap, p.w * (inp.velocity ?? 0))) };
+    },
     needs: () => ['h60', 'vel'],
   },
   {
@@ -85,6 +91,16 @@ export const MODELS = [
     ],
     setup: (inp, p) => ({ sigma: sigmaOf(inp, 'h60', p.f), drift: 0, df: p.df }),
     needs: () => ['h60'],
+  },
+  {
+    id: 'learn', name: 'Learned', learned: true,
+    tagline: 'Learns from this market’s recorded rounds how much the distance to the strike, the last minute’s trend and a calm or hectic market really mattered (logistic regression), and weighs them that way.',
+    assumes: ['learned from recorded rounds', 'distance, trend, calm or hectic', `needs ${LEARN_MIN}+ rounds`],
+    params: [],
+    // the spread of the cone is the Standard model's; its centre moves to the learned probability (modelPath)
+    setup: inp => ({ sigma: sigmaOf(inp, 'h60', 1), drift: 0 }),
+    prob: inp => { const fit = fits.get(inp.series), x = fit && learnFeatures(inp); return x ? predict(fit, x) : null; },
+    needs: () => ['h60', 'h15', 'h240', 'vel'],
   },
 ];
 
@@ -102,11 +118,17 @@ export function paramsOf(m, saved = {}) {
 }
 
 // t (seconds from now) → distribution { mean, sd, df } of what decides the round then; t = T is the settlement average.
-// null when the model lacks an input (no volatility yet).
+// null when the model lacks an input (no volatility yet). A model with a `prob` hook (Learned) keeps the spread of
+// its setup but moves the centre, gradually towards the end, so that the settlement lands above the strike with
+// exactly its probability; without a probability (not trained yet) it is its setup's random walk.
 export function modelPath(m, inp, p) {
   const { sigma, drift, df } = m.setup(inp, p);
   if (!(sigma > 0)) return null;
-  return t => { const d = forecastAt(inp.price, sigma, t, inp.ws, inp.observed, drift); return { mean: d.mean, sd: Math.max(d.sd, 1e-6), df }; };
+  const base = t => { const d = forecastAt(inp.price, sigma, t, inp.ws, inp.observed, drift); return { mean: d.mean, sd: Math.max(d.sd, 1e-6), df }; };
+  const pT = m.prob?.(inp, p);
+  if (pT == null) return base;
+  const end = base(inp.T), shift = inp.strike + end.sd * stdQuantile(Math.min(1 - 1e-9, Math.max(1e-9, pT))) - end.mean;
+  return t => { const d = base(t); return { ...d, mean: d.mean + shift * Math.min(1, Math.max(0, t / inp.T)) }; };
 }
 export const modelDist = (m, inp, p) => modelPath(m, inp, p)?.(inp.T) ?? null;
 export const modelSigma = (m, inp, p) => m.setup(inp, p).sigma;
@@ -127,14 +149,62 @@ function scorable(m, p, recs) {
     need.every(k => r[has[k]] != null));
 }
 
-// Brier score, favourite hit rate and backtest of this model on the recorded rounds; null without any
-export function scoreModel(m, p, recs, len, fee, minEdge) {
-  const rows = scorable(m, p, recs).map(r => {
+// The recorded rounds re-computed with this model: each row with its `model` probability. The learned model is
+// scored out of sample (each fifth of the rounds predicted by a fit on the other four), never on rounds it saw.
+export function rescore(m, p, recs, len) {
+  const rows = scorable(m, p, recs);
+  if (m.learned) {
+    const X = rows.map(r => learnFeatures(recordInputs(r, len))), y = rows.map(r => r.result === 'up' ? 1 : 0);
+    if (rows.length < LEARN_MIN) return [];
+    const pr = crossPredict(X, y);
+    return rows.map((r, i) => pr[i] === null ? null : { ...r, model: pr[i] }).filter(Boolean);
+  }
+  return rows.map(r => {
     const d = modelDist(m, recordInputs(r, len), p);
     return d && { ...r, model: probAbove(d, r.strike) };
   }).filter(Boolean);
-  const s = summary(rows);
+}
+
+// log loss, Brier score, favourite hit rate and backtest of this model on the recorded rounds; null without any
+export function scoreModel(m, p, recs, len, fee, minEdge) {
+  const rows = rescore(m, p, recs, len), s = summary(rows);
   return s.n ? { ...s, bt: backtest(rows, minEdge, fee) } : null;
+}
+
+// The volatility factor that fits the recorded rounds best (lowest log loss), for models that have one
+export function fitFactor(m, p, recs, len) {
+  if (!m.params.some(q => q.key === 'f')) return null;
+  const loss = f => { const rows = rescore(m, { ...p, f }, recs, len); return rows.length ? scores(rows, r => r.model).log : null; };
+  let best = null;
+  for (let f = 0.5; f <= 2.0001; f += 0.05) {
+    const l = loss(+f.toFixed(2));
+    if (l !== null && (!best || l < best.log)) best = { f: +f.toFixed(2), log: l };
+  }
+  return best && { ...best, now: loss(p.f), n: rescore(m, p, recs, len).length };
+}
+
+// ── Learned: logistic regression on the recorded rounds of the market in view (learn.js) ──
+// Its inputs, all from the Standard model's view: how many typical moves the price is from the strike, how far the
+// last minute's speed would carry it in typical moves, and whether the last 15 minutes are calmer or more hectic
+// than the last 4 hours. Trained once enough rounds have all of them (LEARN_MIN), refitted as rounds come in.
+const clip = (v, m) => Math.max(-m, Math.min(m, v));
+export const LEARN_FEATURES = ['distance to the strike', 'last minute’s trend', 'volatility now vs 4 h'];
+export function learnFeatures(inp) {
+  const sigma = sigmaOf(inp, 'h60', 1);
+  if (!(sigma > 0) || inp.price == null || inp.strike == null) return null;
+  const d = forecastAt(inp.price, sigma, inp.T, inp.ws, inp.observed, 0), sd = Math.max(d.sd, 1e-9);
+  const v15 = inp.vol('h15'), v240 = inp.vol('h240');
+  return [1, clip((d.mean - inp.strike) / sd, 8), clip((inp.velocity ?? 0) * Math.min(inp.T, 60) / sd, 8),
+          v15 > 0 && v240 > 0 ? clip(Math.log(v15 / v240), 3) : 0];
+}
+export const learnedFit = series => fits.get(series) ?? null;
+// (re)train on a series' recorded rounds; returns the fit, or null while there are too few
+export function trainLearned(series, recs, len) {
+  const m = MODELS.find(x => x.learned), rows = scorable(m, {}, recs || []);
+  if (rows.length < LEARN_MIN) { fits.delete(series); return null; }
+  const fit = fitLogistic(rows.map(r => learnFeatures(recordInputs(r, len))), rows.map(r => r.result === 'up' ? 1 : 0));
+  if (fit) fits.set(series, fit); else fits.delete(series);
+  return fit;
 }
 
 // the live volatilities from 1-minute closes (oldest first) — the same the recorder stores per snapshot

@@ -1,25 +1,29 @@
 // Recent rounds with official results, and the track record kept in this browser.
 
 import { KS_FEE, PM_FEE } from './arb.js';
+import { seriesId } from './assets.js';
 import { ksFetchResult, ksRefreshResults } from './kalshi.js';
 import { twap } from './math.js';
 import { pmFetchResult } from './polymarket.js';
 import { loadRecorded, recorded } from './recorder.js';
 import { syncReview } from './review.js';
 import { ROUNDS_SHOWN, ROUND_S, S, TWAP_MS, medianHistory } from './state.js';
-import { backtest, calibration, marketProb, summary } from './stats.js';
+import { OPEN, backtest, calibration, marketProb, summary } from './stats.js';
 import { $, currentRound, fmtHM, roundSpan, signedC } from './util.js';
 import { KS, PM, activeVenues, both, mainVenue } from './venues.js';
 
 // ── Recent rounds + track record ─────────────────────────────────────────────
 // official results from each venue; the track record (market + model 60s before the end, own result)
 // lives in this browser's localStorage, one store per venue and round length
+// (Bitcoin keeps the keys it had before the other coins came)
 const TRACK_KEYS = { poly5: 'btc5m-track-v1', poly15: 'btc-track-poly15-v1', kalshi15: 'btc-track-kalshi15-v1' };
+const trackKey = id => TRACK_KEYS[id] ?? `track-${id}-v1`;
 const tracks = {};
-export const trackId = V => V === KS ? 'kalshi15' : 'poly' + ROUND_S / 60;
+// series id of a venue's market in view: poly5, poly15, kalshi15 for Bitcoin, eth-poly5 … for the others
+export const trackId = V => seriesId(S.asset, V === KS ? 'kalshi' : 'poly', V === KS ? 15 : ROUND_S / 60);
 function trackOf(V) {
   const id = trackId(V);
-  if (!tracks[id]) tracks[id] = (() => { try { return JSON.parse(localStorage.getItem(TRACK_KEYS[id])) || {}; } catch { return {}; } })();
+  if (!tracks[id]) tracks[id] = (() => { try { return JSON.parse(localStorage.getItem(trackKey(id))) || {}; } catch { return {}; } })();
   return tracks[id];
 }
 
@@ -28,7 +32,7 @@ function saveTrack(V) {
   try {
     const keys = Object.keys(t).sort();
     while (keys.length > 600) delete t[keys.shift()];
-    localStorage.setItem(TRACK_KEYS[trackId(V)], JSON.stringify(t));
+    localStorage.setItem(trackKey(trackId(V)), JSON.stringify(t));
   } catch {}
 }
 
@@ -129,7 +133,7 @@ export function renderTrack() {
   el.innerHTML = rows.map(([k, v]) => `<div class="trow"><span>${k}</span><b>${v}</b></div>`).join('') +
     '<div class="track-foot"><span>Stored in this browser</span><button class="link-btn" type="button" id="track-reset">Reset</button></div>';
   $('track-reset').addEventListener('click', () => {
-    if (!confirm(`Reset the ${activeVenues().map(V => V.name).join(' and ')} track record (${ROUND_S / 60}-minute rounds) in this browser?`)) return;
+    if (!confirm(`Reset the ${S.A.sym} ${activeVenues().map(V => V.name).join(' and ')} track record (${ROUND_S / 60}-minute rounds) in this browser?`)) return;
     for (const V of activeVenues()) { tracks[trackId(V)] = {}; saveTrack(V); }
     renderTrack();
   });
@@ -148,11 +152,14 @@ function renderServerTrack(el, server) {
     [`Rounds recorded <span class="muted">· since ${fmtDay(Math.min(...st.map(x => x.s.since)))}</span>`, per(x => x.s.n)],
     ['Market favourite won <span class="muted">· at −60s</span>', per(x => pct(x.s.fav))],
     ['Brier score <span class="muted">· lower is better</span>', per(x => `market ${x.s.brierMkt.toFixed(3)} · model ${x.s.brierModel.toFixed(3)}`)],
+    ['Log loss <span class="muted">· punishes confident misses</span>', per(x => `market ${x.s.logMkt.toFixed(3)} · model ${x.s.logModel.toFixed(3)}`)],
+    [`Still open at −60s <span class="muted">· market ${OPEN[0] * 100}–${OPEN[1] * 100}%</span>`, per(x => x.s.open.n
+      ? `${x.s.open.n} rounds · log loss market ${x.s.open.logMkt.toFixed(3)} · model ${x.s.open.logModel.toFixed(3)}` : 'none yet')],
     [`Model edge ≥ ${BT_EDGE * 100}¢, bought at the ask <span class="muted">· after fees</span>`, per(x => {
       const b = backtest(x.recs, BT_EDGE, x.fee);
       return b.trades ? `<span class="${b.pnl >= 0 ? 'up-t' : 'down-t'}">${signedC(b.perTrade)}</span>&nbsp;a&nbsp;trade · ${b.trades}&nbsp;trades` : 'no trades yet';
     })],
-    ['BTC (Kraken) settled like the market', per(x => `${x.s.ownMatch} / ${x.s.ownN}`)],
+    [`${S.A.sym} (Kraken) settled like the market`, per(x => `${x.s.ownMatch} / ${x.s.ownN}`)],
   ];
   el.innerHTML = rows.map(([k, v]) => `<div class="trow"><span>${k}</span><b>${v}</b></div>`).join('') +
     (!two && st[0].s.n >= 20 ? calibrationChart(st[0].recs, st[0].V) : '') +

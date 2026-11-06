@@ -1,24 +1,31 @@
 // Taker fees, model edge per side, and Polymarket vs Kalshi: price gap, arbitrage pairs, settle-apart risk.
 
+import { seriesId } from './assets.js';
 import { KALSHI_PROXY } from './kalshi.js';
 import { bookLevels, buyEdge, walkPair } from './math.js';
-import { ksTarget, nearStrikeProb } from './model.js';
+import { ksTarget, modelDist } from './model.js';
 import { EXCH, ROUNDS_SHOWN, ROUND_S, S, STALE_MS } from './state.js';
 import { $, currentRound, fmtC, fmtP, fmtPts, fmtSz, signedUsd } from './util.js';
 import { KS, PM, activeVenues } from './venues.js';
 import { recorded } from './recorder.js';
-import { settleApart } from './stats.js';
+import { pairBacktest, splitCurve, splitProb } from './stats.js';
 
 // Both venues charge takers rate × p × (1 − p) per share/contract: Polymarket crypto 0.07, Kalshi 0.07 × the
 // series multiplier (1 for KXBTC15M), rounded up to the cent per order — that rounding only matters for tiny orders.
 export const PM_FEE = 0.07, KS_FEE = 0.07;
-// how far Chainlink's and CF Benchmarks' 60s averages may move apart over one round: an estimate, used until the
-// recorder has seen 3 rounds the venues settled apart (then: the widest BRTI distance from the strike among those)
-const SETTLE_BAND = 5;
-function settleBand() {
-  const p = recorded('poly15'), k = recorded('kalshi15'), sa = p && k ? settleApart(p, k) : null;
-  const measured = !!sa && sa.splits >= 3 && sa.maxDist !== null;
-  return { sa, measured, band: measured ? Math.max(1, Math.ceil(sa.maxDist)) : SETTLE_BAND };
+
+// Settle-apart risk: the two venues settle on different indices (Chainlink, CF Benchmarks), so a round that ends
+// within cents of the strike can go UP on one and DOWN on the other. A pair bought because one venue is cheaper
+// then loses both legs: the price gap usually exists *because* the two indices sit on different sides. The chance
+// comes from the recorded rounds of this coin (stats.js splitCurve: split rate by distance to the strike) and where
+// the model expects the settlement average.
+const recorded15 = () => [recorded(seriesId(S.asset, 'poly', 15)), recorded(seriesId(S.asset, 'kalshi', 15))];
+let curveKey = '', curve = splitCurve([], []);
+export function splitRisk() {
+  const [p, k] = recorded15(), key = `${S.asset}|${p?.length}|${k?.length}`;
+  if (key !== curveKey) { curveKey = key; curve = splitCurve(p, k); }
+  const d = modelDist();
+  return { curve, p: d && S.strike !== null ? splitProb(curve, d, S.strike) : null };
 }
 
 // ── Model edge ───────────────────────────────────────────────────────────────
@@ -44,12 +51,15 @@ export function arbState() {
   const ok = f => f && !f.closed && f.wts * 1000 === currentRound().start && f.mid !== null;
   const a = PM.cur, b = KS.cur;
   if (!ok(a) || !ok(b)) return null;
+  const split = splitRisk().p, ev = r => r && split !== null ? r.edge - split : null;
+  const upPm = walkPair(bookLevels(a.asks, false), PM_FEE, bookLevels(b.bids, true, true), KS_FEE);
+  const downPm = walkPair(bookLevels(a.bids, true, true), PM_FEE, bookLevels(b.asks, false), KS_FEE);
   return {
-    gap: (a.mid - b.mid) * 100,
-    // UP on Polymarket (its asks) + NO on Kalshi (NO asks = YES bids mirrored)
-    upPm:   walkPair(bookLevels(a.asks, false), PM_FEE, bookLevels(b.bids, true, true), KS_FEE),
+    gap: (a.mid - b.mid) * 100, split,
+    // UP on Polymarket (its asks) + NO on Kalshi (NO asks = YES bids mirrored); `ev` = edge after the split risk
+    upPm: upPm && { ...upPm, ev: ev(upPm) },
     // DOWN on Polymarket (UP bids mirrored) + YES on Kalshi (its asks)
-    downPm: walkPair(bookLevels(a.bids, true, true), PM_FEE, bookLevels(b.asks, false), KS_FEE),
+    downPm: downPm && { ...downPm, ev: ev(downPm) },
   };
 }
 
@@ -64,14 +74,21 @@ function venueAgreement() {
   return n ? { n, same } : null;
 }
 
+const signedCents = x => (x > 0.0005 ? '+' : x < -0.0005 ? '−' : '') + fmtC(Math.abs(x));
 function arbRow(id, r) {
   const val = $(id + '-val'), sub = $(id + '-sub');
   if (!r) { val.textContent = '—'; val.className = 'sig-value'; sub.textContent = 'One side of the books is empty'; return; }
-  val.textContent = (r.edge > 0 ? '+' : r.edge < 0 ? '−' : '') + fmtC(Math.abs(r.edge)) + ' / pair';
-  val.className = 'sig-value' + (r.edge > 0 ? ' good' : '');
-  sub.textContent = `${fmtC(r.pa)} + ${fmtC(r.pb)} + fees ${fmtC(r.fees, 2)} = ${fmtC(r.pa + r.pb + r.fees)} for a $1 payout` +
-    (r.pairs > 0 ? ` · up to ${fmtSz(r.pairs)} pairs, +$${r.profit.toFixed(2)}` : '');
+  const ev = r.ev ?? r.edge;
+  val.textContent = signedCents(ev) + ' / pair';
+  val.className = 'sig-value' + (ev > 0 ? ' good' : '');
+  val.title = r.ev !== null ? 'Expected per pair after the split risk' : 'Per pair if both venues settle alike';
+  sub.textContent = `${fmtC(r.pa)} + ${fmtC(r.pb)} + fees ${fmtC(r.fees, 2)} = ${fmtC(r.pa + r.pb + r.fees)} · ` +
+    `${signedCents(r.edge)} if both settle alike` + (r.ev !== null ? `, ${signedCents(r.ev - r.edge)} split risk` : '') +
+    (r.pairs > 0 ? ` · up to ${fmtSz(r.pairs)} pairs` : '');
 }
+
+// percentage with a sensible number of decimals for small risks
+const pctSmall = p => p < 0.001 ? '<0.1%' : p < 0.1 ? (p * 100).toFixed(1) + '%' : Math.round(p * 100) + '%';
 
 export function updateArb(arb) {
   if (!arb) {
@@ -85,12 +102,34 @@ export function updateArb(arb) {
     arbRow('arb1', arb.upPm);
     arbRow('arb2', arb.downPm);
   }
-  const { sa, measured, band } = settleBand(), near = nearStrikeProb(band), agree = venueAgreement();
-  $('risk-val').textContent = near === null ? '—' : near < 0.1 ? '<0.1%' : near.toFixed(1) + '%';
-  $('risk-val').className = 'sig-value' + (near !== null && near >= 5 ? ' warn' : '');
-  $('risk-sub').textContent = `Model chance the settlement ends within ±$${band} of the strike ` +
-    (measured ? `(the widest of ${sa.splits} recorded splits)` : '(an estimate)') + ', where the two indices can disagree' +
-    (sa?.n ? ` · settled apart in ${sa.splits} of ${sa.n} rounds, last 14 days` : agree ? ` · same result in ${agree.same} of the last ${agree.n} rounds` : '');
+  // settle-apart risk now, and the curve it comes from
+  const { curve: c, p } = splitRisk(), agree = venueAgreement(), near = c.bins[0];
+  $('risk-val').textContent = p === null ? '—' : pctSmall(p);
+  $('risk-val').className = 'sig-value' + (p !== null && p >= 0.02 ? ' warn' : '');
+  const own = c.n >= 200;
+  $('risk-sub').textContent = `Chance the venues settle this round apart: where the model expects the settlement × how often ` +
+    `rounds that close to the strike split (${Math.round(near.rate * 100)}% within ${near.hi} bp` +
+    (S.strike !== null ? ` ≈ $${(near.hi * S.strike / 1e4).toLocaleString('en-US', { maximumSignificantDigits: 2 })}` : '') + ')' +
+    (own ? ` · recorded: ${c.splits} splits in ${c.n} rounds` : ` · curve measured on Bitcoin${c.n ? `, ${c.n} rounds of ${S.A.sym} so far` : ''}`) +
+    (!c.n && agree ? ` · same result in ${agree.same} of the last ${agree.n} rounds` : '');
+  updatePairs(c);
+}
+
+// what the recorded snapshots offered, and what it would have made
+let pairsKey = '';
+function updatePairs(c) {
+  const [p, k] = recorded15(), key = `${S.asset}|${p?.length}|${k?.length}|${c.n}`;
+  if (key === pairsKey) return;
+  pairsKey = key;
+  const val = $('pairs-val'), sub = $('pairs-sub');
+  if (!p || !k) { val.textContent = '—'; sub.textContent = 'Needs the recorder’s rounds of both venues'; return; }
+  const bt = pairBacktest(p, k, c, PM_FEE, KS_FEE), r = bt.raw, a = bt.aware, usd = x => (x < 0 ? '−$' : '+$') + Math.abs(x).toFixed(2);
+  if (!r.n) { val.textContent = 'None'; val.className = 'sig-value'; sub.textContent = `No pair under $1 in ${bt.rounds} recorded rounds (60s before the end)`; return; }
+  val.textContent = usd(r.pnl);
+  val.className = 'sig-value ' + (r.pnl >= 0 ? 'up-t' : 'down-t');
+  sub.textContent = `60s before the end, ${r.n} of ${bt.rounds} rounds had a pair under $1; ${r.splits} of them settled apart` +
+    (r.lossSplits ? ` (${r.lossSplits} lost both legs)` : '') + ` · one pair each: ${usd(r.pnl)}. ` +
+    `Only where the edge beats the split risk: ${a.n ? `${a.n} pairs, ${usd(a.pnl)}${a.splits ? `, ${a.splits} split` : ''}` : 'none'}.`;
 }
 
 export function updateSources() {

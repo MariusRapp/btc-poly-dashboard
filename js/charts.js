@@ -7,7 +7,7 @@ import { activeModel, activeParams, modelInputs } from './model.js';
 import { modelPath } from './models.js';
 import { EXCH, S, TWAP_MS, medianHistory } from './state.js';
 import { T } from './theme.js';
-import { $, currentRound, fmtClock, fmtHM, fmtNum, fmtP, fmtPts, signedUsd } from './util.js';
+import { $, currentRound, fmtClock, fmtHM, fmtNum, fmtP, fmtPts, fmtTick, signedUsd } from './util.js';
 import { KS, PM, activeVenues } from './venues.js';
 
 let plotGutter = 72;
@@ -274,13 +274,13 @@ function drawBtc(v) {
   if (strike !== null) { lo = Math.min(lo, strike); hi = Math.max(hi, strike); }
   const fc = forecastPath(v);
   if (fc) for (const p of fc.pts) { lo = Math.min(lo, p.lo68); hi = Math.max(hi, p.hi68); }   // the 68% band in view
-  const pad = Math.max((hi - lo) * 0.12, 3);
+  const pad = Math.max((hi - lo) * 0.12, Math.abs(hi) * 4e-5);   // at least ~$3 on BTC, in any coin's scale
   ({ lo, hi } = easeRange('btc', lo - pad, hi + pad));
   const yOf = p => Y0 + (hi - p) / (hi - lo) * (Y1 - Y0);
 
   const lastP = med.pts[med.pts.length - 1].p;
   yGrid(ctx, lo, hi, yOf, PW, Y0, Y1, (Y1 - Y0) < 240 ? 4 : 6,
-    (v, step) => '$' + v.toLocaleString('en-US', { minimumFractionDigits: step < 1 ? 2 : 0, maximumFractionDigits: step < 1 ? 2 : 0 }),
+    fmtTick,
     xNow >= PW - 1 ? yOf(lastP) : null);
 
   const verts = vertices(med.pts, yOf, false, xNow);

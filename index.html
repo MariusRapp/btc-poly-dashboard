@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="color-scheme" content="light dark" />
-  <title>BTC Up/Down · Polymarket &amp; Kalshi</title>
+  <title>Crypto Up/Down · Polymarket &amp; Kalshi</title>
   <meta name="theme-color" content="#f9f9f7" media="(prefers-color-scheme: light)" />
   <meta name="theme-color" content="#0d0d0d" media="(prefers-color-scheme: dark)" />
   <meta name="apple-mobile-web-app-title" content="BTC Up/Down" />
@@ -19,17 +19,22 @@
   <!-- all modules up front, in parallel, instead of one import level after the other -->
   <link rel="modulepreload" href="js/main.js" />
   <link rel="modulepreload" href="js/alerts.js" />
+  <link rel="modulepreload" href="js/analysis.js" />
   <link rel="modulepreload" href="js/arb.js" />
+  <link rel="modulepreload" href="js/assets.js" />
   <link rel="modulepreload" href="js/chainlink.js" />
   <link rel="modulepreload" href="js/charts.js" />
   <link rel="modulepreload" href="js/kalshi.js" />
   <link rel="modulepreload" href="js/ladder.js" />
+  <link rel="modulepreload" href="js/lag.js" />
+  <link rel="modulepreload" href="js/learn.js" />
   <link rel="modulepreload" href="js/math.js" />
   <link rel="modulepreload" href="js/mode.js" />
   <link rel="modulepreload" href="js/model.js" />
   <link rel="modulepreload" href="js/modelcard.js" />
   <link rel="modulepreload" href="js/models.js" />
   <link rel="modulepreload" href="js/panels.js" />
+  <link rel="modulepreload" href="js/paper.js" />
   <link rel="modulepreload" href="js/polymarket.js" />
   <link rel="modulepreload" href="js/prices.js" />
   <link rel="modulepreload" href="js/recorder.js" />
@@ -46,7 +51,7 @@
 
   <header class="topbar">
     <div class="brand">
-      <div class="brand-title">BTC Up or Down <span class="muted hide-sm" id="brand-len">· 5-minute rounds</span></div>
+      <div class="brand-title"><span class="asym">BTC</span> Up or Down <span class="muted hide-sm" id="brand-len">· 5-minute rounds</span></div>
       <div class="brand-sub" id="market-title">Loading market…</div>
     </div>
     <span class="status"><i class="dot wait" id="live-dot"></i><span id="live-text">Connecting</span></span>
@@ -55,13 +60,20 @@
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
     </button>
     <button class="icon-btn" id="alert-btn" type="button" aria-pressed="false" aria-label="Alerts"
-            title="Alerts: strike crossings in the last minute and model edges of 5¢+ after fees">
+            title="Alerts: strike crossings in the last minute, model edges of 5¢+ after fees and stale order books">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
     </button>
     <button class="icon-btn" id="theme-btn" type="button" aria-label="Switch light/dark theme"></button>
   </header>
 
   <nav class="venuebar" aria-label="Market">
+    <div class="seg" id="asset-seg" role="group" aria-label="Which coin">
+      <button type="button" data-asset="btc"  aria-pressed="true"  title="Bitcoin">BTC</button>
+      <button type="button" data-asset="eth"  aria-pressed="false" title="Ethereum">ETH</button>
+      <button type="button" data-asset="sol"  aria-pressed="false" title="Solana">SOL</button>
+      <button type="button" data-asset="xrp"  aria-pressed="false" title="XRP">XRP</button>
+      <button type="button" data-asset="doge" aria-pressed="false" title="Dogecoin">DOGE</button>
+    </div>
     <div class="seg" id="venue-seg" role="group" aria-label="Which market">
       <button type="button" data-venue="poly"   aria-pressed="true"><i class="lk pm thick"></i>Polymarket</button>
       <button type="button" data-venue="kalshi" aria-pressed="false"><i class="lk ks thick"></i>Kalshi</button>
@@ -76,7 +88,7 @@
 
   <section class="kpis" aria-label="Current round">
     <div class="card kpi kpi-hero">
-      <div class="kpi-label">BTC / USD <span class="muted">· median of exchanges</span></div>
+      <div class="kpi-label"><span class="asym">BTC</span> / USD <span class="muted">· median of exchanges</span></div>
       <div class="hero" id="btc-price">—</div>
       <div class="kpi-delta muted" id="btc-delta">
         <span id="btc-delta-text">Waiting for trades…</span>
@@ -132,7 +144,7 @@
         </div>
 
         <div class="chart-head">
-          <h2>BTC price vs strike</h2>
+          <h2><span class="asym">BTC</span> price vs strike</h2>
           <div class="legend">
             <span><i class="lk"></i><span id="leg-med">Median</span></span>
             <span><i class="lk dash"></i>Strike</span>
@@ -144,7 +156,7 @@
           </div>
         </div>
         <div class="plot" id="btc-plot">
-          <canvas id="btc-canvas" role="img" aria-label="BTC price chart"></canvas>
+          <canvas id="btc-canvas" role="img" aria-label="Price chart"></canvas>
           <div class="tip" id="btc-tip" hidden></div>
         </div>
 
@@ -221,8 +233,12 @@
           <div class="sig-sub" id="arb2-sub">—</div>
         </div>
         <div class="sig">
-          <div class="sig-top"><span class="sig-label" title="Polymarket settles on Chainlink, Kalshi on CF Benchmarks. If the settlement lands right at the strike they can disagree, and then both legs of a pair lose.">Settle-apart risk</span><span class="sig-value" id="risk-val">—</span></div>
+          <div class="sig-top"><span class="sig-label" title="Polymarket settles on Chainlink, Kalshi on CF Benchmarks. If the settlement lands right at the strike they can disagree, and then both legs of a pair usually lose: the price gap tends to point the way the indices differ.">Settle-apart risk</span><span class="sig-value" id="risk-val">—</span></div>
           <div class="sig-sub" id="risk-sub">—</div>
+        </div>
+        <div class="sig">
+          <div class="sig-top"><span class="sig-label" title="Every recorded round 60s before the end: was a pair below $1 after fees, and what did one pair make once the official results were in?">Recorded pairs</span><span class="sig-value" id="pairs-val">—</span></div>
+          <div class="sig-sub" id="pairs-sub">—</div>
         </div>
       </section>
 
@@ -233,6 +249,10 @@
           <div class="sig-sub" id="edge-sub">Needs order book, strike and price</div>
         </div>
         <div class="sig">
+          <div class="sig-top"><span class="sig-label" title="When the price jumps, the model says how far the UP probability should move. If the order book's mid has not followed yet, its quotes are stale for a moment. Below: how fast the book followed the recent jumps (time to cover half of the move; negative = the book moved first).">Book vs price</span><span class="sig-value" id="lag-val">—</span></div>
+          <div class="sig-sub" id="lag-sub">Needs price, strike, model and the running round’s book</div>
+        </div>
+        <div class="sig">
           <div class="sig-top"><span class="sig-label">Projected settlement</span><span class="sig-value" id="proj-val">—</span></div>
           <div class="sig-sub" id="proj-sub">Momentum of the last 30s, extrapolated into the settlement average</div>
         </div>
@@ -240,6 +260,19 @@
           <div class="sig-top"><span class="sig-label" id="bp-label">Buy pressure</span><span class="sig-value" id="bp-val">—</span></div>
           <div class="segbar thin idle" id="bp-bar" aria-hidden="true"><span class="sb-up" id="bp-buy"></span><span class="sb-down" id="bp-sell"></span></div>
           <div class="sig-sub" id="bp-sub">—</div>
+        </div>
+      </section>
+
+      <section class="card" id="card-paper" aria-label="Paper trades">
+        <div class="card-head"><h2>Paper trades</h2><span class="card-meta" id="paper-venue">—</span></div>
+        <div class="paper-ctl">
+          <label class="paper-qty">Shares <input type="number" id="paper-qty" min="1" max="100000" step="1" value="10" inputmode="numeric"></label>
+          <button type="button" class="pbtn up" id="paper-up" disabled>Buy ▲ UP <b>—</b></button>
+          <button type="button" class="pbtn down" id="paper-down" disabled>Buy ▼ DOWN <b>—</b></button>
+        </div>
+        <div id="paper">
+          <div id="paper-stats"></div>
+          <div id="paper-list"></div>
         </div>
       </section>
 
@@ -285,6 +318,16 @@
         </div>
       </div>
     </div>
+  </section>
+
+  <section class="card" id="card-lab" aria-label="Analysis of the recorded rounds">
+    <div class="card-head"><h2>Recorded rounds</h2><span class="card-meta" id="lab-meta">—</span></div>
+    <div class="seg lab-tabs" role="group" aria-label="Which analysis">
+      <button type="button" data-lab="stack" aria-pressed="true" title="Does the model know anything the market price doesn’t?">Model vs market</button>
+      <button type="button" data-lab="round" aria-pressed="false" title="Market and model minute by minute through the round: when is there an edge?">By minute</button>
+      <button type="button" data-lab="hour" aria-pressed="false" title="UP share, typical move and spread by hour of the day">By hour</button>
+    </div>
+    <div id="lab-body"></div>
   </section>
 </div>
 

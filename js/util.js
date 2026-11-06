@@ -5,8 +5,14 @@ import { ROUND_MS, ROUND_S, S } from './state.js';
 export const $ = id => document.getElementById(id);
 
 // ── Formatting & small helpers ───────────────────────────────────────────────
-export const fmtP     = n => '$' + n.toLocaleString('en-US', { minimumFractionDigits:2, maximumFractionDigits:2 });
-export const fmtNum   = n => n.toLocaleString('en-US', { minimumFractionDigits:2, maximumFractionDigits:2 });
+// prices with the decimals of the coin in view (BTC $75,658.59, DOGE $0.07281); fmtAmt rounds an amount coarser
+// ("±$12" for BTC, "±$0.0004" for DOGE)
+const num = (n, d) => n.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+export const fmtNum   = n => num(n, S.A.dp);
+export const fmtP     = n => '$' + num(n, S.A.dp);
+export const fmtAmt   = n => '$' + num(n, S.A.dc);
+// an axis label: as many decimals as the tick step needs
+export const fmtTick  = (v, step) => '$' + num(v, Math.max(0, Math.min(8, -Math.floor(Math.log10(step) + 1e-9))));
 export const fmtSz    = n => n.toLocaleString('en-US', { maximumFractionDigits: n >= 100 ? 0 : 1 });
 export const fmtClock = t => new Date(t).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit', second:'2-digit' });
 export const fmtHM    = t => new Date(t).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });

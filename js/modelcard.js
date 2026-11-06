@@ -4,16 +4,15 @@
 import { KS_FEE, PM_FEE, modelEdges } from './arb.js';
 import { distCdf, distPdf, distQuantile, impliedSigma, niceStep, probAbove, takerFee } from './math.js';
 import { activeModel, activeParams, modelInputs } from './model.js';
-import { EWMA_HALF_LIFE, MODELS, modelPath, paramsOf, scoreModel } from './models.js';
+import { EWMA_HALF_LIFE, LEARN_FEATURES, LEARN_MIN, MODELS, fitFactor, learnedFit, modelPath, paramsOf, scoreModel, trainLearned } from './models.js';
 import { recorded } from './recorder.js';
 import { trackId } from './rounds.js';
 import { ROUND_S, S, saveOpts } from './state.js';
-import { $, fmtC, fmtP, signedC } from './util.js';
+import { $, fmtAmt, fmtC, fmtP, fmtTick, signedC } from './util.js';
 import { KS, PM, both, mainVenue } from './venues.js';
 
 const pct = v => (v * 100).toFixed(v > 0.995 || v < 0.005 ? 1 : 0) + '%';
 const fmtDur = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
-const fmtUsd0 = v => '$' + Math.round(v).toLocaleString('en-US');
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const BT_EDGE = 0.03;
 // the venue the card explains: the one in view; with both venues, Polymarket
@@ -61,6 +60,11 @@ function renderParams() {
     return `<div class="mparam"><div class="mparam-top"><label for="mp-${q.key}">${esc(q.label)}</label><output id="mpo-${q.key}">${esc(q.fmt ? q.fmt(p[q.key]) : p[q.key])}</output></div>
       <input type="range" id="mp-${q.key}" data-param="${q.key}" min="${q.min}" max="${q.max}" step="${q.step}" value="${p[q.key]}">${help}</div>`;
   }).join('');
+  // the Learned model has no settings: what it learned instead; models with a volatility factor can fit it
+  if (m.learned) $('mdl-params').innerHTML = '<div class="mparam" id="mdl-learn"></div>';
+  if (m.params.some(q => q.key === 'f')) $('mdl-params').insertAdjacentHTML('beforeend',
+    `<div class="mparam"><div class="mparam-top"><span>Volatility × that fits this market best</span><button class="link-btn" type="button" id="mdl-fit">Fit to recorded rounds</button></div>
+     <div class="sig-sub" id="mdl-fit-msg">Tries ×0.50 … ×2.00 on the recorded rounds of the market in view and keeps the one with the lowest log loss.</div></div>`);
   const set = (key, v) => {
     S.modelParams = { ...S.modelParams, [m.id]: { ...activeParams(m), [key]: v } };
     const q = m.params.find(x => x.key === key), out = $('mpo-' + key);
@@ -72,6 +76,35 @@ function renderParams() {
     set(el.dataset.param, +el.dataset.value);
     el.parentElement.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b === el)));
   }));
+  $('mdl-fit')?.addEventListener('click', () => {
+    const recs = recorded(trackId(cardVenue())), msg = $('mdl-fit-msg'), before = activeParams(m).f;
+    const r = recs && fitFactor(m, activeParams(m), recs, ROUND_S);
+    if (!r) { msg.textContent = 'No recorded rounds of this market with this model’s inputs yet.'; return; }
+    set('f', r.f);
+    if ($('mp-f')) $('mp-f').value = r.f;
+    msg.textContent = `Fitted on ${r.n} rounds: ×${r.f.toFixed(2)} has the lowest log loss, ${r.log.toFixed(3)}` +
+      (r.f !== before ? ` (×${before.toFixed(2)}: ${r.now.toFixed(3)}).` : ' — the setting already was the best.') +
+      ' Fitted on the same rounds it is scored on, so its score looks a little better than it will be.';
+  });
+  renderLearnInfo();
+}
+
+// what the Learned model took from the recorded rounds of the market in view
+function renderLearnInfo() {
+  const el = $('mdl-learn');
+  if (!el) return;
+  const series = trackId(cardVenue()), fit = learnedFit(series), m = MODELS.find(x => x.learned);
+  if (!fit) {
+    const recs = recorded(series), n = recs ? recs.filter(r => r.snap_t != null && r.result && r.vol15 != null && r.vel != null).length : 0;
+    el.innerHTML = `<div class="sig-sub">Not trained yet: needs ${LEARN_MIN} recorded rounds of this market with every input, has ${n}. ` +
+      'Until then it gives the Standard model’s probability.</div>';
+    return;
+  }
+  const w = fit.w.slice(1).map((v, i) => `<tr><td>${esc(LEARN_FEATURES[i])}</td><td>${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(2)}</td><td>±${fit.se[i + 1].toFixed(2)}</td></tr>`).join('');
+  el.innerHTML = `<div class="mparam-top"><span>Learned from ${fit.n} rounds</span></div>
+    <table class="edge-t"><thead><tr><th>Weight on</th><th>weight</th><th>±</th></tr></thead><tbody>${w}</tbody></table>
+    <div class="sig-sub">Log-odds per unit: distance and trend in typical moves, volatility as ln(15 min ÷ 4 h). About 1.6 on the distance is ` +
+    `what the Standard model implies; a trend weight well away from 0 (more than twice its ±) means trends carried on (or reversed). Refitted as rounds come in. ${esc(m.name)} is scored out of sample.</div>`;
 }
 
 // ── Score of every model on the recorded rounds of the market in view ────────
@@ -81,6 +114,8 @@ function renderScores() {
   const key = `${series}|${recs ? recs.length + ':' + (recs[recs.length - 1]?.start ?? '') : 'none'}|${JSON.stringify(S.modelParams)}`;
   if (key === scoreKey) return;
   scoreKey = key;
+  if (recs) trainLearned(series, recs, ROUND_S);
+  renderLearnInfo();
   const fee = V === KS ? KS_FEE : PM_FEE, withSnap = recs?.filter(r => r.snap_t != null && r.result).length ?? 0;
   for (const m of MODELS) {
     const el = $('msc-' + m.id);
@@ -88,15 +123,18 @@ function renderScores() {
     if (!recs) { el.textContent = 'Not scored yet: the recorder collects the rounds of this market.'; continue; }
     const sc = scoreModel(m, paramsOf(m, S.modelParams[m.id]), recs, ROUND_S, fee, BT_EDGE);
     if (!sc) {
-      el.textContent = withSnap ? 'Scored once the recorder also stores this model’s inputs (recorder update).'
-                                : 'Not scored yet: no recorded round of this market has ended with a snapshot.';
+      el.textContent = m.learned ? `Learns and is scored once ${LEARN_MIN} recorded rounds of this market have every input.`
+        : withSnap ? 'Scored once the recorder also stores this model’s inputs (recorder update).'
+                   : 'Not scored yet: no recorded round of this market has ended with a snapshot.';
       continue;
     }
     const bt = sc.bt.trades ? `${signedC(sc.bt.perTrade)} a trade (${sc.bt.trades})` : 'no trades';
-    el.innerHTML = `Brier <b>${sc.brierModel.toFixed(3)}</b> vs market ${sc.brierMkt.toFixed(3)} · ${sc.n} rounds · ` +
-      `edge ≥ ${BT_EDGE * 100}¢: ${bt}` + (sc.n < 50 ? ' · <i>too few rounds to judge</i>' : '');
-    el.title = 'On recorded rounds of this market, 60s before the end. Brier: lower is better. Backtest: buy the side with ' +
-      'a model edge of at least 3¢ at the best ask, after fees.';
+    const o = sc.open;
+    el.innerHTML = `Log loss <b>${sc.logModel.toFixed(3)}</b> vs market ${sc.logMkt.toFixed(3)} · Brier ${sc.brierModel.toFixed(3)} vs ${sc.brierMkt.toFixed(3)} · ` +
+      `${sc.n} rounds` + (o.n ? `, ${o.n} still open: log loss <b>${o.logModel.toFixed(3)}</b> vs ${o.logMkt.toFixed(3)}` : '') +
+      ` · edge ≥ ${BT_EDGE * 100}¢: ${bt}` + (sc.n < 50 ? ' · <i>too few rounds to judge</i>' : '');
+    el.title = 'On recorded rounds of this market, 60s before the end. Log loss and Brier: lower is better; "still open" = market ' +
+      'between 10% and 90%, where market and model part. Backtest: buy the side with a model edge of at least 3¢ at the best ask, after fees.';
   }
 }
 
@@ -110,7 +148,7 @@ export function updateModelCard() {
   if (!path) {
     cur = null;
     $('mdl-svg').innerHTML = '';
-    $('mdl-steps').innerHTML = '<li class="mstep"><span class="ms-s">Needs the BTC price, the strike and the volatility…</span></li>';
+    $('mdl-steps').innerHTML = `<li class="mstep"><span class="ms-s">Needs the ${S.A.sym} price, the strike and the volatility…</span></li>`;
     $('mdl-vs').innerHTML = $('mdl-edge').innerHTML = '';
     return;
   }
@@ -135,13 +173,15 @@ function renderSteps(m, p, inp, d, { sigma, drift }, pUp) {
   const rows = [
     ['Distance to the strike', `<span class="${gap >= 0 ? 'up-t' : 'down-t'}">${gap >= 0 ? '▲' : '▼'} ${fmtP(Math.abs(gap))}</span>`,
       inWin ? `Settlement average so far ${fmtP(inp.observed)} over ${Math.round(60 - inp.T)}s of 60; the rest counted at today’s ${fmtP(inp.price)}, against the strike ${fmtP(inp.strike)}`
-            : `BTC ${fmtP(inp.price)} (median of exchanges) against the strike ${fmtP(inp.strike)} (60s average before the start)`],
-    ['Typical move until the end', `±${fmtUsd0(d.sd)}`,
-      `${fmtDur(inp.T)} left · volatility ${sigma.toFixed(2)} $/√s (${volSrc}${p.f && p.f !== 1 ? `, ×${p.f.toFixed(2)}` : ''}). ` +
+            : `${S.A.sym} ${fmtP(inp.price)} (median of exchanges) against the strike ${fmtP(inp.strike)} (60s average before the start)`],
+    ['Typical move until the end', `±${fmtAmt(d.sd)}`,
+      `${fmtDur(inp.T)} left · volatility ${sigma.toPrecision(3)} $/√s (${volSrc}${p.f && p.f !== 1 ? `, ×${p.f.toFixed(2)}` : ''}). ` +
       'Moves grow with the square root of time; averaging the last minute damps them.' +
-      (drift ? ` Trend: the last minute’s speed adds ${shift >= 0 ? '+' : '−'}${fmtUsd0(Math.abs(shift))}.` : '')],
-    ['Typical moves away from the strike', `${Math.abs(z).toFixed(1)}×`, `${fmtUsd0(Math.abs(d.mean - inp.strike))} ÷ ${fmtUsd0(d.sd)} — ${leaning}`],
-    ['UP probability', pct(pUp), `The share of the curve right of the strike${d.df ? `, with fat tails (${d.df})` : ''}. DOWN: ${pct(1 - pUp)}.`],
+      (drift ? ` Trend: the last minute’s speed adds ${shift >= 0 ? '+' : '−'}${fmtAmt(Math.abs(shift))}.` : '')],
+    ['Typical moves away from the strike', `${Math.abs(z).toFixed(1)}×`, `${fmtAmt(Math.abs(d.mean - inp.strike))} ÷ ${fmtAmt(d.sd)} — ${leaning}`],
+    ['UP probability', pct(pUp), `The share of the curve right of the strike${d.df ? `, with fat tails (${d.df})` : ''}. DOWN: ${pct(1 - pUp)}.` +
+      (m.learned ? (learnedFit(inp.series) ? ` Learned from ${learnedFit(inp.series).n} rounds: the curve sits where the weights put it; the Standard model says ${pct(probAbove({ mean: base, sd: d.sd }, inp.strike))}.`
+                                           : ' Not trained yet, so this is the Standard model’s probability.') : '')],
   ];
   $('mdl-steps').innerHTML = rows.map(([l, v, s], i) =>
     `<li class="mstep n${i === 3 ? ' result' : ''}"><span class="ms-l">${l}</span><span class="ms-v">${v}</span><span class="ms-s">${s}</span></li>`).join('');
@@ -158,9 +198,9 @@ function renderVs(V, inp, d, sigma, pUp) {
   else if (imp === null) why = 'The market favours the other side than the price does. No amount of volatility explains that: it may weigh a trend, ' +
     'the index the round settles on (Chainlink / CF Benchmarks) or news differently.';
   else {
-    const r = imp / sigma, move = fmtUsd0(d.sd * r);
-    why = r > 1.15 ? `The market prices in about <b>${r.toFixed(1)}×</b> the movement the model expects (±${move} instead of ±${fmtUsd0(d.sd)} by the end): it takes the round as more open.`
-        : r < 0.87 ? `The market prices in only about <b>${r.toFixed(1)}×</b> the movement the model expects (±${move} instead of ±${fmtUsd0(d.sd)}): it takes the round as more decided.`
+    const r = imp / sigma, move = fmtAmt(d.sd * r);
+    why = r > 1.15 ? `The market prices in about <b>${r.toFixed(1)}×</b> the movement the model expects (±${move} instead of ±${fmtAmt(d.sd)} by the end): it takes the round as more open.`
+        : r < 0.87 ? `The market prices in only about <b>${r.toFixed(1)}×</b> the movement the model expects (±${move} instead of ±${fmtAmt(d.sd)}): it takes the round as more decided.`
         : 'Market and model expect about the same movement; the gap is small.';
   }
   $('mdl-vs').innerHTML = `
@@ -208,8 +248,8 @@ function drawCurve() {
   let g = area(lo, k, 'mc-down') + area(k, hi, 'mc-up') + `<polyline class="mc-line" points="${pts(lo, hi)}"/>`;
   g += `<line class="mc-axis" x1="${CL}" x2="${CW - CR}" y1="${base + .5}" y2="${base + .5}"/>`;
   const step = niceStep(hi - lo, CW < 420 ? 3 : 4);
-  for (let v = Math.ceil(lo / step) * step; v <= hi; v += step) g += `<text class="mc-tick" x="${xOf(v).toFixed(1)}" y="${CH - 6}" text-anchor="middle">${fmtUsd0(v)}</text>`;
-  // strike (dashed) and BTC now (solid), labels at the top, pushed apart when close
+  for (let v = Math.ceil(lo / step) * step; v <= hi; v += step) g += `<text class="mc-tick" x="${xOf(v).toFixed(1)}" y="${CH - 6}" text-anchor="middle">${fmtTick(v, step)}</text>`;
+  // strike (dashed) and the price now (solid), labels at the top, pushed apart when close
   g += `<line class="mc-strike" x1="${xs_}" x2="${xs_}" y1="${CT - 14}" y2="${base}"/><line class="mc-now" x1="${xn}" x2="${xn}" y1="${CT - 14}" y2="${base}"/>`;
   // the two labels: centred over their line, kept inside the plot and apart from each other
   const labels = [[xs_, `Strike ${fmtP(inp.strike)}`], [xn, `now ${fmtP(inp.price)}`]]

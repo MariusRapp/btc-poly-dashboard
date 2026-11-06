@@ -1,8 +1,9 @@
 // Alerts: toast, beep, vibration, and a system notification while the tab is in the background.
 
 import { EDGE_ALERT, bestEdge, modelEdges } from './arb.js';
+import { staleBook } from './lag.js';
 import { ROUND_S, S } from './state.js';
-import { $, currentRound, fmtC, fmtSz, signedC, signedUsd } from './util.js';
+import { $, currentRound, fmtC, fmtPts, fmtSz, signedC, signedUsd } from './util.js';
 import { activeVenues, both } from './venues.js';
 
 // ── Alerts: toast + beep + vibration, system notification while the tab is in the background ──
@@ -47,11 +48,11 @@ export async function setAlerts(on, fromClick) {
   if (!on || !fromClick) return;
   try { S.audioCtx = S.audioCtx || new (window.AudioContext || window.webkitAudioContext)(); await S.audioCtx.resume(); } catch {}
   if ('Notification' in window && Notification.permission === 'default') { try { await Notification.requestPermission(); } catch {} }
-  toast('Alerts on', 'Strike crossings in the last minute, model edges of 5¢+ after fees' + (both() ? ', Poly/Kalshi arbitrage' : ''));
+  toast('Alerts on', 'Strike crossings in the last minute, model edges of 5¢+ after fees, stale books' + (both() ? ', Poly/Kalshi arbitrage' : ''));
 }
 
 function alertOnce(kind, start, title, body) {
-  const k = kind + '|' + start;
+  const k = kind + '|' + S.asset + '|' + start;
   if (alerted.has(k)) return;
   alerted.add(k);
   if (alerted.size > 200) alerted.delete(alerted.values().next().value);
@@ -71,15 +72,21 @@ export function checkAlerts(now, modelP, exp, arb) {
     lastSide = side;
   }
   if (!alertsOn) return;
+  // the book trails a price jump by 5+ pts (lag.js)
+  const stale = T > 10 ? staleBook() : null;
+  if (stale) alertOnce('stale-' + stale.V.key, start, `Stale book: ${stale.side === 'up' ? '▲ UP' : '▼ DOWN'}${both() ? ' on ' + stale.V.name : ''}`,
+    `The price says ${fmtPts(stale.dModel)}, the book trails by ${Math.abs(stale.gap).toFixed(0)} pts${stale.text ? ' · ' + stale.text : ''}`);
   if (modelP !== null && T > 60 && T < ROUND_S - 30) for (const V of activeVenues()) {
     const best = bestEdge(modelEdges(V, modelP) || []);
     if (!best || best.edge < EDGE_ALERT) continue;
     alertOnce('edge-' + V.key, start, `Model edge: buy ${best.side.toUpperCase()}${both() ? ' on ' + V.name : ''}`,
       `${fmtC(best.price)} ask + fee vs model ${(best.side === 'up' ? modelP : 100 - modelP).toFixed(0)}% → ${signedC(best.edge)} per share`);
   }
-  // both venues: a pair (UP on one, DOWN on the other) below $1 after fees, with some size behind it
+  // both venues: a pair (UP on one, DOWN on the other) below $1 after fees, with some size behind it, that still
+  // earns at least 0.5¢ once the chance of the venues settling apart is taken off (arb.js splitRisk)
   if (arb && T > 5) for (const [k, r, name] of [['arb-up', arb.upPm, 'Poly UP + Kalshi NO'], ['arb-down', arb.downPm, 'Poly DOWN + Kalshi YES']]) {
-    if (!r || r.edge < 0.005 || r.pairs < 5) continue;
-    alertOnce(k, start, `Arbitrage: ${name}`, `${fmtC(r.pa)} + ${fmtC(r.pb)} + fees → +${fmtC(r.edge)} per pair, up to ${fmtSz(r.pairs)} pairs`);
+    if (!r || r.ev === null || r.ev < 0.005 || r.pairs < 5) continue;
+    alertOnce(k, start, `Arbitrage: ${name}`, `${fmtC(r.pa)} + ${fmtC(r.pb)} + fees → +${fmtC(r.edge)} per pair, ` +
+      `+${fmtC(r.ev)} after the split risk, up to ${fmtSz(r.pairs)} pairs`);
   }
 }

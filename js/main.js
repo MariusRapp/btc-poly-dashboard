@@ -1,11 +1,14 @@
 // Entry point: builds the sources table and tooltips, wires up the controls, starts the feeds and timers.
 
 import { alertsOn, setAlerts } from './alerts.js';
+import { initLab, updateLab } from './analysis.js';
+import { initPaper, settlePaper } from './paper.js';
+import { lagTick } from './lag.js';
 import { pollChainlink } from './chainlink.js';
 import { attachHover, btcC, probC, wakeFrame, yRange } from './charts.js';
 import { ksLoad, ksSchedule } from './kalshi.js';
 import { setBookSide, setBookVenue, setBookView } from './ladder.js';
-import { setMode, syncModeUI } from './mode.js';
+import { setAsset, setMode, syncModeUI } from './mode.js';
 import { updateUI } from './panels.js';
 import { loadPolymarket } from './polymarket.js';
 import { backfill, connectExchanges, getMedian, seedUsdt } from './prices.js';
@@ -24,6 +27,7 @@ function tick() {
   const now = Date.now();
   if (now - S.tpsTick >= 1000) { S.tps = S.tpsCount; S.tpsCount = 0; S.tpsTick = now; }
   updateUI(now);
+  lagTick(now);   // book vs price: at 5 Hz, so a book's reaction time is measured to a fraction of a second
 }
 
 // ── Boot ─────────────────────────────────────────────────────────────────────
@@ -82,7 +86,8 @@ $('show-gap').addEventListener('change', e => {
   saveOpts();
 });
 
-// market switch: Polymarket / Kalshi / both, and the round length (Polymarket alone only)
+// coin switch, market switch: Polymarket / Kalshi / both, and the round length (Polymarket alone only)
+document.querySelectorAll('[data-asset]').forEach(b => b.addEventListener('click', () => setAsset(b.dataset.asset)));
 document.querySelectorAll('[data-venue]').forEach(b => b.addEventListener('click', () => {
   if (b.dataset.venue !== S.venueMode) setMode(b.dataset.venue);
 }));
@@ -157,8 +162,10 @@ if ('wakeLock' in navigator) {
   try { if (localStorage.getItem('wake') === '1') setWake(true); } catch {}
 }
 
-onRecorded(() => { renderTrack(); updateModelCard(); });   // the recorder's rounds arrived or refreshed
+onRecorded(() => { renderTrack(); updateModelCard(); updateLab(); });   // the recorder's rounds arrived or refreshed
 initModelCard();
+initLab();
+initPaper();
 readTheme();
 attachHover(btcC.el, 'btc');
 attachHover(probC.el, 'prob');
@@ -181,6 +188,8 @@ wakeFrame();
 // Safety sampler: ensure each probability history always has a recent point even during quiet markets
 setInterval(() => { for (const V of activeVenues()) if (V.lastProb !== null) pushProbPoint(V, V.lastProb); }, 1000);
 setInterval(refreshRounds, 30_000);
+setInterval(settlePaper, 30_000);
+setTimeout(settlePaper, 5000);
 
 // watchdog: mobile browsers can leave sockets open but silent — close them so they reconnect
 setInterval(() => {
