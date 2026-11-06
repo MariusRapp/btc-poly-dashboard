@@ -26,6 +26,7 @@
   <link rel="modulepreload" href="js/charts.js" />
   <link rel="modulepreload" href="js/kalshi.js" />
   <link rel="modulepreload" href="js/ladder.js" />
+  <link rel="modulepreload" href="js/lag.js" />
   <link rel="modulepreload" href="js/learn.js" />
   <link rel="modulepreload" href="js/math.js" />
   <link rel="modulepreload" href="js/mode.js" />
@@ -59,7 +60,7 @@
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
     </button>
     <button class="icon-btn" id="alert-btn" type="button" aria-pressed="false" aria-label="Alerts"
-            title="Alerts: strike crossings in the last minute and model edges of 5¢+ after fees">
+            title="Alerts: strike crossings in the last minute, model edges of 5¢+ after fees and stale order books">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
     </button>
     <button class="icon-btn" id="theme-btn" type="button" aria-label="Switch light/dark theme"></button>
@@ -246,6 +247,10 @@
         <div class="sig">
           <div class="sig-top"><span class="sig-label" title="Expected gain per $1 share when buying a side at its best ask, after the taker fee (0.07 × p × (1 − p)), if the model is right. Model: normal approximation of the settlement average (60s TWAP), volatility from the last hour of 1-minute returns">Model edge</span><span class="sig-value" id="edge-val">—</span></div>
           <div class="sig-sub" id="edge-sub">Needs order book, strike and price</div>
+        </div>
+        <div class="sig">
+          <div class="sig-top"><span class="sig-label" title="When the price jumps, the model says how far the UP probability should move. If the order book's mid has not followed yet, its quotes are stale for a moment. Below: how fast the book followed the recent jumps (time to cover half of the move; negative = the book moved first).">Book vs price</span><span class="sig-value" id="lag-val">—</span></div>
+          <div class="sig-sub" id="lag-sub">Needs price, strike, model and the running round’s book</div>
         </div>
         <div class="sig">
           <div class="sig-top"><span class="sig-label">Projected settlement</span><span class="sig-value" id="proj-val">—</span></div>

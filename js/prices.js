@@ -33,7 +33,12 @@ function onTrade(key, tr) {
   medianHistory.push({ t: Math.max(tr.t, lastM ? lastM.t : 0), p: med });
   if (medianHistory.length > MED_BUF) medianHistory.splice(0, 5000);
   S.lastMedianP = med;
+  // the same median by when this browser got it: the order book's timestamps are local too (lag.js)
+  const now = Date.now();
+  recvMedian.push({ t: Math.max(now, recvMedian[recvMedian.length - 1]?.t ?? 0), p: med });
+  while (recvMedian[0].t < now - 30_000) recvMedian.shift();
 }
+export const recvMedian = [];   // {t: local receive time, p} of the last 30s
 
 // ── Backfill: recent trades over REST so charts, strike and model work right after loading ──
 // (Coinbase, Kraken and Binance allow browser requests; Bitstamp answers browsers with 403, Gemini and Bitfinex send no CORS)
@@ -173,6 +178,7 @@ export function switchExchanges() {
     ex.trades = []; ex.lastP = null; ex.lastTT = 0; ex.lastMsgT = 0;
   }
   medianHistory.length = 0;
+  recvMedian.length = 0;
   S.lastMedianP = null;
   connectExchanges();
 }

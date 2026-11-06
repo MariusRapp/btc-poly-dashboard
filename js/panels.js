@@ -3,6 +3,7 @@
 import { checkAlerts } from './alerts.js';
 import { updateLab } from './analysis.js';
 import { updatePaper } from './paper.js';
+import { renderLag } from './lag.js';
 import { arbState, bestEdge, modelEdges, updateArb, updateLive, updateSources } from './arb.js';
 import { btcC, probC } from './charts.js';
 import { KALSHI_PROXY, ksCheckSwitch } from './kalshi.js';
@@ -83,10 +84,11 @@ export function updateUI(now) {
     S.lastSlowT = now;
     const arb = both() ? arbState() : null;
     updateSignals(now, modelP);
+    renderLag();
     updateModelCard();
     updateLab();
     updatePaper();
-    if (arb) updateArb(arb);
+    if (both()) updateArb(arb);   // also without both books: the split risk and the recorded pairs
     updateSources();
     updateLive();
     recordTrack(now, modelP);
