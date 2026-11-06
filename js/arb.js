@@ -5,7 +5,7 @@ import { KALSHI_PROXY } from './kalshi.js';
 import { bookLevels, buyEdge, walkPair } from './math.js';
 import { ksTarget, modelDist } from './model.js';
 import { EXCH, ROUNDS_SHOWN, ROUND_S, S, STALE_MS } from './state.js';
-import { $, currentRound, fmtAmt, fmtC, fmtP, fmtPts, fmtSz, signedUsd } from './util.js';
+import { $, currentRound, fmtC, fmtP, fmtPts, fmtSz, signedUsd } from './util.js';
 import { KS, PM, activeVenues } from './venues.js';
 import { recorded } from './recorder.js';
 import { pairBacktest, splitCurve, splitProb } from './stats.js';
@@ -108,7 +108,8 @@ export function updateArb(arb) {
   $('risk-val').className = 'sig-value' + (p !== null && p >= 0.02 ? ' warn' : '');
   const own = c.n >= 200;
   $('risk-sub').textContent = `Chance the venues settle this round apart: where the model expects the settlement × how often ` +
-    `rounds that close to the strike split (${Math.round(near.rate * 100)}% within ${near.hi} bp${S.strike !== null ? ` ≈ ${fmtAmt(near.hi * S.strike / 1e4)}` : ''})` +
+    `rounds that close to the strike split (${Math.round(near.rate * 100)}% within ${near.hi} bp` +
+    (S.strike !== null ? ` ≈ $${(near.hi * S.strike / 1e4).toLocaleString('en-US', { maximumSignificantDigits: 2 })}` : '') + ')' +
     (own ? ` · recorded: ${c.splits} splits in ${c.n} rounds` : ` · curve measured on Bitcoin${c.n ? `, ${c.n} rounds of ${S.A.sym} so far` : ''}`) +
     (!c.n && agree ? ` · same result in ${agree.same} of the last ${agree.n} rounds` : '');
   updatePairs(c);

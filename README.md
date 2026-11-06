@@ -1,11 +1,17 @@
-# BTC · Polymarket & Kalshi Dashboard
+# Krypto Up/Down · Polymarket & Kalshi Dashboard
 
-Live-Dashboard für die „Bitcoin Up or Down“-Märkte: die 5- und 15-Minuten-Runden auf Polymarket und die
-15-Minuten-Runden auf Kalshi („BTC price up in next 15 mins?“, Serie `KXBTC15M`).
+Live-Dashboard für die „Up or Down“-Märkte auf **Bitcoin, Ethereum, Solana, XRP und Dogecoin**: die 5- und
+15-Minuten-Runden auf Polymarket und die 15-Minuten-Runden auf Kalshi („BTC price up in next 15 mins?“, Serien
+`KXBTC15M`, `KXETH15M`, `KXSOL15M`, `KXXRP15M`, `KXDOGE15M`).
 Polymarket läuft komplett im Browser – kein Backend, kein Build-Schritt, keine API-Keys. Für Kalshi braucht es
 einen kleinen Proxy (siehe unten), weil Kalshi Browser-Anfragen von fremden Seiten blockiert.
 
 **Live:** https://mariusrapp.github.io/btc-poly-dashboard/
+
+Der Coin-Schalter ganz oben (BTC · ETH · SOL · XRP · DOGE) wechselt alles auf einmal: Börsen-Feeds, Chainlink-Feed,
+Volatilität, Märkte, Trefferquote und die Runden des Recorders. Preise und Beträge haben die Nachkommastellen des Coins
+(DOGE $0.07281), und Schwellen, die früher in Dollar für Bitcoin galten, sind jetzt Anteile am Preis.
+`?asset=eth` in der Adresse wählt einen Coin direkt; die Wahl wird gemerkt.
 
 ## Drei Ansichten
 
@@ -29,7 +35,7 @@ Kalshi hat keine 5-Minuten-Runden; „Kalshi“ und „Both“ laufen deshalb im
 | `test/` | Tests für die Rechenkerne (`math.js`, Chainlink-Dekodierung) und den Modul-Aufbau: `npm test`. |
 | `serve.mjs` | Kleiner lokaler Server: `npm start` → http://localhost:8000/ |
 | `manifest.webmanifest`, `icons/` | App-Manifest und Icons: Das Dashboard lässt sich auf dem Handy zum Home-Bildschirm hinzufügen und öffnet dann im Vollbild. |
-| `recorder/` | Cloudflare Worker mit Cron Trigger und D1-Datenbank: zeichnet jede Runde auf, auch ohne offenen Tab (siehe „Recorder“). |
+| `recorder/` | Cloudflare Worker mit Cron Trigger und D1-Datenbank: zeichnet jede Minute alle laufenden Runden aller Coins auf, auch ohne offenen Tab (siehe „Recorder“). |
 | `kalshi-proxy/` | Cloudflare Worker, der Kalshis öffentliche Marktdaten mit CORS-Headern an das Dashboard weiterreicht (`worker.js`), plus `dev.mjs` zum lokalen Testen mit Node. |
 | `btc-stream.html` | Schlanker BTC/USD-Tick-Stream (Binance aggTrade) mit Volumen und Buy Pressure. |
 | `poly.ipynb` | Jupyter-Notebook: Polymarket-Orderbuch als ipywidgets-Dashboard und Strike-Suche über den Chainlink-Feed. |
@@ -63,23 +69,31 @@ In der Ansicht „Both“ vergleicht eine eigene Karte beide Märkte derselben R
 
 - **Price gap:** UP-Mid auf Polymarket minus YES-Mid auf Kalshi.
 - **Poly UP + Kalshi NO** und **Poly DOWN + Kalshi YES:** Kauf beider Seiten zu den besten Ask-Preisen. Einer der beiden
-  Anteile zahlt 1 $, solange beide Börsen gleich abrechnen. Angezeigt werden Kosten inklusive Taker-Gebühren
-  (beide Börsen: 0,07 × p × (1 − p) pro Anteil, höchstens 1,75 ¢ bei 50 ¢) und – falls ein Paar unter 1 $ kostet –
-  wie viele Paare die Orderbücher hergeben und was das brutto bringt.
+  Anteile zahlt 1 $, solange beide Börsen gleich abrechnen. Angezeigt wird zuerst, was ein Paar **nach dem Split-Risiko**
+  im Mittel bringt, darunter die Kosten inklusive Taker-Gebühren (beide Börsen: 0,07 × p × (1 − p) pro Anteil,
+  höchstens 1,75 ¢ bei 50 ¢), der Gewinn, falls beide gleich abrechnen, und wie viele Paare die Orderbücher hergeben.
 - **Settle-apart risk:** Weil Chainlink und CF Benchmarks nicht identisch sind, können die Börsen eine Runde
-  unterschiedlich abrechnen, wenn der Kurs am Ende genau am Strike liegt. Dann verlieren *beide* Anteile eines Paares.
-  Die Karte zeigt die Modell-Wahrscheinlichkeit, dass die Abrechnung innerhalb von ±5 $ um den Strike landet
-  (eine Schätzung), und wie oft beide Börsen in den letzten Runden gleich abgerechnet haben. Runden mit
-  unterschiedlichem Ergebnis sind unter „Recent rounds“ mit ≠ markiert.
+  unterschiedlich abrechnen, wenn der Kurs am Ende fast genau am Strike liegt. Dann verlieren meist *beide* Anteile eines
+  Paares: Der Preisunterschied zeigt gerade in die Richtung, in der die beiden Indizes auseinanderliegen. Wie oft das
+  passiert, misst der Recorder: Bei Bitcoin liefen bis 6.11.2026 12 von 26 Runden auseinander, die innerhalb von
+  0,25 Basispunkten (≈ 2 $) vom Strike endeten, 7 von 28 bei 0,25–0,5 bp, 5 von 56 bei 0,5–1 bp, keine von 100 bei 1–2 bp
+  und 1 von 1.193 darüber. Diese Kurve (je Coin aus seinen eigenen Runden, solange es wenige sind zur Bitcoin-Kurve
+  hingezogen) und die Modell-Verteilung der Abrechnung ergeben die Split-Wahrscheinlichkeit der laufenden Runde.
+  Runden mit unterschiedlichem Ergebnis sind unter „Recent rounds“ mit ≠ markiert.
+- **Recorded pairs:** spielt die aufgezeichneten Runden 60 s vor dem Ende nach: Wie oft gab es ein Paar unter 1 $, und
+  was hätte je ein Paar mit den offiziellen Ergebnissen gebracht – alle Paare, und nur die, bei denen der Preisvorteil
+  das Split-Risiko übersteigt. Stand 6.11.2026: 15 Paare in 87 Runden, −1,71 $ (beide Splits kosteten beide Anteile);
+  mit der Regel 7 Paare, +0,16 $ (die Kurve stammt aus denselben Runden, das ist also eher zu optimistisch).
 
-Die Glocke alarmiert in dieser Ansicht zusätzlich, wenn ein Paar nach Gebühren mindestens 0,5 ¢ unter 1 $ kostet.
+Die Glocke alarmiert in dieser Ansicht zusätzlich, wenn ein Paar nach Gebühren *und* Split-Risiko mindestens 0,5 ¢ bringt.
 
 ## Datenquellen
 
-- **BTC-Preis:** Trade-WebSockets von Coinbase, Kraken, Bitstamp, Gemini, Bitfinex und Binance; Median
-  aus mindestens drei frischen Quellen. Binance und Bitfinex laufen über BTC/USDT und werden mit dem USDT/USD-Kurs
+- **Coin-Preis:** Trade-WebSockets von Coinbase, Kraken, Bitstamp, Gemini, Bitfinex und Binance; Median
+  aus mindestens drei frischen Quellen. Binance und Bitfinex laufen über <Coin>/USDT und werden mit dem USDT/USD-Kurs
   von Coinbase umgerechnet. Bitfinex' eigenes BTC/USD-Paar liegt dauerhaft 100 $+ über dem Rest, weil Dollar auf
-  Bitfinex schwer abzuheben sind und dort rund 0,15 % weniger wert sind als Bankdollar.
+  Bitfinex schwer abzuheben sind und dort rund 0,15 % weniger wert sind als Bankdollar. Die Symbole aller fünf Coins
+  (auch die Chainlink-Feeds auf Polygon) stehen in `js/assets.js` und sind gegen die Live-APIs geprüft.
   Beim Laden und nach der Rückkehr aus dem Hintergrund werden die letzten Minuten per REST nachgeladen
   (Coinbase, Kraken, Binance – die anderen Börsen erlauben keine Browser-Anfragen).
 - **Polymarket:** Gamma API für Marktsuche und offizielle Rundenergebnisse, CLOB-WebSocket für das Orderbuch.
@@ -122,30 +136,44 @@ node serve.mjs                       # Dashboard unter http://localhost:8000/?ka
 ## Recorder
 
 Der Browser sammelt nur, solange ein Tab offen ist. Der Worker in `recorder/` läuft deshalb jede Minute auf Cloudflare
-(Cron Trigger) und speichert pro Markt (`poly5`, `poly15`, `kalshi15`) und Runde in der D1-Datenbank `btc-rounds`:
+(Cron Trigger) und speichert für alle fünf Coins und jeden ihrer drei Märkte (Bitcoin: `poly5`, `poly15`, `kalshi15`;
+die anderen mit Präfix: `eth-poly5`, `doge-kalshi15`, …) in der D1-Datenbank `btc-rounds`:
 
-- besten Bid und Ask und die Modell-Wahrscheinlichkeit 60 s vor dem Ende (dasselbe Modell wie im Dashboard, `js/math.js`),
-- BTC-60-s-Durchschnitt vor dem Start und vor dem Ende (zeitgewichtet aus Kraken-BTC/USD-Trades; Binance blockt
-  Anfragen aus dem Cloudflare-Netz),
-- das offizielle Ergebnis, bei Kalshi zusätzlich die veröffentlichten BRTI-Werte (Start und Abrechnung).
+- **jede Minute** einen Snapshot jeder laufenden Runde (Tabelle `snaps`): besten Bid und Ask **und die Menge dort**,
+  Preis, Volatilitäten, Tempo der letzten Minute und die Wahrscheinlichkeit des Standard-Modells (dasselbe wie im
+  Dashboard, `js/math.js`) – eine 5-Minuten-Runde bekommt fünf Snapshots, eine 15-Minuten-Runde fünfzehn,
+- pro Runde (Tabelle `rounds`) den Snapshot 60 s vor dem Ende, die 60-s-Durchschnitte vor dem Start und vor dem Ende,
+  das offizielle Ergebnis, bei Kalshi zusätzlich die veröffentlichten Indexwerte (Start und Abrechnung).
 
-Die offiziellen Ergebnisse der 15-Minuten-Runden beider Börsen holt er zwei Wochen rückwirkend nach. Das Dashboard
-liest die Runden über `GET /rounds` und zeigt unter „Recent rounds“ Trefferquote und Brier-Score von Markt und Modell,
-einen Backtest (Model edge ≥ 3 ¢ zum Ask gekauft, nach Gebühren) und ein Kalibrierungsdiagramm. In „Both“ ersetzt es
-die geschätzten ±5 $ beim Settle-apart-Risiko durch den gemessenen Wert, sobald drei Runden auseinanderliefen.
+Preise: Bitcoin aus Kraken-BTC/USD-Trades (Binance blockt Anfragen aus dem Cloudflare-Netz). Die anderen Coins handeln
+auf Kraken allein zu selten (Dogecoin: alle 30 s ein Trade, Lücken bis zwei Minuten), deshalb werden ihre Trades von
+Kraken und Coinbase zusammengeführt. Volatilität aus Coinbase-1-Minuten-Kerzen.
+
+Die offiziellen Ergebnisse der 15-Minuten-Runden beider Börsen holt er für jeden Coin zwei Wochen rückwirkend nach.
+Das Dashboard liest die Runden über `GET /rounds` (Trefferquote, Log Loss und Brier-Score von Markt und Modell, Backtest,
+Kalibrierung, Split-Kurve) und die Minuten-Snapshots über `GET /snaps` (Karte „Recorded rounds“, „By minute“).
 Ist der Recorder nicht erreichbar, bleibt es bei der Trefferquote im Browser.
+
+Damit er im Free-Plan bleibt (10 ms CPU, 50 Unteranfragen, etwa 50 D1-Abfragen pro Lauf): alle Polymarket-Orderbücher
+in einer Anfrage, die Markt-IDs (Polymarket-Token, Kalshi-Ticker) in D1 gemerkt statt jede Minute nachgeschlagen,
+Kalshi-Bücher nur mit der besten Stufe, kleine Trade-Seiten und alle Schreibzugriffe eines Laufs in drei
+mehrzeiligen Statements. Gemessen auf abgespielten Antworten: etwa 5 ms Arbeit pro Lauf, 20–35 Unteranfragen.
+Rund 22.000 Zeilen am Tag (Limit: 100.000).
 
 Einrichten (einmalig; die Datenbank `btc-rounds` ist angelegt und in `recorder/wrangler.jsonc` eingetragen):
 
 ```bash
 cd recorder
 npm install
-npm run schema      # Tabellen in D1 anlegen
+npm run schema      # Tabellen in D1 anlegen (eine neue Datenbank bekommt alles auf einmal)
 npm run deploy      # Worker und Cron Trigger
 ```
 
-Danach zeigt https://btc-recorder.mariusrapp-kit.workers.dev/status, was schon gespeichert ist. Der Free-Plan reicht:
-ein Lauf pro Minute, wenige Anfragen pro Lauf, rund 2.000 Schreibzugriffe am Tag. Lokal: `npm run schema:local`,
+Eine bestehende Datenbank bringen die Migrationen auf Stand: `npm run migrate` (Version 2: Modell-Eingaben) und
+`npm run migrate:3` (Version 3: Tabelle `snaps`, Mengen am besten Preis, Markt-IDs). Ohne Migration 3 schreibt der
+Worker weiter in die alten Spalten und meldet im Log, was fehlt.
+
+Danach zeigt https://btc-recorder.mariusrapp-kit.workers.dev/status, was schon gespeichert ist. Lokal: `npm run schema:local`,
 `npm run dev -- --port 8790` (`/__scheduled` löst einen Lauf aus), Dashboard mit `?recorder=http://localhost:8790`.
 
 ## Modelle
@@ -169,9 +197,20 @@ liegen darunter (Schieberegler, „Reset“), alles wird im Browser gemerkt.
 | Fast volatility | Wie Standard, die letzten Minuten zählen am meisten (Halbwertszeit 10 min) |
 | Momentum | Ein Teil des Tempos der letzten Minute läuft weiter und klingt in etwa einer Minute ab |
 | Fat tails | Gleiche typische Bewegung, aber große Sprünge häufiger (Student-t) |
+| Learned | Logistische Regression auf den Recorder-Runden des Markts: wie viel Abstand zum Strike, Trend der letzten Minute und ruhiger/hektischer Markt tatsächlich ausmachten. Trainiert ab 100 Runden, bewertet außerhalb der Stichprobe |
 
-Jede Karte zeigt, wie das Modell mit seinen aktuellen Einstellungen auf den Recorder-Runden abgeschnitten hätte (Brier-Score
-gegen den Markt, Backtest „Edge ≥ 3 ¢ zum Ask“). Aussagekräftig wird das erst nach einigen hundert Runden.
+Jede Karte zeigt, wie das Modell mit seinen aktuellen Einstellungen auf den Recorder-Runden abgeschnitten hätte: Log Loss
+und Brier-Score gegen den Markt (alle Runden und die noch offenen, Markt 10–90 % 60 s vor dem Ende), Backtest „Edge ≥ 3 ¢
+zum Ask“. Runden, in denen eine Buchseite leer ist (schon entschieden), zählen mit: die fehlende Seite gilt als 0 ¢ bzw.
+100 ¢. Aussagekräftig wird das erst nach einigen hundert Runden.
+
+**Learned** zeigt in den Einstellungen statt Schiebereglern, was es gelernt hat: das Gewicht jeder Eingabe mit seiner
+Unsicherheit. Die Bewertung läuft in fünf zeitlich geordneten Teilen: Jedes Fünftel der Runden wird von einem Fit auf den
+anderen vier vorhergesagt, nie von einem, der die Runde schon kannte. Für den Prognose-Kegel nimmt es die Streuung des
+Standard-Modells und legt die Mitte so, dass die Wahrscheinlichkeit stimmt.
+
+**Fit to recorded rounds** (bei Modellen mit „Volatility ×“) probiert ×0,50 bis ×2,00 auf den aufgezeichneten Runden
+und übernimmt den Faktor mit dem kleinsten Log Loss – angepasst auf denselben Runden, an denen er gemessen wird.
 
 **Eigenes Modell ergänzen:** in `js/models.js` einen Eintrag zu `MODELS` hinzufügen – die kommentierte Vorlage steht
 direkt darüber. Ein Modell bekommt die Live-Eingaben (Preis, Strike, Restzeit, Volatilitäten, Tempo) und liefert
@@ -186,6 +225,36 @@ npm run migrate     # vier neue Spalten in D1
 npm run deploy
 ```
 
+## Recorded rounds
+
+Die Karte ganz unten wertet die Recorder-Daten des Markts in der Ansicht mit dem gewählten Modell aus:
+
+- **Model vs market:** Weiß das Modell etwas, das der Marktpreis nicht schon sagt? Eine logistische Regression erklärt das
+  Ergebnis erst mit den Log-Odds des Markts allein, dann mit Markt und Modell zusammen. Wiederholt das Modell nur den Markt,
+  bekommt es das Gewicht 0 (± etwa zweimal seine Unsicherheit). Dazu: wie wahrscheinlich so ein Gewicht durch Zufall ist,
+  und der Log Loss beider Fits außerhalb der Stichprobe. Ein Markt-Gewicht über 1 heißt: seine Favoriten gewannen öfter,
+  als sein Preis sagte.
+- **By minute:** aus den Minuten-Snapshots (Recorder v3) für jede Minute der Runde: Log Loss von Markt und Modell,
+  Anteil noch offener Runden, der Backtest „Edge ≥ 3 ¢“ zu dieser Minute und die mittlere Menge, die zum Ask im Buch lag.
+  Damit lässt sich sehen, wann in einer Runde ein Vorsprung entsteht – und ob er sich überhaupt handeln ließe.
+- **By hour:** UP-Anteil, typische Bewegung (Median-Abstand der Abrechnung vom Strike) und Spread 60 s vor dem Ende je
+  Stunde des Tages (Ortszeit), für alle Tage, Mo–Fr oder Sa–So. Stunden mit weniger als 10 Runden sind blasser.
+
+## Paper trades und Book vs price
+
+**Paper trades** (rechte Spalte) kauft UP oder DOWN der laufenden Runde ohne Geld: zum besten Ask, bei größeren Mengen
+durch die tieferen Stufen, mit Taker-Gebühr, an der Börse in der Ansicht (in „Both“ die im Orderbuch gewählte). Jeder Trade
+merkt sich, was Markt (Mid) und Modell in diesem Moment sagten, und wird mit dem offiziellen Ergebnis abgerechnet, auch für
+Coins und Märkte, die gerade nicht angezeigt werden. Die Karte zeigt das eigene Ergebnis neben dem, was Markt und Modell
+erwartet hatten. Gespeichert im Browser, Export als CSV.
+
+**Book vs price** (Karte „Signals“): Springt der Preis, sagt das gewählte Modell, wie weit sich die UP-Wahrscheinlichkeit
+bewegen müsste. Ist die Mitte des Orderbuchs nicht mitgekommen, sind seine Kurse für einen Moment veraltet – an diesen kurzen
+Märkten die klassische Kante, um die allerdings Bots konkurrieren. Die Zeile vergleicht die letzten 2 s je Börse und
+misst bei jedem Sprung von 5+ Punkten, wie lange das Buch brauchte, um die Hälfte nachzuholen (negativ: das Buch war
+schneller als unser Median). Kalshis Buch wird nur einmal pro Sekunde abgefragt. Die Glocke meldet ein Buch, das einem
+Sprung um 5+ Punkte hinterherhinkt.
+
 ## Code-Aufbau
 
 Das Dashboard ist eine statische Seite: GitHub Pages liefert `index.html`, `css/app.css` und die Module in `js/` so aus,
@@ -196,6 +265,7 @@ parallel vor (ein Test prüft, dass die Liste vollständig ist).
 |---|---|
 | `main.js` | Einstieg: Bedienelemente, Start der Feeds und Timer |
 | `state.js` | Gemeinsamer Zustand `S` (Werte, die mehrere Module setzen), Konstanten, gespeicherte Optionen, Börsenliste |
+| `assets.js` | Die fünf Coins mit allen Symbolen und Nachkommastellen, Serien-IDs (rein, mit dem Recorder geteilt, getestet) |
 | `math.js` | Reine Funktionen ohne DOM und Zustand: TWAP, Median, Modell-Verteilung, Gebühren, Edge, Arbitrage-Walk. Getestet |
 | `prices.js` | Trade-Feeds der sechs Börsen, Median, REST-Nachladen |
 | `model.js` | Strike, erwartete Abrechnung, Eingaben und Wahrscheinlichkeit des gewählten Modells |
@@ -204,7 +274,9 @@ parallel vor (ein Test prüft, dass die Liste vollständig ist).
 | `venues.js`, `polymarket.js`, `kalshi.js`, `mode.js` | Die beiden Börsen, ihre Orderbücher und Rundenwechsel; Markt-Umschalter |
 | `charts.js`, `theme.js` | Die beiden Canvas-Charts, Tooltips, Render-Schleife; Farben |
 | `panels.js`, `ladder.js`, `arb.js`, `rounds.js`, `review.js`, `alerts.js` | Die Karten: Kennzahlen und Signale, Orderbuch, Poly vs Kalshi, Runden und Trefferquote, vergangene Runden, Alarme |
-| `stats.js`, `recorder.js` | Auswertung der Recorder-Runden (Brier, Kalibrierung, Backtest, Settle-apart); Abruf vom Recorder |
+| `stats.js`, `recorder.js` | Auswertung der Recorder-Runden (Log Loss, Brier, Kalibrierung, Backtest, Split-Kurve, Paar-Backtest); Abruf vom Recorder (Runden und Minuten-Snapshots) |
+| `learn.js`, `analysis.js` | Logistische Regression, Kreuzvalidierung, Stacking-Test (rein, getestet); die Karte „Recorded rounds“ |
+| `paper.js`, `lag.js` | Paper trades; Book vs price |
 | `util.js` | DOM-Zugriff, Formatierung, Rundenzeiten |
 
 ES-Module laden nicht von `file://`; lokal deshalb `npm start` (oder `node serve.mjs`) und http://localhost:8000/ öffnen.
@@ -212,7 +284,8 @@ ES-Module laden nicht von `file://`; lokal deshalb `npm start` (oder `node serve
 ## Benutzung
 
 Online: https://mariusrapp.github.io/btc-poly-dashboard/ – lokal siehe oben. Die Glocke oben rechts schaltet Alarme ein
-(Strike-Kreuzung in der letzten Minute, Model edge ab 5 ¢ pro Anteil nach Gebühren, in „Both“ Arbitrage). Auf dem
+(Strike-Kreuzung in der letzten Minute, Model edge ab 5 ¢ pro Anteil nach Gebühren, ein Orderbuch, das einem
+Preissprung hinterherhinkt, in „Both“ Arbitrage nach Split-Risiko). Auf dem
 Desktop laufen Alarme und Trefferquote auch in einem Hintergrund-Tab weiter; ein gesperrtes Handy pausiert die Seite.
 Der Bildschirm-Knopf daneben hält deshalb den Bildschirm an, solange das Dashboard offen ist (nur in Browsern mit
 Screen Wake Lock, sonst ausgeblendet). Die Trefferquote wird je Börse und Rundenlänge im Browser gespeichert,
@@ -238,5 +311,6 @@ pip install requests websockets ipywidgets web3
 
 ## Hinweis
 
-Modell, Model edge, Arbitrage, Projected Settlement und Buy Pressure sind Heuristiken, keine Handelsempfehlung.
+Modelle (auch Learned), Model edge, Arbitrage, Book vs price, Projected Settlement und Buy Pressure sind Heuristiken,
+keine Handelsempfehlung; Paper trades handeln nicht wirklich.
 Beide Börsen erheben bei diesen Märkten Taker-Gebühren. Kalshi steht nicht in jedem Land für den Handel offen.

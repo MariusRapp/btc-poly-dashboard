@@ -10,7 +10,7 @@ import { activeModel, activeParams, modelInputs } from './model.js';
 import { modelDist } from './models.js';
 import { recvMedian } from './prices.js';
 import { S } from './state.js';
-import { $, currentRound, fmtAmt, fmtC, fmtPts } from './util.js';
+import { $, currentRound, fmtC, fmtP, fmtPts } from './util.js';
 import { KS, PM, activeVenues, both } from './venues.js';
 
 const WIN = 2000;           // the live window, ms
@@ -37,14 +37,18 @@ export function lagTick(now) {
   const inp = modelInputs(now), price = S.lastMedianP;
   lagState.live = null;
   if (!inp || price === null || recvMedian.length < 2) return;
-  const then = at(recvMedian, now - WIN);
+  // the price stream must cover the window (it only holds live points: a quiet coin's last price is still its price);
+  // the book's point at the window start must be a live one (its history starts with backfilled points a minute
+  // apart; the 1s sampler keeps a live book's points fresh)
+  const fresh = x => x && x.t >= now - WIN - 1500;
+  const then = recvMedian[0].t <= now - WIN ? at(recvMedian, now - WIN) : null;
   if (!then) return;
   const m = activeModel(), p = activeParams(m), p1 = probAt(inp, m, p, price), p0 = probAt(inp, m, p, then.p);
   if (p1 === null || p0 === null) return;
   const dModel = p1 - p0, live = { dPrice: price - then.p, dModel, venues: [] };
   for (const V of activeVenues()) {
     const L = lag[V.key], b1 = V.prob[V.prob.length - 1], b0 = at(V.prob, now - WIN);
-    if (V.up === null || !b1 || !b0 || V.cur?.wts * 1000 !== currentRound(now).start) continue;
+    if (V.up === null || !b1 || !fresh(b0) || now - b1.t > 3000 || V.cur?.wts * 1000 !== currentRound(now).start) continue;
     live.venues.push({ V, dBook: b1.p - b0.p, gap: dModel - (b1.p - b0.p) });
     // a new jump: when did the price cover half of it (its moment), what was the book then
     if (!L.open && now >= L.coolT && Math.abs(dModel) >= JUMP && (p1 > 3 && p1 < 97 || p0 > 3 && p0 < 97)) {
@@ -93,7 +97,7 @@ export function renderLag() {
   const hist = st.map(({ V, s }) => `${both() ? V.short + ' ' : ''}` + (s.med !== null
     ? `follows jumps in ${secs(s.med)} (median of ${s.followed}${s.first ? `, ${s.first} moved first` : ''}${s.followed < s.n ? `, ${s.n - s.followed} did not follow` : ''})`
     : `did not follow ${s.n} jump${s.n > 1 ? 's' : ''}`)).join(' · ');
-  sub.textContent = `Last 2s: ${S.A.sym} ${live.dPrice >= 0 ? '+' : '−'}${fmtAmt(Math.abs(live.dPrice))} → model ${fmtPts(live.dModel)}, ${book}` +
+  sub.textContent = `Last 2s: ${S.A.sym} ${live.dPrice >= 0 ? '+' : '−'}${fmtP(Math.abs(live.dPrice))} → model ${fmtPts(live.dModel)}, ${book}` +
     (hist ? ` · ${hist}` : ` · no ${JUMP}-pt jump yet`) + (KS.on ? ' · Kalshi is polled once a second' : '');
 }
 
