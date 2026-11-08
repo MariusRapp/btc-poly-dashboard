@@ -75,8 +75,20 @@ const tapeAvg = (tp, a, b) => tp && tp.from <= a ? twap(tp.trades, a, b) : null;
 // ── Markets ──────────────────────────────────────────────────────────────────
 const gammaEvents = slugs => slugs.length ? getJSON(`${GAMMA}/events?${slugs.map(s => 'slug=' + s).join('&')}`) : Promise.resolve([]);
 // Kalshi markets of a coin's series that closed in [fromS, toS]: results, published averages, tickers
+// Kalshi answers about 5–10 requests a second per IP, and Cloudflare's outgoing IPs are shared with other Workers.
+// So its requests go out one at a time, 150 ms apart, and once more after a second when it answers 429.
+let ksSlot = 0;
+async function kalshiGet(url) {
+  for (let attempt = 0; ; attempt++) {
+    const now = Date.now(), slot = Math.max(now, ksSlot + 150);
+    ksSlot = slot;
+    if (slot > now) await sleep(slot - now);
+    try { return await getJSON(url); }
+    catch (e) { if (attempt || !/^429 /.test(e.message)) throw e; await sleep(1000); }
+  }
+}
 const kalshiMarkets = (series, fromS, toS, limit = 20) =>
-  getJSON(`${KALSHI}/markets?series_ticker=${series}&min_close_ts=${fromS}&max_close_ts=${toS}&limit=${limit}`).then(d => d.markets || []);
+  kalshiGet(`${KALSHI}/markets?series_ticker=${series}&min_close_ts=${fromS}&max_close_ts=${toS}&limit=${limit}`).then(d => d.markets || []);
 
 export async function record(env, nowMs0) {
   // the cron fires on the minute, give or take a second: snapshot on the minute
@@ -144,7 +156,7 @@ export async function record(env, nowMs0) {
       }
     })(),
     ...ksRuns.filter(r => r.token).map(async r => {
-      try { touches.set(r, kalshiTouch((await getJSON(`${KALSHI}/markets/${r.token}/orderbook?depth=1`)).orderbook_fp)); }
+      try { touches.set(r, kalshiTouch((await kalshiGet(`${KALSHI}/markets/${r.token}/orderbook?depth=1`)).orderbook_fp)); }
       catch (e) { log('error', 'kalshi book failed', { series: r.s.id, error: e.message }); }
     }),
   ]);
@@ -239,7 +251,7 @@ async function backfillStep(env, nowS, writes, stats) {
     const ks = SERIES.find(s => s.asset === a && s.venue === 'kalshi'), p15 = SERIES.find(s => s.asset === a && s.venue === 'poly' && s.len === 900);
     if (meta[pre + 'kalshi_done'] !== '1') tasks.push(async () => {
       const cur = meta[pre + 'kalshi_cursor'];
-      const d = await getJSON(`${KALSHI}/markets?series_ticker=${a.kalshi}&status=settled&limit=50${cur ? '&cursor=' + encodeURIComponent(cur) : ''}`);
+      const d = await kalshiGet(`${KALSHI}/markets?series_ticker=${a.kalshi}&status=settled&limit=50${cur ? '&cursor=' + encodeURIComponent(cur) : ''}`);
       let oldest = Infinity;
       for (const m of d.markets || []) { const k = kalshiRound(m); oldest = Math.min(oldest, k.start); if (k.result) { put(ks.id, k.start, k); stats.backfilled++; } }
       if (!d.cursor || oldest < nowS - BACKFILL_S) setMeta(pre + 'kalshi_done', 1);
