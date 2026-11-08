@@ -97,6 +97,23 @@ export function modelAt({ price, strike, sigma, nowMs, endMs, observed = null })
 // round to `n` significant digits (keeps the stored rows and the /snaps answer small)
 export const sig = (x, n = 6) => x == null || !Number.isFinite(x) ? null : x === 0 ? 0 : +x.toPrecision(n);
 
+// ── Reads ────────────────────────────────────────────────────────────────────
+// D1 bills every row a query reads, and the free plan allows 5 million a day. Every query goes through the primary
+// key (series, start): with the series named, D1 reads only the rows asked for. A bare `WHERE start >= ?` cannot use
+// that key and reads the whole table: 14,400 rows on every run by 2026-11-08, 20 million a day, which used up the
+// daily limit by six in the morning. recorder/lib.test.js checks the query plans.
+const SERIES_IN = `series IN (${SERIES.map(s => lit(s.id)).join(', ')})`;
+export const SQL = {
+  // the rows of the last hours a run works on: running rounds, ended ones waiting for settlement or result
+  recent: `SELECT * FROM rounds WHERE ${SERIES_IN} AND start >= ?`,
+  rounds: cols => `SELECT ${cols.join(', ')} FROM rounds WHERE series = ? AND start >= ? ORDER BY start`,
+  snaps: cols => `SELECT ${cols.join(', ')} FROM snaps WHERE series = ? AND start >= ? ORDER BY start, t`,
+  outcomes: 'SELECT start, strike, result FROM rounds WHERE series = ? AND start >= ?',
+  statusRounds: `SELECT series, COUNT(*) AS rounds, COUNT(snap_t) AS snapshots, COUNT(result) AS results, MAX(snap_t) AS last_snapshot
+                 FROM rounds WHERE ${SERIES_IN} AND start >= ? GROUP BY series`,
+  statusSnaps: `SELECT series, COUNT(*) AS n, MAX(t) AS last FROM snaps WHERE ${SERIES_IN} AND start >= ? GROUP BY series`,
+};
+
 // ── Writes ───────────────────────────────────────────────────────────────────
 // All of a run's writes go out as a few multi-row statements: D1 allows about 50 queries per invocation on the
 // free plan and 100 bound parameters per query, and a run now touches up to ~80 rows. The values are written into
