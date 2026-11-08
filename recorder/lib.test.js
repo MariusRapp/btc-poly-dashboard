@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   SERIES, seriesById, runningRound, isFinalSnapshot, endedRounds, polyTouch, kalshiTouch, polyResult, polyMarketResult, polyToken,
   slugStart, kalshiRound, krakenTrades, windowAvg, covers, lastPrice, modelAt, tradeVelocity, sig, lit, upsertMany, snapsInsert,
-  COLUMNS, MODEL_INPUTS, BOOK_EXTRA, SNAP_COLUMNS,
+  COLUMNS, MODEL_INPUTS, BOOK_EXTRA, SNAP_COLUMNS, SQL,
 } from './lib.js';
 import { settlementDist, probAbove } from '../js/math.js';
 
@@ -128,4 +128,20 @@ test('snapsInsert: all snapshots of a run in one statement', () => {
     "('poly5', 300, 360, 0.5, 0.51, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0.49), " +
     "('kalshi15', 0, 360, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)");
   assert.equal(snapsInsert([]), null);
+});
+
+test('every read goes through the primary key: no query scans a whole table (D1 bills every row read)', async () => {
+  const { DatabaseSync } = await import('node:sqlite');
+  const { readFileSync } = await import('node:fs');
+  const db = new DatabaseSync(':memory:');
+  db.exec(readFileSync(new URL('./schema.sql', import.meta.url), 'utf8'));
+  const plan = sql => db.prepare('EXPLAIN QUERY PLAN ' + sql).all().map(r => r.detail).join(' | ');
+  const queries = [SQL.recent, SQL.rounds(['start', 'bid']), SQL.snaps(['start', 't', 'bid']), SQL.outcomes, SQL.statusRounds, SQL.statusSnaps];
+  for (const q of queries) {
+    const p = plan(q);
+    assert.match(p, /SEARCH (rounds|snaps) USING (COVERING )?(INDEX|PRIMARY KEY)/, `${q.slice(0, 60)} → ${p}`);
+    assert.doesNotMatch(p, /\bSCAN (rounds|snaps)\b/, `${q.slice(0, 60)} → ${p}`);
+  }
+  // the query that used up the daily limit, for contrast
+  assert.match(plan('SELECT * FROM rounds WHERE start >= 1'), /SCAN rounds/);
 });

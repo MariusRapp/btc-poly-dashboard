@@ -19,6 +19,7 @@ import { volsFromCloses } from '../js/models.js';
 import {
   SERIES, seriesById, runningRound, isFinalSnapshot, endedRounds, polyTouch, kalshiTouch, polyResult, polyToken, slugStart,
   kalshiRound, krakenTrades, lastPrice, tradeVelocity, modelAt, upsertMany, snapsInsert, sig, COLUMNS, MODEL_INPUTS, BOOK_EXTRA,
+  SNAP_COLUMNS, SQL,
 } from './lib.js';
 
 const HEADERS = { 'Accept': 'application/json', 'User-Agent': 'btc-recorder/1.0 (+https://github.com/MariusRapp/btc-poly-dashboard)' };
@@ -87,7 +88,7 @@ export async function record(env, nowMs0) {
   const put = (series, start, fields) => writes.push({ series, start, fields });
 
   // what D1 has for the last two hours: strike, settlement, result, market id
-  const { results: rows } = await env.DB.prepare('SELECT * FROM rounds WHERE start >= ?').bind(nowS - RECENT_S - 900).all();
+  const { results: rows } = await env.DB.prepare(SQL.recent).bind(nowS - RECENT_S - 900).all();   // ~225 rows, by the primary key
   const have = new Map(rows.map(r => [`${r.series}|${r.start}`, r]));
   const row = (s, start) => have.get(`${s.id}|${start}`);
 
@@ -285,7 +286,14 @@ function reply(body, origin, { status = 200, cache = 'no-store' } = {}) {
 // columns of /rounds, newest schema first (the market id stays in D1)
 const ROUND_COLS = [COLUMNS.filter(c => c !== 'token'), COLUMNS.filter(c => !BOOK_EXTRA.includes(c)),
                     COLUMNS.filter(c => !BOOK_EXTRA.includes(c) && !MODEL_INPUTS.includes(c))];
-const SNAP_SELECT = 's.start, s.t, s.bid, s.ask, s.bid_sz, s.ask_sz, s.price, s.sigma, s.vol15, s.vol240, s.ewma, s.vel, s.model, r.strike, r.result';
+const SNAP_COLS = ['start', 't', ...SNAP_COLUMNS];
+
+// how far back a request reaches: ?hours=3 (the dashboard's refresh between full loads) or ?days=7
+function since(url, nowS, defDays, maxDays) {
+  const h = +url.searchParams.get('hours');
+  if (h > 0) return nowS - Math.min(h, 48) * 3600;
+  return nowS - Math.max(1, Math.min(maxDays, +url.searchParams.get('days') || defDays)) * 86400;
+}
 
 export default {
   async scheduled(event, env, ctx) {
@@ -300,42 +308,43 @@ export default {
     const url = new URL(request.url), nowS = Math.floor(Date.now() / 1000);
     const s = seriesById(url.searchParams.get('series'));
 
-    // GET /rounds?series=poly5&days=7 → { cols, rows } (rows as arrays, oldest first)
+    // GET /rounds?series=poly5&days=7 (or &hours=3) → { cols, rows } (rows as arrays, oldest first)
     if (url.pathname === '/rounds') {
       if (!s) return reply('unknown series', origin, { status: 400 });
-      const days = Math.max(1, Math.min(30, +url.searchParams.get('days') || 7));
+      const from = since(url, nowS, 7, 30);
       for (const c of ROUND_COLS) {
         const cols = ['start', ...c];
         try {
-          const rows = await env.DB.prepare(`SELECT ${cols.join(', ')} FROM rounds WHERE series = ? AND start >= ? ORDER BY start`)
-            .bind(s.id, nowS - days * 86400).raw();
+          const rows = await env.DB.prepare(SQL.rounds(cols)).bind(s.id, from).raw();
           return reply({ series: s.id, cols, rows }, origin, { cache: 'public, max-age=60' });
         } catch {}
       }
       return reply('database error', origin, { status: 500 });
     }
 
-    // GET /snaps?series=poly5&days=3 → { cols, rows }: every minute's snapshot with the round's strike and result
+    // GET /snaps?series=poly5&days=3 (or &hours=1) → { cols, rows }: every minute's snapshot with its round's strike and
+    // result. Two lookups by the primary key, joined here: a JOIN in SQL would read a rounds row again for every snapshot.
     if (url.pathname === '/snaps') {
       if (!s) return reply('unknown series', origin, { status: 400 });
-      const days = Math.max(1, Math.min(14, +url.searchParams.get('days') || 3));
+      const from = since(url, nowS, 3, 14);
       try {
-        const rows = await env.DB.prepare(`SELECT ${SNAP_SELECT} FROM snaps s LEFT JOIN rounds r ON r.series = s.series AND r.start = s.start
-          WHERE s.series = ? AND s.start >= ? ORDER BY s.start, s.t`).bind(s.id, nowS - days * 86400).raw();
-        return reply({ series: s.id, len: s.len, cols: SNAP_SELECT.split(', ').map(c => c.slice(2)), rows }, origin, { cache: 'public, max-age=60' });
+        const [snaps, outcomes] = await Promise.all([env.DB.prepare(SQL.snaps(SNAP_COLS)).bind(s.id, from).raw(),
+                                                     env.DB.prepare(SQL.outcomes).bind(s.id, from).raw()]);
+        const by = new Map(outcomes.map(r => [r[0], r]));
+        const rows = snaps.map(r => { const o = by.get(r[0]); return [...r, o ? o[1] : null, o ? o[2] : null]; });
+        return reply({ series: s.id, len: s.len, cols: [...SNAP_COLS, 'strike', 'result'], rows }, origin, { cache: 'public, max-age=60' });
       } catch {
         return reply('no snapshots yet (recorder v3: npm run migrate:3)', origin, { status: 503 });
       }
     }
 
-    // GET /status → rows per series, last snapshot, backfill state
+    // GET /status → rows per series over the last 24 hours, snapshots of the last hour, backfill state
     if (url.pathname === '/status') {
-      const { results } = await env.DB.prepare(`SELECT series, COUNT(*) AS rounds, COUNT(snap_t) AS snapshots,
-        COUNT(result) AS results, MAX(snap_t) AS last_snapshot, MIN(start) AS first_round FROM rounds GROUP BY series`).all();
+      const { results } = await env.DB.prepare(SQL.statusRounds).bind(nowS - 86400).all();
       let snaps = null;
-      try { snaps = (await env.DB.prepare('SELECT series, COUNT(*) AS n, MAX(t) AS last FROM snaps GROUP BY series').all()).results; } catch {}
+      try { snaps = (await env.DB.prepare(SQL.statusSnaps).bind(nowS - 3600).all()).results; } catch {}
       const meta = (await env.DB.prepare('SELECT key, value FROM meta').all()).results;
-      return reply({ now: nowS, series: results, snaps, meta }, origin);
+      return reply({ now: nowS, window: { rounds: '24 h', snaps: '1 h' }, series: results, snaps, meta }, origin);
     }
 
     return reply('not found', origin, { status: 404 });
