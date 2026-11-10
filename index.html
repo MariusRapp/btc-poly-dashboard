@@ -24,6 +24,7 @@
   <link rel="modulepreload" href="js/assets.js" />
   <link rel="modulepreload" href="js/bot.js" />
   <link rel="modulepreload" href="js/chainlink.js" />
+  <link rel="modulepreload" href="js/fold.js" />
   <link rel="modulepreload" href="js/charts.js" />
   <link rel="modulepreload" href="js/kalshi.js" />
   <link rel="modulepreload" href="js/ladder.js" />
@@ -89,7 +90,7 @@
   </nav>
 
   <section class="kpis" aria-label="Current round">
-    <div class="card kpi kpi-hero">
+    <div class="card kpi kpi-hero" id="kpi-price" data-fold="Price">
       <div class="kpi-label"><span class="asym">BTC</span> / USD <span class="muted">· median of exchanges</span></div>
       <div class="hero" id="btc-price">—</div>
       <div class="kpi-delta muted" id="btc-delta">
@@ -98,7 +99,7 @@
       </div>
       <div class="kpi-sub num" id="btc-sub">Strike — · Chainlink —</div>
     </div>
-    <div class="card kpi">
+    <div class="card kpi" id="kpi-up" data-fold="UP probability">
       <div class="kpi-label">UP probability <span class="muted" id="up-venue">· Polymarket</span></div>
       <div class="kpi-value" id="up-prob">—</div>
       <div class="kpi-pair" id="up-pair" hidden>
@@ -108,7 +109,7 @@
       <div class="segbar idle" id="up-bar" aria-hidden="true"><span class="sb-up" id="seg-up"></span><span class="sb-down" id="seg-down"></span></div>
       <div class="kpi-sub num" id="up-sub">Waiting for order book…</div>
     </div>
-    <div class="card kpi">
+    <div class="card kpi" id="kpi-time" data-fold="Time left">
       <div class="kpi-label">Time left in round</div>
       <div class="kpi-value" id="time-left">—:——</div>
       <div class="meter" id="time-meter" data-level="ok" aria-hidden="true"><span id="time-fill"></span></div>
@@ -180,13 +181,23 @@
       <section class="card" id="card-paper" aria-label="Paper trades">
         <div class="card-head"><h2>Paper trades</h2><span class="card-meta" id="paper-venue">—</span></div>
         <div class="paper-top">
-          <div class="paper-ctl">
-            <label class="paper-qty">Shares <input type="number" id="paper-qty" min="1" max="100000" step="1" value="10" inputmode="numeric"></label>
-            <button type="button" class="pbtn up" id="paper-up" disabled>Buy ▲ UP <b>—</b></button>
-            <button type="button" class="pbtn down" id="paper-down" disabled>Buy ▼ DOWN <b>—</b></button>
+          <div class="paper-ctl" id="paper-ctl">
+            <div class="ptype">
+              <div class="seg sm" role="group" aria-label="Order type">
+                <button type="button" data-ptype="market" aria-pressed="true" title="Buy at once at the best asks, taker fee included">Market</button>
+                <button type="button" data-ptype="limit" aria-pressed="false" title="Buy at your price or less: what the asks offer there fills at once, the rest waits for sellers (no fee) until the round ends">Limit</button>
+              </div>
+              <span class="ptype-note" id="paper-type-note"></span>
+            </div>
+            <label class="paper-qty pq-n">Shares <input type="number" id="paper-qty" min="1" max="100000" step="1" value="10" inputmode="numeric"></label>
+            <label class="paper-qty plim pl-up" hidden>UP limit <span class="plim-in"><input type="number" id="paper-lim-up" min="0" max="99.9" step="1" inputmode="decimal">¢</span></label>
+            <label class="paper-qty plim pl-down" hidden>DOWN limit <span class="plim-in"><input type="number" id="paper-lim-down" min="0" max="99.9" step="1" inputmode="decimal">¢</span></label>
+            <button type="button" class="pbtn up" id="paper-up" disabled><span class="pb-l">Buy ▲ UP</span><b>—</b><small></small></button>
+            <button type="button" class="pbtn down" id="paper-down" disabled><span class="pb-l">Buy ▼ DOWN</span><b>—</b><small></small></button>
           </div>
           <div class="pstats" id="paper-stats"></div>
         </div>
+        <div class="porders" id="paper-orders" aria-label="Limit orders" hidden></div>
         <div id="paper">
           <div class="plist" id="paper-list" tabindex="0" aria-label="Paper trades, newest first"></div>
           <div class="track-foot" id="paper-foot" hidden></div>

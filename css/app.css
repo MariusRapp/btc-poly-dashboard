@@ -432,11 +432,24 @@ label.src-name { cursor:pointer; }
 /* ── Paper trades: buttons + totals on top, every trade below in a scrolling list ── */
 #card-paper { container-type:inline-size; }
 .paper-top { display:grid; grid-template-columns:minmax(0,1fr); gap:10px; margin-bottom:12px; }
-.paper-ctl { display:grid; grid-template-columns:auto minmax(0,1fr) minmax(0,1fr); gap:8px; align-items:stretch; }
+/* market: shares beside the two buttons; limit: a price field above each button, in a row with the shares */
+.paper-ctl { display:grid; grid-template-columns:auto minmax(0,1fr) minmax(0,1fr); grid-template-areas:"type type type" "qty up down"; gap:8px; align-items:stretch; }
+.paper-ctl.limit { grid-template-areas:"type type type" "qty lup ldown" ". up down"; }
+.ptype { grid-area:type; display:flex; align-items:center; flex-wrap:wrap; gap:4px 10px; }
+.ptype-note { font-size:11px; color:var(--muted-text); line-height:1.35; }
+.pq-n { grid-area:qty; }
+.pl-up { grid-area:lup; }
+.pl-down { grid-area:ldown; }
+#paper-up { grid-area:up; }
+#paper-down { grid-area:down; }
 .paper-qty { display:flex; flex-direction:column; gap:2px; font-size:11px; color:var(--muted-text); }
 .paper-qty input { width:76px; font:inherit; font-size:15px; color:var(--ink-1); background:var(--surface-2); border:1px solid var(--border); border-radius:8px; padding:8px; font-variant-numeric:tabular-nums; }
+.plim-in { display:flex; align-items:center; gap:4px; font-size:13px; color:var(--ink-2); }
+.plim-in input { flex:0 1 90px; width:0; min-width:0; }
 .pbtn { font:inherit; font-size:13px; font-weight:600; border-radius:10px; border:1px solid var(--border); padding:8px; min-height:56px; cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px; }
 .pbtn b { font-size:18px; font-variant-numeric:tabular-nums; color:var(--ink-1); }
+.pbtn small { font-size:11px; font-weight:500; color:var(--ink-2); font-variant-numeric:tabular-nums; text-align:center; }
+.pbtn small:empty { display:none; }
 .pbtn.up   { color:var(--up-text);   background:var(--up-wash); }
 .pbtn.down { color:var(--down-text); background:var(--down-wash); }
 .pbtn:hover:not(:disabled) { box-shadow:0 0 0 1px var(--ink-2); }
@@ -475,8 +488,27 @@ label.src-name { cursor:pointer; }
 .pt-res.likely-won  { color:var(--up-text);   font-weight:500; }
 .pt-res.likely-lost { color:var(--down-text); font-weight:500; }
 .ptrade.open { background:linear-gradient(90deg, var(--band), transparent 70%); }
+.pt-lim { font-size:10px; font-weight:600; padding:0 6px; border-radius:999px; background:var(--surface-2); color:var(--ink-2); vertical-align:1px; }
 .phead { display:none; }
 #paper-foot { margin-top:8px; }
+
+/* limit orders: open ones and those that ended in the last minutes, between the buttons and the trades */
+.porders { margin-bottom:12px; }
+.po-head { display:flex; align-items:baseline; justify-content:space-between; gap:8px; padding-bottom:4px; font-size:11px; color:var(--muted-text); }
+.pord {
+  display:grid; grid-template-columns:auto minmax(0,1fr) auto; grid-template-areas:"side side x" "meta st st";
+  column-gap:10px; row-gap:1px; align-items:baseline; padding:6px 0; border-top:1px solid var(--grid); font-size:12px;
+}
+.pord:last-child { border-bottom:1px solid var(--grid); }
+.pord.open { background:linear-gradient(90deg, var(--band), transparent 70%); }
+.po-side { grid-area:side; font-size:13px; font-variant-numeric:tabular-nums; }
+.po-side b { font-weight:650; }
+.po-meta { grid-area:meta; color:var(--muted-text); font-variant-numeric:tabular-nums; white-space:nowrap; }
+.po-st { grid-area:st; text-align:right; color:var(--ink-2); font-variant-numeric:tabular-nums; }
+.po-st.idle::before { content:'◆ '; color:var(--warning); }
+.po-st.done { color:var(--muted-text); }
+.po-x { grid-area:x; font-size:12px; justify-self:end; }
+.pord:not(.open) .po-side { color:var(--ink-2); }
 
 /* wide card (desktop: under the charts): buttons beside the totals, the list as a table */
 @container (min-width: 960px) {
@@ -498,6 +530,7 @@ label.src-name { cursor:pointer; }
   .pt-meta > span:first-child { text-align:left; }
   .pt-res { flex-direction:row; justify-content:flex-end; align-items:baseline; gap:6px; }
   .pt-l { display:none; }
+  .pord { grid-template-columns:minmax(120px,1fr) minmax(130px,1fr) minmax(0,2fr) 56px; grid-template-areas:"side meta st x"; column-gap:12px; }
 }
 
 /* ── Paper bot: switch and order settings, totals, rules beside the activity, its trades (same rows as above) ── */
@@ -555,4 +588,34 @@ label.src-name { cursor:pointer; }
 }
 @container (max-width: 420px) {
   .bot-switch { flex:1 1 100%; }
+}
+
+/* ── Folding (fold.js): a chevron in every card's corner; folded = the title row, a KPI tile = label and number ── */
+.card { position:relative; }
+.fold {
+  position:absolute; top:9px; right:9px; z-index:3; width:28px; height:28px; padding:0; display:grid; place-items:center;
+  border:0; border-radius:7px; background:transparent; color:var(--muted-text); cursor:pointer;
+}
+.fold:hover { color:var(--ink-1); background:var(--surface-2); }
+.fold:focus-visible { outline:2px solid var(--accent); outline-offset:0; }
+.fold svg { transition:transform .2s; }
+.folded > .fold svg { transform:rotate(180deg); }
+@media (prefers-reduced-motion: reduce) { .fold svg { transition:none; } }
+.foldable > .card-head, .foldable > .toolbar { padding-right:30px; }
+.foldable > .card-head > h2, .foldable.kpi > .kpi-label { cursor:pointer; user-select:none; -webkit-user-select:none; }
+.fold-head { display:none; }
+.card.folded > .fold-head { display:flex; }
+.card.folded:not(.kpi) > :not(.card-head):not(.fold) { display:none !important; }
+.card.folded > .card-head { margin-bottom:0 !important; }
+.card.folded > .card-head > :not(h2):not(.card-meta) { display:none; }
+#card-charts:not(.folded) > .fold { top:17px; }   /* level with the toolbar */
+.kpi > .fold { top:7px; right:7px; width:26px; height:26px; }
+.foldable.kpi > .kpi-label { padding-right:24px; }
+.kpi.folded > :not(.kpi-label):not(.fold):not(.hero):not(.kpi-value):not(.kpi-pair) { display:none !important; }
+.kpi.folded .hero { font-size:32px; }
+@media (max-width: 640px) {
+  .fold { top:7px; right:6px; }
+  #card-charts:not(.folded) > .fold { top:15px; }
+  .kpi > .fold { top:5px; right:5px; }
+  .kpi.folded .hero { font-size:26px; }
 }

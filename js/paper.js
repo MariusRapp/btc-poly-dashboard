@@ -1,16 +1,17 @@
 // Paper trades: buy UP or DOWN of the running round at the live book (best ask, deeper levels for bigger orders,
-// taker fee included), without money. Each trade keeps what the market (mid) and the model said at that moment;
-// once the official result is in it is settled, so your own calls sit next to the market's and the model's.
-// Stored in this browser (localStorage), all coins and markets in one list. The paper bot (bot.js) keeps its
-// trades in a list of its own in the same format, with sales on top; both lists are settled here, together.
+// taker fee included), without money, or with a limit order that waits at your price. Each trade keeps what the
+// market (mid) and the model said at that moment; once the official result is in it is settled, so your own calls
+// sit next to the market's and the model's. Stored in this browser (localStorage), all coins and markets in one
+// list. The paper bot (bot.js) keeps its trades in a list of its own in the same format, with sales on top; both
+// lists are settled here, together.
 import { KS_FEE, PM_FEE } from './arb.js';
 import { assetById, parseSeries, seriesId } from './assets.js';
 import { KALSHI_PROXY } from './kalshi.js';
-import { bookLevels, fillOrder, sellOrder } from './math.js';
+import { bookLevels, fillOrder, matchLimit, sellOrder } from './math.js';
 import { computeModelProb } from './model.js';
 import { clobResult } from './polymarket.js';
 import { ROUND_S, S } from './state.js';
-import { $, currentRound, fmtC, fmtHM, getJSON } from './util.js';
+import { $, currentRound, fmtC, fmtClock, fmtHM, getJSON } from './util.js';
 import { KS, PM, activeVenues, both, mainVenue } from './venues.js';
 
 const QTY_KEY = 'paper-qty';
@@ -59,14 +60,20 @@ export function liveVenue(t) {
   return null;
 }
 
+// what the market (mid) and the model say about a side right now, as a chance 0..1
+function entryProbs(V, side) {
+  const model = computeModelProb(), up = V.up;
+  return { mkt: up !== null ? +((side === 'up' ? up : 100 - up) / 100).toFixed(4) : null,
+           model: model !== null ? +((side === 'up' ? model : 100 - model) / 100).toFixed(4) : null };
+}
+
 // a trade filled now: what it cost, and what the market (mid) and the model said about its side at that moment
 export function newTrade(V, side, q, now, extra = {}) {
-  const f = V.cur, model = computeModelProb(), up = V.up;
+  const f = V.cur;
   return {
     id: now.toString(36) + Math.random().toString(36).slice(2, 5), t: now, asset: S.asset, series: seriesId(S.asset, V.key, lenOf(V)), start: f.wts,
     side, qty: q.qty, avg: +q.avg.toFixed(4), fees: +q.fees.toFixed(4), total: +q.total.toFixed(4), left: Math.round((currentRound(now).end - now) / 1000),
-    mkt: up !== null ? +((side === 'up' ? up : 100 - up) / 100).toFixed(4) : null,
-    model: model !== null ? +((side === 'up' ? model : 100 - model) / 100).toFixed(4) : null,
+    ...entryProbs(V, side),
     // the market's id, for the result lookup
     ...(V === KS ? { ticker: f.ticker } : { cid: f.cid }),
     result: null, ...extra,
@@ -76,6 +83,7 @@ export function newTrade(V, side, q, now, extra = {}) {
 // the venue the buttons trade on: the one in view; with both venues, the one picked in the order book card
 const tradeVenue = () => both() ? (S.bookVenue === 'kalshi' ? KS : PM) : mainVenue();
 const qty = () => Math.max(1, Math.min(100000, Math.round(+$('paper-qty').value || 10)));
+const marketOf = o => { const s = parseSeries(o.series); return `${assetById(o.asset).sym} ${s.venue === 'kalshi' ? 'Kalshi' : 'Poly'} ${s.len / 60}m`; };
 
 function buy(side) {
   const V = tradeVenue(), q = quoteBuy(V, side, qty()), now = Date.now();
@@ -83,6 +91,180 @@ function buy(side) {
   M.trades.push(newTrade(V, side, q, now));
   saveLedger(M);
   render();
+}
+
+// ── Limit orders ─────────────────────────────────────────────────────────────
+// A limit order buys at its price or less. What the asks already offer at or below it fills at once, like a market
+// buy (taker fee); the rest waits until a seller comes down to the limit. A sell offer at the limit means no bid at
+// that price is left ahead of the order, so it fills there, as a maker without fee, as many shares as are offered.
+// The order isn't in the real book: sellers who would have hit it while it was the best bid go unseen, so paper
+// fills come later and more rarely than real ones, if anything. It is checked 5× a second while its market is in
+// view (main.js) and ends with its round.
+const ORD_KEY = 'paper-orders-v1', TYPE_KEY = 'paper-type', SHOW_DONE = 180_000;   // ended orders stay listed 3 min
+let orders = [], type = 'market';
+try { const o = JSON.parse(localStorage.getItem(ORD_KEY)); if (Array.isArray(o)) orders = o; } catch {}
+try { if (localStorage.getItem(TYPE_KEY) === 'limit') type = 'limit'; } catch {}
+function saveOrders() {
+  if (orders.length > 100) orders = orders.slice(-100);
+  try { localStorage.setItem(ORD_KEY, JSON.stringify(orders)); } catch {}
+}
+const orderById = id => orders.find(o => o.id === id);
+const sideAsks = (f, side) => side === 'up' ? bookLevels(f.asks, false) : bookLevels(f.bids, true, true);
+
+// best bid and ask of a side, 0..1 (DOWN: the UP book mirrored)
+function touch(f, side) {
+  let bb = null, ba = null;
+  for (const k in f.bids) if (bb === null || +k > bb) bb = +k;
+  for (const k in f.asks) if (ba === null || +k < ba) ba = +k;
+  return side === 'up' ? { bid: bb !== null ? bb / 1000 : null, ask: ba !== null ? ba / 1000 : null }
+                       : { bid: ba !== null ? 1 - ba / 1000 : null, ask: bb !== null ? 1 - bb / 1000 : null };
+}
+
+// limit prices like the venues' ticks: whole cents between 10¢ and 90¢, tenths of a cent beyond (in cents)
+const tickC = c => c < 10 || c > 90 ? Math.round(c * 10) / 10 : Math.round(c);
+function limitOf(side) {
+  const v = parseFloat($('paper-lim-' + side).value);
+  return Number.isFinite(v) && v >= 0.1 && v <= 99.9 ? tickC(v) / 100 : null;
+}
+
+// each side's limit field follows its best bid (rounded down to a tick, so it never crosses the book) until you
+// type a price in; that one holds for the round and market it was typed for
+const limFor = { up: null, down: null };
+const limKey = (V, f) => `${S.asset}|${V.key}|${f.wts}`;
+const floorTick = c => c < 10 || c > 90 ? Math.floor(c * 10 + 1e-6) / 10 : Math.floor(c + 1e-6);
+function prefill(V, f) {
+  for (const side of ['up', 'down']) {
+    const el = $('paper-lim-' + side);
+    if (limFor[side] === limKey(V, f) || document.activeElement === el) continue;
+    const { bid, ask } = touch(f, side), c = bid !== null ? bid * 100 : ask !== null ? ask * 100 - 1 : null;
+    if (c !== null) el.value = String(Math.max(0.1, Math.min(99.9, floorTick(c))));
+  }
+}
+
+function place(side) {
+  const V = tradeVenue(), f = liveFeed(V), limit = limitOf(side), now = Date.now();
+  if (!f || limit === null || currentRound(now).end - now < 3000) return;
+  const o = { id: 'o' + now.toString(36) + Math.random().toString(36).slice(2, 5), t: now, asset: S.asset,
+              series: seriesId(S.asset, V.key, lenOf(V)), start: f.wts, side, qty: qty(), limit,
+              filled: 0, mk: 0, cost: 0, fees: 0, used: {}, status: 'open', tid: null };
+  orders.push(o);
+  const x = matchLimit(sideAsks(f, side), limit, o.qty, o.used, true, feeOf(V));
+  if (x) addFill(o, V, x, now, true);
+  saveOrders();
+  renderOrders();
+}
+
+// a fill of an order: one trade per order, its shares, price and entry chances growing with each fill
+function addFill(o, V, x, now, taker) {
+  const prev = o.filled;
+  o.filled = Math.round((o.filled + x.qty) * 100) / 100;
+  o.cost += x.cost; o.fees += x.fees;
+  if (!taker) o.mk = Math.round((o.mk + x.qty) * 100) / 100;
+  const sum = { qty: o.filled, avg: o.cost / o.filled, fees: o.fees, total: o.cost + o.fees };
+  const t = o.tid && M.trades.find(t => t.id === o.tid);
+  if (!t) {
+    const nt = newTrade(V, o.side, sum, now, { lim: o.limit, ord: o.id, mk: o.mk });
+    o.tid = nt.id;
+    M.trades.push(nt);
+  } else {
+    const p = entryProbs(V, o.side), w = (a, b) => a == null ? b : b == null ? a : +((a * prev + b * x.qty) / o.filled).toFixed(4);
+    Object.assign(t, { qty: sum.qty, avg: +sum.avg.toFixed(4), fees: +sum.fees.toFixed(4), total: +sum.total.toFixed(4),
+                       mk: o.mk, mkt: w(t.mkt, p.mkt), model: w(t.model, p.model) });
+  }
+  if (o.filled >= o.qty - 0.005) { o.status = 'filled'; o.done = now; delete o.used; }
+  saveLedger(M);
+  render();
+}
+
+function endOrder(o, status, now) {
+  o.status = status; o.done = now;
+  delete o.used;
+}
+
+// every 200ms (main.js): open orders against their book; an order whose round is over ends
+export function paperTick(now) {
+  let changed = false;
+  for (const o of orders) {
+    if (o.status !== 'open') continue;
+    if (now >= endOf(o)) { endOrder(o, 'expired', endOf(o)); changed = true; continue; }
+    const V = liveVenue(o), f = V && liveFeed(V);
+    if (!f) continue;
+    const x = matchLimit(sideAsks(f, o.side), o.limit, o.qty - o.filled, o.used, false, feeOf(V));
+    if (x) { addFill(o, V, x, now, false); changed = true; }
+  }
+  if (changed) { saveOrders(); renderOrders(); }
+}
+
+function cancelOrder(id) {
+  const o = orderById(id);
+  if (o?.status !== 'open') return;
+  endOrder(o, 'cancelled', Date.now());
+  saveOrders();
+  renderOrders();
+  tickOpen();
+}
+
+// the order list: the open ones and those that ended in the last minutes, newest first
+let ordRows = [], ordShown = '';
+const shownOrders = now => orders.filter(o => o.status === 'open' || now - o.done < SHOW_DONE).slice(-8).reverse();
+
+function orderStatus(o) {
+  const part = o.filled > 0 ? `${o.filled} of ${o.qty} filled` : null;
+  if (o.status === 'filled') return { cls: 'done', text: `filled · avg ${fmtC(o.cost / o.filled)}`, tip: '' };
+  if (o.status === 'expired') return { cls: 'done', text: `round over · ${part ?? 'nothing filled'}`, tip: '' };
+  if (o.status === 'cancelled') return { cls: 'done', text: `cancelled · ${part ?? 'nothing filled'}`, tip: '' };
+  const V = liveVenue(o), f = V && liveFeed(V);
+  if (!f) return { cls: 'idle', text: `not watched · ${marketOf(o)} isn’t in view`,
+                   tip: 'An order is only checked against the order book this page shows; switch back to its market' };
+  const { ask } = touch(f, o.side);
+  return { cls: 'open', text: `${part ?? 'waiting'} · ask ${ask !== null ? fmtC(ask) : '—'}`,
+           tip: `Fills once sellers offer at ${fmtC(o.limit)} or less (no fee); ends with the round` };
+}
+
+function orderRow(o) {
+  const open = o.status === 'open';
+  return `<div class="pord${open ? ' open' : ''}" data-id="${esc(o.id)}">` +
+    `<span class="po-side"><b class="${o.side === 'up' ? 'up-t' : 'down-t'}">${o.side === 'up' ? '▲ UP' : '▼ DOWN'}</b> ${o.qty} @ ${fmtC(o.limit)}</span>` +
+    `<span class="po-meta">${esc(marketOf(o))} · ${fmtClock(o.t)}</span>` +
+    '<span class="po-st"></span>' +
+    (open ? `<button type="button" class="link-btn po-x" data-cancel="${esc(o.id)}">Cancel</button>` : '') + '</div>';
+}
+
+function renderOrders() {
+  const now = Date.now(), el = $('paper-orders'), list = shownOrders(now);
+  ordShown = list.map(o => o.id + o.status).join();
+  ordRows = [];
+  el.hidden = !list.length;
+  if (!list.length) { el.innerHTML = ''; return; }
+  const open = list.filter(o => o.status === 'open').length;
+  el.innerHTML = `<div class="po-head"><h3 class="sub">Limit orders</h3><span>${open ? `${open} open` : 'none open'}</span></div>` + list.map(orderRow).join('');
+  for (const r of el.querySelectorAll('.pord')) ordRows.push([orderById(r.dataset.id), r.querySelector('.po-st')]);
+  tickOrders();
+}
+
+function tickOrders() {
+  if (shownOrders(Date.now()).map(o => o.id + o.status).join() !== ordShown) return renderOrders();
+  for (const [o, el] of ordRows) {
+    const st = orderStatus(o);
+    if (el.textContent === st.text) continue;
+    el.textContent = st.text;
+    el.className = 'po-st ' + st.cls;
+    el.title = st.tip;
+  }
+}
+
+const TYPE_NOTE = {
+  market: 'Fills at once at the asks, taker fee included',
+  limit: 'Waits at your price until a seller comes down to it, no fee · ends with the round',
+};
+function setType(t) {
+  type = t;
+  try { localStorage.setItem(TYPE_KEY, t); } catch {}
+  for (const b of document.querySelectorAll('[data-ptype]')) b.setAttribute('aria-pressed', String(b.dataset.ptype === t));
+  $('paper-ctl').classList.toggle('limit', t === 'limit');
+  for (const side of ['up', 'down']) $('paper-lim-' + side).closest('label').hidden = t !== 'limit';
+  $('paper-type-note').textContent = TYPE_NOTE[t];
+  updatePaper();
 }
 
 // ── Settlement ───────────────────────────────────────────────────────────────
@@ -169,26 +351,57 @@ export async function settlePaper() {
 export function initPaper() {
   try { const q = +localStorage.getItem(QTY_KEY); if (q > 0) $('paper-qty').value = q; } catch {}
   $('paper-qty').addEventListener('change', () => { try { localStorage.setItem(QTY_KEY, String(qty())); } catch {} updatePaper(); });
-  $('paper-up').addEventListener('click', () => buy('up'));
-  $('paper-down').addEventListener('click', () => buy('down'));
+  for (const side of ['up', 'down']) {
+    $('paper-' + side).addEventListener('click', () => type === 'limit' ? place(side) : buy(side));
+    const el = $('paper-lim-' + side);
+    el.addEventListener('input', () => { const V = tradeVenue(), f = liveFeed(V); if (f) limFor[side] = limKey(V, f); updatePaper(); });
+    el.addEventListener('change', () => { const L = limitOf(side); if (L !== null) el.value = String(Math.round(L * 1000) / 10); });
+  }
+  for (const b of document.querySelectorAll('[data-ptype]')) b.addEventListener('click', () => setType(b.dataset.ptype));
+  $('paper-orders').addEventListener('click', e => { const id = e.target.closest('[data-cancel]')?.dataset.cancel; if (id) cancelOrder(id); });
   $('paper').addEventListener('click', e => {
-    if (e.target.id === 'paper-reset' && confirm('Delete all paper trades in this browser?')) { M.trades = []; saveLedger(M); render(); }
-    if (e.target.id === 'paper-csv') exportCsv(M.trades, 'paper-trades.csv');
+    if (e.target.id === 'paper-reset' && confirm('Delete all paper trades and limit orders in this browser?')) {
+      M.trades = []; orders = [];
+      saveLedger(M); saveOrders(); render(); renderOrders();
+    }
+    if (e.target.id === 'paper-csv') exportCsv(M.trades, 'paper-trades.csv', ['lim', 'mk']);
   });
+  // orders of rounds that ended while the page was closed
+  paperTick(Date.now());
+  setType(type);
   render();
+  renderOrders();
 }
 
-// the buttons' prices and the open trades' status, every second
+// the buttons' prices, the orders' and the open trades' status, every second
 export function updatePaper() {
-  const V = tradeVenue();
+  const V = tradeVenue(), f = liveFeed(V), n = qty(), left = currentRound().end - Date.now();
+  if (type === 'limit' && f) prefill(V, f);
   for (const side of ['up', 'down']) {
-    const b = $('paper-' + side), q = quoteBuy(V, side, qty()), left = currentRound().end - Date.now();
-    b.disabled = !q || left < 3000;
-    b.querySelector('b').textContent = q ? fmtC(q.avg) : '—';
-    b.title = q ? `${q.qty} shares at ${fmtC(q.avg, 2)} on average + ${fmtC(q.fees / q.qty, 2)} fee each = $${q.total.toFixed(2)}; pays $${q.qty} if ${side.toUpperCase()} wins` +
-      (q.qty < qty() ? ` (the book only has ${q.qty} on that side)` : '') : 'Needs the running round’s order book';
+    const b = $('paper-' + side), dir = side === 'up' ? '▲ UP' : '▼ DOWN';
+    let label, price, note, tip;
+    if (type === 'market') {
+      const q = quoteBuy(V, side, n);
+      b.disabled = !q || left < 3000;
+      label = 'Buy ' + dir; price = q ? fmtC(q.avg) : '—'; note = '';
+      tip = q ? `${q.qty} shares at ${fmtC(q.avg, 2)} on average + ${fmtC(q.fees / q.qty, 2)} fee each = $${q.total.toFixed(2)}; pays $${q.qty} if ${side.toUpperCase()} wins` +
+        (q.qty < n ? ` (the book only has ${q.qty} on that side)` : '') : 'Needs the running round’s order book';
+    } else {
+      const L = limitOf(side), q = f && L !== null ? quoteBuy(V, side, n, L) : null, ask = f ? touch(f, side).ask : null;
+      b.disabled = !f || L === null || left < 3000;
+      label = 'Limit ' + dir; price = L !== null ? fmtC(L) : '—';
+      note = !f || L === null ? '' : q && q.qty >= n - 0.005 ? 'fills at once' : q ? `${q.qty} at once, rest waits` : `waits · ask ${ask !== null ? fmtC(ask) : '—'}`;
+      tip = !f ? 'Needs the running round’s order book' : L === null ? 'Enter a limit price in cents above the button'
+        : `Buy up to ${n} ${side.toUpperCase()} at ${fmtC(L)} or less` + (q ? `: ${q.qty} at once at the asks (taker fee)` : '') +
+          (!q || q.qty < n ? `; ${q ? 'the rest waits' : 'it waits'} for sellers at ${fmtC(L)} (no fee), until the round ends` : '');
+    }
+    b.querySelector('.pb-l').textContent = label;
+    b.querySelector('b').textContent = price;
+    b.querySelector('small').textContent = note;
+    b.title = tip;
   }
   $('paper-venue').textContent = `${S.A.sym} ${V.name} ${lenOf(V)}m`;
+  tickOrders();
   tickOpen();
 }
 
@@ -210,6 +423,10 @@ function status(t, now) {
     if (q && q.qty === t.qty)
       return { cls: 'open', html: `≈ ${usd(q.net - t.total)}<small>${mmss((end - now) / 1000)} left · bid ${fmtC(q.avg)}</small>`,
                tip: 'Open: what selling now at the bids would make after the fee. The bot sells by the rule’s exits.' };
+    const o = t.ord && orderById(t.ord);
+    if (o?.status === 'open')
+      return { cls: 'open', html: `${mmss((end - now) / 1000)}<small>left · order ${o.filled} of ${o.qty}</small>`,
+               tip: `Round still running; the limit order at ${fmtC(o.limit)} is still open and may buy more` };
     return { cls: 'open', html: `${mmss((end - now) / 1000)}<small>left</small>`, tip: 'Round still running' };
   }
   const up = look.get(roundKey(t))?.up, p = up == null ? null : t.side === 'up' ? up : 1 - up;
@@ -243,12 +460,12 @@ const dayName = d => {
 
 // one trade; `ruleName` (bot trades) puts the rule where the manual list shows market and model
 function row(t, now, ruleName) {
-  const s = parseSeries(t.series), A = assetById(t.asset), st = status(t, now), open = !t.result && !t.sold;
-  const market = `${esc(A.sym)} ${s.venue === 'kalshi' ? 'Kalshi' : 'Poly'} ${s.len / 60}m`;
+  const st = status(t, now), open = !t.result && !t.sold, market = esc(marketOf(t));
   const mm = `<span class="pt-l">mkt </span>${pct(t.mkt)} · <span class="pt-l">model </span>${pct(t.model)}`;
+  const lim = t.lim == null ? '' : ` <span class="pt-lim" title="${esc(`Limit order at ${fmtC(t.lim)}: ${t.mk ? `${t.mk} of ${t.qty} filled waiting, as a maker without fee` : 'filled at once at the asks'}${t.mk && t.mk < t.qty ? ', the rest at once at the asks' : ''}`)}">limit</span>`;
   return `<div class="ptrade${open ? ' open' : ''}" data-id="${esc(t.id)}">` +
     `<span class="pt-when" title="${esc(new Date(t.t).toLocaleString())}">${fmtHM(t.t)}</span>` +
-    `<span class="pt-side" title="${t.qty} shares at ${fmtC(t.avg, 2)} on average + $${t.fees.toFixed(2)} fees"><b class="${t.side === 'up' ? 'up-t' : 'down-t'}">${t.side === 'up' ? '▲ UP' : '▼ DOWN'}</b> ${t.qty} @ ${fmtC(t.avg)}</span>` +
+    `<span class="pt-side" title="${t.qty} shares at ${fmtC(t.avg, 2)} on average + $${t.fees.toFixed(2)} fees"><b class="${t.side === 'up' ? 'up-t' : 'down-t'}">${t.side === 'up' ? '▲ UP' : '▼ DOWN'}</b> ${t.qty} @ ${fmtC(t.avg)}${lim}</span>` +
     `<span class="pt-meta"><span>${market}</span>` +
     `<span title="Time left in the round when bought">${mmss(t.left)} left</span>` +
     `<span title="Paid incl. fees; pays $${t.qty} if it wins"><span class="pt-l">cost </span>$${t.total.toFixed(2)}</span>` +
@@ -303,8 +520,8 @@ export function summaryTiles(trades) {
 function render() {
   const statsEl = $('paper-stats'), listEl = $('paper-list'), foot = $('paper-foot'), trades = M.trades;
   if (!trades.length) {
-    statsEl.innerHTML = '<div class="sig-sub">Try your own calls without money: tap UP or DOWN, and each trade is settled with the official result. ' +
-      'Next to your result: what the market and the model expected at the moment you bought.</div>';
+    statsEl.innerHTML = '<div class="sig-sub">Try your own calls without money: tap UP or DOWN to buy at once, or pick Limit to wait at your price. ' +
+      'Each trade is settled with the official result; next to your result: what the market and the model expected at the moment you bought.</div>';
     renderList(M, listEl, []);
     foot.hidden = true;
     return;

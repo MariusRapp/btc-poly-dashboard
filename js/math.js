@@ -214,5 +214,29 @@ export function sellOrder(levels, n, rate) {
   return f && { qty: f.qty, avg: f.avg, fees: f.fees, net: f.qty * f.avg - f.fees, worst: f.worst };
 }
 
+// A paper limit order to buy up to `n` shares at `limit` or less, against ask levels [price, size] (best first).
+// `taker`: the order arrives and crosses the book: each level at its own price, with the taker fee. Afterwards it
+// rests, and a seller who comes down to the limit fills it there as a maker: the limit price, no fee (both venues
+// charge takers only). A paper fill leaves the book as it was, so `used` (level in 0.1¢ → shares) keeps what the
+// order already took at each level: those shares must not fill it twice. A level that shrank or vanished is
+// forgotten that far, size added later is new. Mutates `used`; shares in steps of 0.01.
+// → { qty, cost, fees } of this fill, or null
+export function matchLimit(levels, limit, n, used, taker, rate) {
+  const seen = new Set();
+  let left = n, qty = 0, cost = 0, fees = 0;
+  for (const [p, sz] of levels) {
+    if (p > limit + 1e-9 || left < 0.005) break;
+    const k = String(Math.round(p * 1000)), u = Math.min(used[k] ?? 0, sz);
+    const take = Math.max(0, Math.floor(Math.min(sz - u, left) * 100 + 1e-6) / 100);
+    seen.add(k);
+    used[k] = u + take;
+    if (!take) continue;
+    qty += take; cost += take * (taker ? p : limit); left -= take;
+    if (taker) fees += take * takerFee(p, rate);
+  }
+  for (const k of Object.keys(used)) if (!seen.has(k)) delete used[k];
+  return qty > 0 ? { qty: Math.round(qty * 100) / 100, cost, fees } : null;
+}
+
 // DOWN book = UP book mirrored: buying DOWN at p is selling UP at 100¢ − p (the CLOB shows both tokens this way)
 export const mirrorBook = book => { const m = {}; for (const k in book) m[1000 - k] = book[k]; return m; };

@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import {
   firstIdx, twap, median, normalCDF, volFromCloses, settlementDist, probAbove, probWithin,
   takerFee, buyEdge, bookLevels, walkPair, mirrorBook, niceStep, forecastAt, distPdf, distCdf, distQuantile, tCdf, tPdf, stdQuantile, ewmaVol, impliedSigma,
-  fillOrder, sellOrder,
+  fillOrder, sellOrder, matchLimit,
 } from '../js/math.js';
 import { decodeRound } from '../js/chainlink.js';
 
@@ -225,4 +225,35 @@ test('sellOrder: walks the bids, the fee comes off the proceeds', () => {
   const b = fillOrder([[0.5, 10]], 10, 0.07), r = sellOrder([[0.5, 10]], 10, 0.07);
   near(r.net - b.total, -2 * 10 * takerFee(0.5, 0.07), 1e-12);
   assert.equal(sellOrder([], 5, 0.07), null);
+});
+
+test('matchLimit: crosses at arrival as a taker, then fills only from sellers at the limit, never twice', () => {
+  const used = {};
+  // arrives at 45¢ for 10: takes 44¢ and 45¢ at their prices with the taker fee, 47¢ is above the limit
+  const a = matchLimit([[0.44, 3], [0.45, 5], [0.47, 10]], 0.45, 10, used, true, 0.07);
+  assert.equal(a.qty, 8);
+  near(a.cost, 3 * 0.44 + 5 * 0.45, 1e-12);
+  near(a.fees, 3 * takerFee(0.44, 0.07) + 5 * takerFee(0.45, 0.07), 1e-12);
+  assert.deepEqual(used, { 440: 3, 450: 5 });
+  // the same book a moment later: those shares are its own fills, nothing new
+  assert.equal(matchLimit([[0.44, 3], [0.45, 5], [0.47, 10]], 0.45, 2, used, false, 0.07), null);
+  // a seller adds 4 at 45¢: 2 fill, at the limit and without fee
+  const b = matchLimit([[0.44, 3], [0.45, 9]], 0.45, 2, used, false, 0.07);
+  assert.equal(b.qty, 2);
+  near(b.cost, 2 * 0.45, 1e-12);
+  assert.equal(b.fees, 0);
+  // a level that vanished is forgotten: shares offered there later are new
+  matchLimit([[0.47, 10]], 0.45, 5, used, false, 0.07);
+  assert.deepEqual(used, {});
+  const c = matchLimit([[0.43, 2.5]], 0.45, 5, used, false, 0.07);
+  assert.equal(c.qty, 2.5);
+  near(c.cost, 2.5 * 0.45, 1e-12, 'a maker gets its own price, not the lower ask');
+  // a level that shrank below what was taken: only size beyond the new amount is new
+  const u2 = { 450: 5 };
+  assert.equal(matchLimit([[0.45, 2]], 0.45, 5, u2, false, 0.07), null);
+  assert.equal(u2[450], 2);
+  assert.equal(matchLimit([[0.45, 3]], 0.45, 5, u2, false, 0.07).qty, 1);
+  // nothing at or below the limit
+  assert.equal(matchLimit([[0.5, 10]], 0.45, 5, {}, true, 0.07), null);
+  assert.equal(matchLimit([], 0.45, 5, {}, true, 0.07), null);
 });
