@@ -32,7 +32,7 @@ Kalshi hat keine 5-Minuten-Runden; „Kalshi“ und „Both“ laufen deshalb im
 |---|---|
 | `index.html` | Das Dashboard: BTC-Median gegen den Strike, Countdown, implizite UP-Wahrscheinlichkeit, Orderbuch (feste Preisleiter, das Mid wandert), Signale, Polymarket-vs-Kalshi-Vergleich mit Arbitrage-Rechnung, die letzten 24 Runden mit offiziellen Ergebnissen – jede Runde im Chart abrufbar – und eigene Trefferquote. Für Desktop, Tablet und Handy, mit Light- und Dark-Mode. Nur Markup; Stil in `css/app.css`, Code in `js/`. |
 | `js/` | Der Code als ES-Module, ohne Build-Schritt (siehe „Code-Aufbau“). |
-| `test/` | Tests für die Rechenkerne (`math.js`, Chainlink-Dekodierung) und den Modul-Aufbau: `npm test`. |
+| `test/` | Tests für die Rechenkerne (`math.js`, Chainlink-Dekodierung, Modelle, Bot-Regeln) und den Modul-Aufbau: `npm test`. |
 | `serve.mjs` | Kleiner lokaler Server: `npm start` → http://localhost:8000/ |
 | `manifest.webmanifest`, `icons/` | App-Manifest und Icons: Das Dashboard lässt sich auf dem Handy zum Home-Bildschirm hinzufügen und öffnet dann im Vollbild. |
 | `recorder/` | Cloudflare Worker mit Cron Trigger und D1-Datenbank: zeichnet jede Minute alle laufenden Runden aller Coins auf, auch ohne offenen Tab (siehe „Recorder“). |
@@ -240,13 +240,37 @@ Die Karte ganz unten wertet die Recorder-Daten des Markts in der Ansicht mit dem
 - **By hour:** UP-Anteil, typische Bewegung (Median-Abstand der Abrechnung vom Strike) und Spread 60 s vor dem Ende je
   Stunde des Tages (Ortszeit), für alle Tage, Mo–Fr oder Sa–So. Stunden mit weniger als 10 Runden sind blasser.
 
-## Paper trades und Book vs price
+## Paper trades, Paper bot und Book vs price
 
-**Paper trades** (rechte Spalte) kauft UP oder DOWN der laufenden Runde ohne Geld: zum besten Ask, bei größeren Mengen
+**Paper trades** (unter den Charts) kauft UP oder DOWN der laufenden Runde ohne Geld: zum besten Ask, bei größeren Mengen
 durch die tieferen Stufen, mit Taker-Gebühr, an der Börse in der Ansicht (in „Both“ die im Orderbuch gewählte). Jeder Trade
 merkt sich, was Markt (Mid) und Modell in diesem Moment sagten, und wird mit dem offiziellen Ergebnis abgerechnet, auch für
 Coins und Märkte, die gerade nicht angezeigt werden. Die Karte zeigt das eigene Ergebnis neben dem, was Markt und Modell
 erwartet hatten. Gespeichert im Browser, Export als CSV.
+
+**Paper bot** (darunter) handelt selbst, ebenfalls ohne Geld, nach den angehakten Regeln – ein- und ausschaltbar, die
+Einstellungen bleiben im Browser. Er handelt nur, solange die Seite offen ist, und nur Coin und Markt in der Ansicht
+(in „Both“ beide Börsen). Ein Signal wird zur Market-Order, die nach der **Reaktionszeit** (0–5 s) am dann aktuellen Buch
+ausgeführt wird, höchstens **Slippage** über dem Preis, den das Signal sah – sonst gilt sie als verpasst. Taker-Gebühr wie
+bei den eigenen Trades. Jede Regel handelt einen Markt höchstens so oft pro Runde wie eingestellt (meist einmal), hält je
+Markt nur eine Position und pausiert nach einem Trade.
+
+| Regel | Was sie tut | Ausstieg |
+|---|---|---|
+| Arbitrage | Nur „Both“: UP auf der einen, DOWN auf der anderen Börse, wenn das Paar nach Gebühren und Split-Risiko unter $1 kostet | Halten bis zum Ende; fehlt ein Bein, wird das andere sofort wieder verkauft |
+| Model edge | Kauft die Seite, die das gewählte Modell um mindestens die Edge über Ask + Gebühr sieht | Halten |
+| Mean reversion | Springt der UP-Preis im Fenster um X Punkte, nimmt sie die Gegenseite | Take profit, Stop loss, Zeitlimit, vor dem Ende |
+| Momentum | Dieselben Sprünge, aber mit der Bewegung | wie Mean reversion |
+| Stale book | Das Buch hinkt einem Preissprung hinterher (Book vs price): kauft die Seite, auf die der Preis zeigt | sobald das Buch aufgeholt hat (Ziel, Stop, Zeit) |
+| Late favourite | In den letzten Sekunden den Favoriten, solange sein Ask unter der Obergrenze liegt | Halten |
+| Coin flip | Vergleichsbasis: eine zufällige Seite pro Runde – was Spread und Gebühren allein kosten | Halten |
+
+Take profit und Stop loss zählen nach beiden Gebühren: Direkt nach dem Kauf steht eine Position schon um Spread + zwei
+Gebühren im Minus (bei 50 ¢ rund 4 ¢), ein engerer Stop löst praktisch sofort aus. Verkauft wird in die Bids; ausgeschaltet
+eröffnet der Bot nichts mehr, verkauft offene Positionen aber weiter nach ihrer Regel. Die Karte zeigt das Ergebnis je
+Regel, bei verkauften Trades auch, was Halten bis zum Ende gebracht hätte („held“), ein Protokoll aller Signale, Fills,
+verpassten Orders und Verkäufe, und die Trades in einer eigenen Liste (bis 2000, Filter nach Regel, CSV). Die Kurse sind
+die, die dieser Browser sieht: Echte Bots an diesen Märkten reagieren in Millisekunden, die Reaktionszeit ehrlich setzen.
 
 **Book vs price** (Karte „Signals“): Springt der Preis, sagt das gewählte Modell, wie weit sich die UP-Wahrscheinlichkeit
 bewegen müsste. Ist die Mitte des Orderbuchs nicht mitgekommen, sind seine Kurse für einen Moment veraltet – an diesen kurzen
@@ -276,7 +300,8 @@ parallel vor (ein Test prüft, dass die Liste vollständig ist).
 | `panels.js`, `ladder.js`, `arb.js`, `rounds.js`, `review.js`, `alerts.js` | Die Karten: Kennzahlen und Signale, Orderbuch, Poly vs Kalshi, Runden und Trefferquote, vergangene Runden, Alarme |
 | `stats.js`, `recorder.js` | Auswertung der Recorder-Runden (Log Loss, Brier, Kalibrierung, Backtest, Split-Kurve, Paar-Backtest); Abruf vom Recorder (Runden und Minuten-Snapshots) |
 | `learn.js`, `analysis.js` | Logistische Regression, Kreuzvalidierung, Stacking-Test (rein, getestet); die Karte „Recorded rounds“ |
-| `paper.js`, `lag.js` | Paper trades; Book vs price |
+| `paper.js`, `lag.js` | Paper trades (auch Abrechnung, Zeilen und Summen für den Bot); Book vs price |
+| `strategies.js`, `bot.js` | Die Regeln des Paper bots (rein, getestet); seine Engine (Orders, Reaktionszeit, Ausstiege) und Karte |
 | `util.js` | DOM-Zugriff, Formatierung, Rundenzeiten |
 
 ES-Module laden nicht von `file://`; lokal deshalb `npm start` (oder `node serve.mjs`) und http://localhost:8000/ öffnen.

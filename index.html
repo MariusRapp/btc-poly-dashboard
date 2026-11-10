@@ -22,6 +22,7 @@
   <link rel="modulepreload" href="js/analysis.js" />
   <link rel="modulepreload" href="js/arb.js" />
   <link rel="modulepreload" href="js/assets.js" />
+  <link rel="modulepreload" href="js/bot.js" />
   <link rel="modulepreload" href="js/chainlink.js" />
   <link rel="modulepreload" href="js/charts.js" />
   <link rel="modulepreload" href="js/kalshi.js" />
@@ -42,6 +43,7 @@
   <link rel="modulepreload" href="js/rounds.js" />
   <link rel="modulepreload" href="js/state.js" />
   <link rel="modulepreload" href="js/stats.js" />
+  <link rel="modulepreload" href="js/strategies.js" />
   <link rel="modulepreload" href="js/theme.js" />
   <link rel="modulepreload" href="js/util.js" />
   <link rel="modulepreload" href="js/venues.js" />
@@ -188,6 +190,39 @@
         <div id="paper">
           <div class="plist" id="paper-list" tabindex="0" aria-label="Paper trades, newest first"></div>
           <div class="track-foot" id="paper-foot" hidden></div>
+        </div>
+      </section>
+
+      <section class="card" id="card-bot" aria-label="Paper bot">
+        <div class="card-head"><h2>Paper bot</h2><span class="card-meta" id="bot-venue">—</span></div>
+        <div class="bot-ctl">
+          <button type="button" class="bot-switch" id="bot-on" aria-pressed="false"
+                  title="On: the bot buys and sells the running round by itself, by the ticked rules, while this page is open. Off: no new trades; positions of rules with exits are still sold by their rule."><i class="dot"></i><span id="bot-on-text">Bot off</span></button>
+          <label class="paper-qty">Shares <input type="number" id="bot-qty" min="1" max="100000" step="1" value="10" inputmode="numeric"></label>
+          <label class="paper-qty" title="How long an order takes from the signal to the book. The quotes may have moved by then; real bots on these markets react in milliseconds.">Reaction
+            <span class="pick"><select id="bot-delay"><option value="0">0 s</option><option value="0.5">0.5 s</option><option value="1">1 s</option><option value="2">2 s</option><option value="5">5 s</option></select></span></label>
+          <label class="paper-qty" title="An order fills at most this much above the price the signal saw; if the book has moved further, the order is missed.">Slippage
+            <span class="pick"><select id="bot-slip"><option value="0">0¢</option><option value="1">1¢</option><option value="2">2¢</option><option value="5">5¢</option></select></span></label>
+        </div>
+        <div class="bot-status" id="bot-status" role="status">—</div>
+        <div class="pstats" id="bot-stats"></div>
+        <div class="bot-grid">
+          <div>
+            <h3 class="sub bot-h">Rules <span class="muted">· tick the ones the bot may trade by</span></h3>
+            <div class="rules" id="bot-rules"></div>
+          </div>
+          <div>
+            <h3 class="sub bot-h">Activity <span class="muted">· this page</span></h3>
+            <div class="blog" id="bot-log" aria-live="off"></div>
+          </div>
+        </div>
+        <div class="bot-list-head">
+          <h3 class="sub">Trades</h3>
+          <span class="pick"><select id="bot-filter" aria-label="Which rule’s trades and totals"></select></span>
+        </div>
+        <div id="bot">
+          <div class="plist" id="bot-list" tabindex="0" aria-label="Bot trades, newest first"></div>
+          <div class="track-foot" id="bot-foot" hidden></div>
         </div>
       </section>
 

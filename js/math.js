@@ -197,15 +197,21 @@ export function walkPair(A, feeA, B, feeB) {
 }
 
 // buy `n` shares from ask levels [price, size] (best first), level by level, with the taker fee on each;
-// fewer shares when the book runs out. null when there is nothing to buy.
+// fewer shares when the book runs out. null when there is nothing to buy. `worst` = the last level's price.
 export function fillOrder(levels, n, rate) {
-  let left = n, cost = 0, fees = 0, got = 0;
+  let left = n, cost = 0, fees = 0, got = 0, worst = null;
   for (const [p, sz] of levels) {
     if (left <= 0) break;
     const q = Math.min(left, sz);
-    cost += q * p; fees += q * takerFee(p, rate); got += q; left -= q;
+    cost += q * p; fees += q * takerFee(p, rate); got += q; left -= q; worst = p;
   }
-  return got > 0 ? { qty: got, avg: cost / got, fees, total: cost + fees } : null;
+  return got > 0 ? { qty: got, avg: cost / got, fees, total: cost + fees, worst } : null;
+}
+
+// sell `n` shares into bid levels [price, size] (best first): the same walk, the fee comes off the proceeds
+export function sellOrder(levels, n, rate) {
+  const f = fillOrder(levels, n, rate);
+  return f && { qty: f.qty, avg: f.avg, fees: f.fees, net: f.qty * f.avg - f.fees, worst: f.worst };
 }
 
 // DOWN book = UP book mirrored: buying DOWN at p is selling UP at 100¢ − p (the CLOB shows both tokens this way)
