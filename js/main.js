@@ -3,7 +3,8 @@
 import { alertsOn, setAlerts } from './alerts.js';
 import { initLab, updateLab } from './analysis.js';
 import { botTick, initBot } from './bot.js';
-import { initPaper, settlePaper } from './paper.js';
+import { initFold } from './fold.js';
+import { initPaper, paperTick, settlePaper } from './paper.js';
 import { lagTick } from './lag.js';
 import { pollChainlink } from './chainlink.js';
 import { attachHover, btcC, probC, wakeFrame, yRange } from './charts.js';
@@ -30,6 +31,7 @@ function tick() {
   updateUI(now);
   lagTick(now);   // book vs price: at 5 Hz, so a book's reaction time is measured to a fraction of a second
   botTick(now);   // the paper bot: its orders, exits and rules, right after the book-vs-price reading it uses
+  paperTick(now); // your limit orders against the live book
 }
 
 // ── Boot ─────────────────────────────────────────────────────────────────────
@@ -164,6 +166,7 @@ if ('wakeLock' in navigator) {
   try { if (localStorage.getItem('wake') === '1') setWake(true); } catch {}
 }
 
+initFold();
 onRecorded(() => { renderTrack(); updateModelCard(); updateLab(); });   // the recorder's rounds arrived or refreshed
 initModelCard();
 initLab();

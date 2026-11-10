@@ -248,6 +248,14 @@ merkt sich, was Markt (Mid) und Modell in diesem Moment sagten, und wird mit dem
 Coins und Märkte, die gerade nicht angezeigt werden. Die Karte zeigt das eigene Ergebnis neben dem, was Markt und Modell
 erwartet hatten. Gespeichert im Browser, Export als CSV.
 
+**Limit-Orders:** Mit „Limit“ statt „Market“ kauft eine Order höchstens zum eingegebenen Preis (Feld über jedem Knopf,
+folgt dem besten Bid, bis man selbst einen Preis eintippt). Was das Buch dort schon anbietet, füllt sofort wie ein
+Market-Kauf (Taker-Gebühr); der Rest wartet, bis ein Verkäufer zum Limit herunterkommt, und füllt dann zum Limit-Preis
+als Maker ohne Gebühr (Polymarket und Kalshi berechnen nur Takern Gebühren). Eine Order ist nicht wirklich im Buch:
+Verkäufe, die sie als bestes Gebot getroffen hätten, sieht die Simulation nicht – Paper-Füllungen kommen also eher später
+und seltener als echte. Eine Order wird nur geprüft, solange ihr Markt angezeigt wird, lässt sich stornieren und endet
+mit der Runde; ihre Füllungen bilden einen Trade (markiert mit „limit“), der wie jeder andere abgerechnet wird.
+
 **Paper bot** (darunter) handelt selbst, ebenfalls ohne Geld, nach den angehakten Regeln – ein- und ausschaltbar, die
 Einstellungen bleiben im Browser. Er handelt nur, solange die Seite offen ist, und nur Coin und Markt in der Ansicht
 (in „Both“ beide Börsen). Ein Signal wird zur Market-Order, die nach der **Reaktionszeit** (0–5 s) am dann aktuellen Buch
@@ -302,6 +310,7 @@ parallel vor (ein Test prüft, dass die Liste vollständig ist).
 | `learn.js`, `analysis.js` | Logistische Regression, Kreuzvalidierung, Stacking-Test (rein, getestet); die Karte „Recorded rounds“ |
 | `paper.js`, `lag.js` | Paper trades (auch Abrechnung, Zeilen und Summen für den Bot); Book vs price |
 | `strategies.js`, `bot.js` | Die Regeln des Paper bots (rein, getestet); seine Engine (Orders, Reaktionszeit, Ausstiege) und Karte |
+| `fold.js` | Auf-/Zuklappen jeder Karte (alles mit `class="card"` und `id`), Zustand im Browser |
 | `util.js` | DOM-Zugriff, Formatierung, Rundenzeiten |
 
 ES-Module laden nicht von `file://`; lokal deshalb `npm start` (oder `node serve.mjs`) und http://localhost:8000/ öffnen.
@@ -317,6 +326,9 @@ Screen Wake Lock, sonst ausgeblendet). Die Trefferquote wird je Börse und Runde
 solange das Dashboard offen ist.
 
 Auf dem Handy: im Browser-Menü „Zum Home-Bildschirm“ – dann startet das Dashboard wie eine App im Vollbild.
+
+Jede Karte lässt sich über den Pfeil oben rechts (oder einen Tipp auf ihren Titel) auf ihre Titelzeile zuklappen, die
+drei Kennzahl-Kacheln oben auf Beschriftung und Wert. Der Zustand bleibt im Browser; ein zugeklappter Chart wird nicht gezeichnet.
 
 Über das Menü links in der Chart-Leiste (oder einen Tipp auf eine Runde unter „Recent rounds“) lässt
 sich jede der letzten 24 Runden im Chart ansehen. „Exchange lines“, „Averaging windows“ (die beiden
