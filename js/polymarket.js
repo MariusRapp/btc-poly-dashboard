@@ -9,16 +9,33 @@ import { ROUND_MS, ROUND_S, S, TWAP_MS } from './state.js';
 import { currentRound, fmtClock, getJSON } from './util.js';
 import { PM, archiveRound, closeFeed, makeFeed, onBookChange, retireFeed, setLevel } from './venues.js';
 
+// A round's official result straight from the CLOB: Polymarket closes a round 1–3 minutes after its end, and
+// the CLOB shows the winner at once, while Gamma's event list lagged another 2–4 minutes (measured 2026-11-10).
+// Its replicas briefly disagree after the close, so a closed answer counts; an open one only means "not yet".
+// → { win: 'up' | 'down' | null, up: UP's price (after the end: near 100¢ or 0¢ once the result is clear) }
+export async function clobResult(cid) {
+  const m = await getJSON(`https://clob.polymarket.com/markets/${cid}`);
+  const up = m.tokens?.find(x => x.outcome === 'Up'), down = m.tokens?.find(x => x.outcome === 'Down');
+  if (!up || !down) return null;
+  return { win: m.closed ? (up.winner ? 'up' : down.winner ? 'down' : null) : null, up: +up.price };
+}
+
 export async function pmFetchResult(ts) {
   const gen = S.modeGen;
   try {
-    const ev = await fetchEvent(ts);
-    const m = ev?.markets[0];
-    if (!m || gen !== S.modeGen) return;
-    PM.meta.set(ts, parseMarket(ev, ts));
-    const outcomes = JSON.parse(m.outcomes || '[]'), prices = JSON.parse(m.outcomePrices || '[]').map(Number);
-    const win = m.closed ? outcomes[prices.indexOf(1)] : null;
-    setResult(PM, ts, win === 'Up' ? 'up' : win === 'Down' ? 'down' : 'pending');
+    let meta = PM.meta.get(ts), win = null;
+    if (!meta?.cid) {
+      const ev = await fetchEvent(ts);
+      const m = ev?.markets[0];
+      if (!m || gen !== S.modeGen) return;
+      PM.meta.set(ts, meta = parseMarket(ev, ts));
+      const outcomes = JSON.parse(m.outcomes || '[]'), prices = JSON.parse(m.outcomePrices || '[]').map(Number);
+      const w = m.closed ? outcomes[prices.indexOf(1)] : null;
+      win = w === 'Up' ? 'up' : w === 'Down' ? 'down' : null;
+    }
+    // ended but not closed in Gamma's (lagging) list: ask the CLOB
+    if (!win && (ts + ROUND_S) * 1000 < Date.now()) win = (await clobResult(meta.cid))?.win ?? null;
+    if (gen === S.modeGen) setResult(PM, ts, win ?? 'pending');
   } catch {}
 }
 

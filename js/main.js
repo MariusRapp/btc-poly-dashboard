@@ -188,8 +188,7 @@ wakeFrame();
 // Safety sampler: ensure each probability history always has a recent point even during quiet markets
 setInterval(() => { for (const V of activeVenues()) if (V.lastProb !== null) pushProbPoint(V, V.lastProb); }, 1000);
 setInterval(refreshRounds, 30_000);
-setInterval(settlePaper, 30_000);
-setTimeout(settlePaper, 5000);
+setInterval(settlePaper, 2000);   // cheap: it only asks for rounds that have ended, each every few seconds
 
 // watchdog: mobile browsers can leave sockets open but silent — close them so they reconnect
 setInterval(() => {
