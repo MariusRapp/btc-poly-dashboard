@@ -2,6 +2,7 @@
 
 import { checkAlerts } from './alerts.js';
 import { updateLab } from './analysis.js';
+import { updateBot } from './bot.js';
 import { updatePaper } from './paper.js';
 import { renderLag } from './lag.js';
 import { arbState, bestEdge, modelEdges, updateArb, updateLive, updateSources } from './arb.js';
@@ -88,6 +89,7 @@ export function updateUI(now) {
     updateModelCard();
     updateLab();
     updatePaper();
+    updateBot();
     if (both()) updateArb(arb);   // also without both books: the split risk and the recorded pairs
     updateSources();
     updateLive();

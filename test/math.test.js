@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import {
   firstIdx, twap, median, normalCDF, volFromCloses, settlementDist, probAbove, probWithin,
   takerFee, buyEdge, bookLevels, walkPair, mirrorBook, niceStep, forecastAt, distPdf, distCdf, distQuantile, tCdf, tPdf, stdQuantile, ewmaVol, impliedSigma,
-  fillOrder,
+  fillOrder, sellOrder,
 } from '../js/math.js';
 import { decodeRound } from '../js/chainlink.js';
 
@@ -211,5 +211,18 @@ test('fillOrder: walks the ask levels, fee on each, partial when the book runs o
   near(f.fees, 5 * takerFee(0.40, 0.07) + 3 * takerFee(0.42, 0.07), 1e-12);
   near(f.total, 5 * 0.40 + 3 * 0.42 + f.fees, 1e-12);
   assert.equal(fillOrder(lv, 100, 0.07).qty, 15, 'only what the book has');
+  assert.equal(f.worst, 0.42, 'the deepest level it reached');
   assert.equal(fillOrder([], 5, 0.07), null);
+});
+
+test('sellOrder: walks the bids, the fee comes off the proceeds', () => {
+  const s = sellOrder([[0.55, 4], [0.53, 10]], 6, 0.07);
+  assert.equal(s.qty, 6);
+  near(s.avg, (4 * 0.55 + 2 * 0.53) / 6, 1e-12);
+  near(s.fees, 4 * takerFee(0.55, 0.07) + 2 * takerFee(0.53, 0.07), 1e-12);
+  near(s.net, 4 * 0.55 + 2 * 0.53 - s.fees, 1e-12);
+  // a round trip at one price loses the fee twice
+  const b = fillOrder([[0.5, 10]], 10, 0.07), r = sellOrder([[0.5, 10]], 10, 0.07);
+  near(r.net - b.total, -2 * 10 * takerFee(0.5, 0.07), 1e-12);
+  assert.equal(sellOrder([], 5, 0.07), null);
 });
